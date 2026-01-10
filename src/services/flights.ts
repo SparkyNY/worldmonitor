@@ -119,9 +119,7 @@ async function fetchFAADelays(): Promise<Map<string, FAADelayInfo>> {
   }
 
   try {
-    const url = import.meta.env.DEV
-      ? '/api/faa/api/airport-status-information'
-      : 'https://nasstatus.faa.gov/api/airport-status-information';
+    const url = '/api/faa/api/airport-status-information';
 
     const response = await fetch(url, {
       headers: { Accept: 'application/xml' },
