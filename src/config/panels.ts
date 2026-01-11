@@ -6,6 +6,7 @@ import type { PanelConfig, MapLayers } from '@/types';
 // Row 3: Supporting context and tracking
 export const DEFAULT_PANELS: Record<string, PanelConfig> = {
   map: { name: 'Global Map', enabled: true, priority: 1 },
+  'live-news': { name: 'Live News', enabled: true, priority: 1 },
   intel: { name: 'Intel Feed', enabled: true, priority: 1 },
   'gdelt-intel': { name: 'Live Intelligence', enabled: true, priority: 1 },
   politics: { name: 'World News', enabled: true, priority: 1 },
