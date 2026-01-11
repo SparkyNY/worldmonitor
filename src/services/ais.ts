@@ -44,6 +44,7 @@ const vesselHistory = new Map<string, number[]>(); // MMSI -> last seen timestam
 
 let socket: WebSocket | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+let cleanupInterval: ReturnType<typeof setInterval> | null = null;
 let isConnected = false;
 let messageCount = 0;
 
@@ -175,7 +176,7 @@ function handleMessage(event: MessageEvent): void {
 }
 
 function connect(): void {
-  if (socket?.readyState === WebSocket.OPEN) return;
+  if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return;
 
   console.log('[Shipping] Opening WebSocket to:', AISSTREAM_URL);
   try {
@@ -198,6 +199,11 @@ function connect(): void {
     socket.onerror = (error) => {
       console.error('[Shipping] WebSocket error:', error);
       isConnected = false;
+      if (socket) {
+        socket.close();
+        socket = null;
+      }
+      scheduleReconnect();
     };
 
     // Check readyState after a short delay
@@ -229,6 +235,20 @@ function cleanupOldData(): void {
   for (const [mmsi, vessel] of vessels) {
     if (vessel.timestamp < cutoff) {
       vessels.delete(mmsi);
+    }
+  }
+
+  // Prune vesselHistory for removed vessels and old timestamps
+  for (const [mmsi, history] of vesselHistory) {
+    if (!vessels.has(mmsi)) {
+      vesselHistory.delete(mmsi);
+    } else {
+      const filtered = history.filter(ts => ts >= cutoff);
+      if (filtered.length === 0) {
+        vesselHistory.delete(mmsi);
+      } else {
+        vesselHistory.set(mmsi, filtered);
+      }
     }
   }
 
@@ -386,8 +406,9 @@ export function initAisStream(): void {
   console.log('[Shipping] Initializing AIS stream...');
   connect();
 
-  // Cleanup old data periodically
-  setInterval(cleanupOldData, 60 * 1000);
+  if (!cleanupInterval) {
+    cleanupInterval = setInterval(cleanupOldData, 60 * 1000);
+  }
 }
 
 export function disconnectAisStream(): void {
@@ -398,6 +419,10 @@ export function disconnectAisStream(): void {
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
+  }
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
   }
   isConnected = false;
 }
