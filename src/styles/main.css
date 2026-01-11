@@ -156,6 +156,26 @@ body {
   border-color: var(--text-dim);
 }
 
+.fullscreen-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.fullscreen-btn:hover {
+  border-color: var(--text-dim);
+}
+
+.fullscreen-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
 .github-link {
   color: var(--text-dim);
   margin-left: 8px;
