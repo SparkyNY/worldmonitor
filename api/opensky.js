@@ -1,57 +1,49 @@
-// Use Node.js runtime for better network reliability to OpenSky
-export const config = { runtime: 'nodejs', maxDuration: 15 };
+export const config = { runtime: 'edge' };
 
-export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Content-Type', 'application/json');
+export default async function handler(req) {
+  const url = new URL(req.url);
 
   // Build OpenSky API URL with bounding box params
   const params = new URLSearchParams();
-  const { lamin, lomin, lamax, lomax } = req.query;
-
-  if (lamin) params.set('lamin', lamin);
-  if (lomin) params.set('lomin', lomin);
-  if (lamax) params.set('lamax', lamax);
-  if (lomax) params.set('lomax', lomax);
+  ['lamin', 'lomin', 'lamax', 'lomax'].forEach(key => {
+    const val = url.searchParams.get(key);
+    if (val) params.set(key, val);
+  });
 
   const openskyUrl = `https://opensky-network.org/api/states/all${params.toString() ? '?' + params.toString() : ''}`;
 
   try {
-    // Build headers with optional Basic Auth
-    const headers = { 'Accept': 'application/json' };
-    const username = process.env.OPENSKY_USERNAME;
-    const password = process.env.OPENSKY_PASSWORD;
-    if (username && password) {
-      headers['Authorization'] = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
-    }
-
-    // Fetch with timeout using AbortController
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
-
+    // Simple fetch without auth (anonymous access: 400 credits/day)
     const response = await fetch(openskyUrl, {
-      headers,
-      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'WorldMonitor/1.0',
+      },
     });
-    clearTimeout(timeout);
 
     if (response.status === 429) {
-      res.setHeader('Cache-Control', 'no-cache');
-      return res.status(429).json({ error: 'Rate limited', time: Date.now(), states: null });
+      return Response.json({ error: 'Rate limited', time: Date.now(), states: null }, {
+        status: 429,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
     }
 
     const data = await response.json();
-    res.setHeader('Cache-Control', 'public, max-age=10');
-    return res.status(response.status).json(data);
-
+    return Response.json(data, {
+      status: response.status,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=30',
+      },
+    });
   } catch (error) {
-    const isTimeout = error.name === 'AbortError';
-    res.setHeader('Cache-Control', 'no-cache');
-    return res.status(isTimeout ? 504 : 500).json({
-      error: isTimeout ? 'Request timeout' : `Fetch error: ${error.message}`,
+    return Response.json({
+      error: `OpenSky error: ${error.message}`,
       time: Date.now(),
       states: null
+    }, {
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' },
     });
   }
 }
