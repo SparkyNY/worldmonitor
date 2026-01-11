@@ -1,4 +1,5 @@
-export const config = { runtime: 'edge' };
+// Use Node.js runtime for better network reliability to OpenSky
+export const config = { runtime: 'nodejs', maxDuration: 15 };
 
 // Fetch with timeout
 async function fetchWithTimeout(url, options, timeoutMs = 15000) {
