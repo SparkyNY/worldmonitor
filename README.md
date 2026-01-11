@@ -529,7 +529,7 @@ Some features require API credentials. Without them, the corresponding layer is 
 |----------|---------|------------|
 | `VITE_WS_RELAY_URL` | AIS vessel tracking | Deploy AIS relay or use hosted service |
 | `CLOUDFLARE_API_TOKEN` | Internet outages | Free Cloudflare account with Radar access |
-| `VITE_ACLED_ACCESS_TOKEN` | Protest data | Free registration at acleddata.com |
+| `ACLED_ACCESS_TOKEN` | Protest data (server-side) | Free registration at acleddata.com |
 
 The dashboard functions fully without these keys—affected layers simply don't appear.
 

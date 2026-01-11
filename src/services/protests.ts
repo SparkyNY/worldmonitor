@@ -2,15 +2,17 @@ import type { SocialUnrestEvent, ProtestSeverity, ProtestEventType } from '@/typ
 import { INTEL_HOTSPOTS } from '@/config';
 import { generateId, createCircuitBreaker } from '@/utils';
 
-// ACLED API - requires free registration at acleddata.com
-const ACLED_API_URL = '/api/acled/api/acled/read';
-const ACLED_ACCESS_TOKEN = import.meta.env.VITE_ACLED_ACCESS_TOKEN || '';
+// ACLED API - proxied through serverless function (token kept server-side)
+const ACLED_PROXY_URL = '/api/acled';
 
 // GDELT GEO 2.0 API - no auth required
 const GDELT_GEO_URL = '/api/gdelt-geo';
 
 const acledBreaker = createCircuitBreaker<SocialUnrestEvent[]>({ name: 'ACLED Protests' });
 const gdeltBreaker = createCircuitBreaker<SocialUnrestEvent[]>({ name: 'GDELT Events' });
+
+// Track if ACLED is configured (determined by first API call)
+let acledConfigured: boolean | null = null;
 
 // Haversine distance calculation
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -71,31 +73,29 @@ interface AcledEvent {
 }
 
 async function fetchAcledEvents(): Promise<SocialUnrestEvent[]> {
-  if (!ACLED_ACCESS_TOKEN) {
-    return [];
-  }
-
   return acledBreaker.execute(async () => {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const startDate = thirtyDaysAgo.toISOString().split('T')[0] || '';
-    const endDate = new Date().toISOString().split('T')[0] || '';
-
-    const params = new URLSearchParams();
-    params.set('event_type', 'Protests');
-    params.set('event_date', `${startDate}|${endDate}`);
-    params.set('event_date_where', 'BETWEEN');
-    params.set('limit', '500');
-    params.set('_format', 'json');
-
-    const response = await fetch(`${ACLED_API_URL}?${params}`, {
-      headers: { Accept: 'application/json', Authorization: `Bearer ${ACLED_ACCESS_TOKEN}` },
+    // Use server-side proxy (token not exposed to client)
+    const response = await fetch(ACLED_PROXY_URL, {
+      headers: { Accept: 'application/json' },
     });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      if (response.status === 429) {
+        console.warn('[ACLED] Rate limited, will retry later');
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
 
-    const data = await response.json();
-    const events: AcledEvent[] = data.data || [];
+    const result = await response.json();
+
+    // Check if ACLED is configured on server
+    if (result.configured === false) {
+      acledConfigured = false;
+      return [];
+    }
+
+    acledConfigured = true;
+    const events: AcledEvent[] = result.data || [];
 
     return events.map((e): SocialUnrestEvent => {
       const lat = parseFloat(e.latitude);
@@ -303,9 +303,9 @@ export async function fetchProtestEvents(): Promise<ProtestData> {
   };
 }
 
-export function getProtestStatus(): { acledConfigured: boolean; gdeltAvailable: boolean } {
+export function getProtestStatus(): { acledConfigured: boolean | null; gdeltAvailable: boolean } {
   return {
-    acledConfigured: Boolean(ACLED_ACCESS_TOKEN),
+    acledConfigured, // null = unknown, true = configured, false = not configured
     gdeltAvailable: true,
   };
 }
