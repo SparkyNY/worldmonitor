@@ -2,9 +2,12 @@
 
 Real-time global intelligence dashboard aggregating news, markets, geopolitical data, and infrastructure monitoring into a unified situation awareness interface.
 
+🌐 **[Live Demo: worldmonitor.app](https://worldmonitor.app)**
+
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
 ![D3.js](https://img.shields.io/badge/D3.js-F9A03C?style=flat&logo=d3.js&logoColor=white)
+![Version](https://img.shields.io/badge/version-1.3.2-blue)
 
 ![World Monitor Dashboard](Screenshot.png)
 
@@ -773,7 +776,12 @@ Vessels within 50km of these bases are flagged, enabling detection of unusual ac
 
 ### Aircraft Tracking (OpenSky)
 
-Military aircraft are tracked via the OpenSky Network using ADS-B data:
+Military aircraft are tracked via the OpenSky Network using ADS-B data. OpenSky blocks unauthenticated requests from cloud provider IPs (Vercel, Railway, AWS), so aircraft tracking requires a relay server with credentials.
+
+**Authentication**:
+- Register for a free account at [opensky-network.org](https://opensky-network.org)
+- Create an API client in account settings to get `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`
+- The relay uses Basic Auth with these credentials to bypass cloud IP blocks
 
 **Identification Methods**:
 - **Callsign matching**: Known military callsign patterns (RCH, REACH, DUKE, etc.)
@@ -1138,7 +1146,9 @@ Some features require API credentials. Without them, the corresponding layer is 
 |----------|---------|------------|
 | `FINNHUB_API_KEY` | Stock quotes (primary) | Free registration at [finnhub.io](https://finnhub.io/) |
 | `VITE_WS_RELAY_URL` | AIS vessel tracking | Deploy AIS relay or use hosted service |
-| `VITE_OPENSKY_RELAY_URL` | Military aircraft | Deploy OpenSky relay (rate limit bypass) |
+| `VITE_OPENSKY_RELAY_URL` | Military aircraft | Deploy relay with OpenSky credentials |
+| `OPENSKY_CLIENT_ID` | OpenSky auth (relay) | Free registration at [opensky-network.org](https://opensky-network.org) |
+| `OPENSKY_CLIENT_SECRET` | OpenSky auth (relay) | API key from OpenSky account settings |
 | `CLOUDFLARE_API_TOKEN` | Internet outages | Free Cloudflare account with Radar access |
 | `ACLED_ACCESS_TOKEN` | Protest data (server-side) | Free registration at acleddata.com |
 
@@ -1374,6 +1384,9 @@ See [ROADMAP.md](ROADMAP.md) for detailed planning. Recent intelligence enhancem
 - ✅ **Infrastructure Cascade Visualization** - Dependency graph showing downstream effects of disruptions
 - ✅ **Strategic Risk Overview** - Unified alert system with cross-module correlation and deduplication
 - ✅ **GDELT Topic Intelligence** - Categorized feeds for military, cyber, nuclear, and sanctions topics
+- ✅ **OpenSky Authentication** - OAuth2 credentials for military aircraft tracking via relay
+- ✅ **Human-Readable Locations** - Convergence alerts show place names instead of coordinates
+- ✅ **Data Freshness Tracking** - Status panel shows enabled/disabled state for all feeds
 
 ### Planned
 
