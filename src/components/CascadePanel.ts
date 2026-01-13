@@ -163,6 +163,8 @@ export class CascadePanel extends Panel {
       <div class="cascade-stats">
         <span>🔌 ${stats.cables}</span>
         <span>🛢️ ${stats.pipelines}</span>
+        <span>⚓ ${stats.ports}</span>
+        <span>🌊 ${stats.chokepoints}</span>
         <span>🏳️ ${stats.countries}</span>
         <span>📊 ${stats.edges} links</span>
       </div>

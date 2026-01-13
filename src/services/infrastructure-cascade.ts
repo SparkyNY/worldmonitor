@@ -399,6 +399,7 @@ function buildChokepointEdges(graph: DependencyGraph): void {
 }
 
 function getChokepointDependentCountries(chokepointId: string): { code: string; strength: number; redundancy: number; reason: string }[] {
+  // Map using actual IDs from STRATEGIC_WATERWAYS
   const dependencies: Record<string, { code: string; strength: number; redundancy: number; reason: string }[]> = {
     'suez': [
       { code: 'DE', strength: 0.6, redundancy: 0.3, reason: 'EU-Asia trade' },
@@ -406,13 +407,13 @@ function getChokepointDependentCountries(chokepointId: string): { code: string; 
       { code: 'GB', strength: 0.5, redundancy: 0.4, reason: 'UK-Asia trade' },
       { code: 'CN', strength: 0.4, redundancy: 0.5, reason: 'China-EU exports' },
     ],
-    'hormuz': [
+    'hormuz_strait': [
       { code: 'JP', strength: 0.8, redundancy: 0.2, reason: '80% oil imports' },
       { code: 'KR', strength: 0.7, redundancy: 0.2, reason: '70% oil imports' },
       { code: 'IN', strength: 0.6, redundancy: 0.3, reason: '60% oil imports' },
       { code: 'CN', strength: 0.5, redundancy: 0.4, reason: '40% oil imports' },
     ],
-    'malacca': [
+    'malacca_strait': [
       { code: 'CN', strength: 0.7, redundancy: 0.3, reason: '80% oil imports transit' },
       { code: 'JP', strength: 0.6, redundancy: 0.3, reason: 'Trade route' },
       { code: 'KR', strength: 0.6, redundancy: 0.3, reason: 'Trade route' },
@@ -430,10 +431,19 @@ function getChokepointDependentCountries(chokepointId: string): { code: string; 
       { code: 'ES', strength: 0.4, redundancy: 0.5, reason: 'Med access' },
       { code: 'IT', strength: 0.3, redundancy: 0.5, reason: 'Atlantic trade' },
     ],
-    'turkish_straits': [
+    'bosphorus': [
       { code: 'RU', strength: 0.6, redundancy: 0.3, reason: 'Black Sea access' },
       { code: 'UA', strength: 0.6, redundancy: 0.3, reason: 'Grain exports' },
       { code: 'RO', strength: 0.4, redundancy: 0.4, reason: 'Black Sea trade' },
+    ],
+    'dardanelles': [
+      { code: 'RU', strength: 0.5, redundancy: 0.3, reason: 'Black Sea access' },
+      { code: 'UA', strength: 0.5, redundancy: 0.3, reason: 'Grain exports' },
+    ],
+    'taiwan_strait': [
+      { code: 'TW', strength: 0.9, redundancy: 0.1, reason: 'Taiwan trade lifeline' },
+      { code: 'JP', strength: 0.5, redundancy: 0.4, reason: 'Trade route' },
+      { code: 'KR', strength: 0.4, redundancy: 0.4, reason: 'Trade route' },
     ],
   };
   return dependencies[chokepointId] || [];
@@ -608,13 +618,15 @@ export function getPortById(id: string): Port | undefined {
   return PORTS.find((p: Port) => p.id === id);
 }
 
-export function getGraphStats(): { nodes: number; edges: number; cables: number; pipelines: number; countries: number } {
+export function getGraphStats(): { nodes: number; edges: number; cables: number; pipelines: number; ports: number; chokepoints: number; countries: number } {
   const graph = buildDependencyGraph();
-  let cables = 0, pipelines = 0, countries = 0;
+  let cables = 0, pipelines = 0, ports = 0, chokepoints = 0, countries = 0;
 
   for (const node of graph.nodes.values()) {
     if (node.type === 'cable') cables++;
     else if (node.type === 'pipeline') pipelines++;
+    else if (node.type === 'port') ports++;
+    else if (node.type === 'chokepoint') chokepoints++;
     else if (node.type === 'country') countries++;
   }
 
@@ -623,6 +635,8 @@ export function getGraphStats(): { nodes: number; edges: number; cables: number;
     edges: graph.edges.length,
     cables,
     pipelines,
+    ports,
+    chokepoints,
     countries,
   };
 }
