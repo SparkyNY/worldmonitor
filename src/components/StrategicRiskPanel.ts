@@ -293,7 +293,6 @@ export class StrategicRiskPanel extends Panel {
 
         ${this.renderMetrics()}
         ${this.renderTopRisks()}
-        ${this.renderUnstableCountries()}
         ${this.renderRecentAlerts()}
 
         <div class="risk-footer">
@@ -362,27 +361,6 @@ export class StrategicRiskPanel extends Panel {
             <div class="risk-item">
               <span class="risk-rank">${i + 1}.</span>
               <span class="risk-text">${escapeHtml(risk)}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  private renderUnstableCountries(): string {
-    if (!this.overview || this.overview.unstableCountries.length === 0) {
-      return '';
-    }
-
-    return `
-      <div class="risk-section">
-        <div class="risk-section-title">Unstable Countries</div>
-        <div class="risk-countries">
-          ${this.overview.unstableCountries.map(c => `
-            <div class="risk-country" style="border-left: 3px solid ${this.getScoreColor(c.score)}">
-              <span class="risk-country-name">${escapeHtml(c.name)}</span>
-              <span class="risk-country-score">${c.score}</span>
-              <span class="risk-country-level">${c.level}</span>
             </div>
           `).join('')}
         </div>
