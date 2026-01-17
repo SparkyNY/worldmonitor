@@ -663,14 +663,14 @@ export class MapComponent {
   }
 
   private getProjection(width: number, height: number): d3.GeoProjection {
-    // Equirectangular with cropped latitude range (60°N to 55°S = 115°)
-    // This removes empty polar regions and allows full-width display
-    const LAT_NORTH = 60;
-    const LAT_SOUTH = -55;
-    const LAT_RANGE = LAT_NORTH - LAT_SOUTH; // 115°
-    const LAT_CENTER = (LAT_NORTH + LAT_SOUTH) / 2; // 2.5°N
+    // Equirectangular with cropped latitude range (72°N to 56°S = 128°)
+    // Shows Greenland/Iceland while trimming extreme polar regions
+    const LAT_NORTH = 72;  // Includes Greenland (extends to ~83°N but 72 shows most)
+    const LAT_SOUTH = -56; // Just below Tierra del Fuego
+    const LAT_RANGE = LAT_NORTH - LAT_SOUTH; // 128°
+    const LAT_CENTER = (LAT_NORTH + LAT_SOUTH) / 2; // 8°N
 
-    // Scale to fit: 360° longitude in width, 115° latitude in height
+    // Scale to fit: 360° longitude in width, 128° latitude in height
     const scaleForWidth = width / (2 * Math.PI);
     const scaleForHeight = height / (LAT_RANGE * Math.PI / 180);
     const scale = Math.min(scaleForWidth, scaleForHeight);
