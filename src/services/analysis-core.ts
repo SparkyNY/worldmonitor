@@ -27,6 +27,12 @@ import {
   generateDedupeKey,
 } from '@/utils/analysis-constants';
 
+import {
+  extractEntitiesFromClusters,
+  findNewsForMarketSymbol,
+} from './entity-extraction';
+import { getEntityIndex } from './entity-index';
+
 // Re-export for convenience
 export {
   SIMILARITY_THRESHOLD,
@@ -90,7 +96,9 @@ export type SignalType =
   | 'triangulation'
   | 'flow_drop'
   | 'flow_price_divergence'
-  | 'geo_convergence';
+  | 'geo_convergence'
+  | 'explained_market_move'
+  | 'sector_cascade';
 
 export interface CorrelationSignalCore {
   id: string;
@@ -104,6 +112,9 @@ export interface CorrelationSignalCore {
     marketChange?: number;
     predictionShift?: number;
     relatedTopics?: string[];
+    correlatedEntities?: string[];
+    correlatedNews?: string[];
+    explanation?: string;
   };
 }
 
@@ -411,6 +422,9 @@ export function analyzeCorrelationsCore(
   const pipelineFlowSignals = detectPipelineFlowDrops(events, isRecentDuplicate, markSignalSeen);
   const pipelineFlowMentions = pipelineFlowSignals.length;
 
+  const entityIndex = getEntityIndex();
+  const newsEntityContexts = extractEntitiesFromClusters(events);
+
   const currentSnapshot: StreamSnapshot = {
     newsVelocity: newsTopics,
     marketChanges: new Map(markets.map(m => [m.symbol, m.change ?? 0])),
@@ -476,27 +490,58 @@ export function analyzeCorrelationsCore(
     }
   }
 
-  // Detect silent market divergence
+  // Detect market moves with entity-aware news correlation
   for (const market of markets) {
     const change = Math.abs(market.change ?? 0);
-    if (change >= MARKET_MOVE_THRESHOLD) {
-      const relatedNews = Array.from(newsTopics.entries())
+    if (change < MARKET_MOVE_THRESHOLD) continue;
+
+    const entity = entityIndex.byId.get(market.symbol);
+    const relatedNews = findNewsForMarketSymbol(market.symbol, newsEntityContexts);
+
+    if (relatedNews.length > 0) {
+      const topNews = relatedNews[0]!;
+      const dedupeKey = generateDedupeKey('explained_market_move', market.symbol, change);
+      if (!isRecentDuplicate(dedupeKey)) {
+        markSignalSeen(dedupeKey);
+        const direction = market.change! > 0 ? '+' : '';
+        signals.push({
+          id: generateSignalId(),
+          type: 'explained_market_move',
+          title: 'Market Move Explained',
+          description: `${market.name} ${direction}${market.change!.toFixed(2)}% correlates with: "${topNews.title.slice(0, 60)}..."`,
+          confidence: Math.min(0.9, 0.5 + (relatedNews.length * 0.1) + (change / 20)),
+          timestamp: new Date(),
+          data: {
+            marketChange: market.change!,
+            newsVelocity: relatedNews.length,
+            correlatedEntities: [market.symbol],
+            correlatedNews: relatedNews.map(n => n.clusterId),
+            explanation: `${relatedNews.length} related news item${relatedNews.length > 1 ? 's' : ''} found`,
+          },
+        });
+      }
+    } else {
+      const oldRelatedNews = Array.from(newsTopics.entries())
         .filter(([k]) => market.name.toLowerCase().includes(k) || k.includes(market.symbol.toLowerCase()))
         .reduce((sum, [, v]) => sum + v, 0);
 
       const dedupeKey = generateDedupeKey('silent_divergence', market.symbol, change);
-      if (relatedNews < 2 && !isRecentDuplicate(dedupeKey)) {
+      if (oldRelatedNews < 2 && !isRecentDuplicate(dedupeKey)) {
         markSignalSeen(dedupeKey);
+        const searchedTerms = entity
+          ? [market.symbol, market.name, ...(entity.keywords?.slice(0, 2) ?? [])].join(', ')
+          : market.symbol;
         signals.push({
           id: generateSignalId(),
           type: 'silent_divergence',
-          title: 'Unexplained Market Move',
-          description: `${market.name} moved ${market.change! > 0 ? '+' : ''}${market.change!.toFixed(2)}% with minimal news coverage`,
+          title: 'Silent Divergence',
+          description: `${market.name} moved ${market.change! > 0 ? '+' : ''}${market.change!.toFixed(2)}% - no news found for: ${searchedTerms}`,
           confidence: Math.min(0.8, 0.4 + change / 10),
           timestamp: new Date(),
           data: {
             marketChange: market.change!,
-            newsVelocity: relatedNews,
+            newsVelocity: oldRelatedNews,
+            explanation: `Searched: ${searchedTerms}`,
           },
         });
       }

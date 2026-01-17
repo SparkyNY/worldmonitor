@@ -52,6 +52,7 @@ export const DEFAULT_MAP_LAYERS: MapLayers = {
 };
 
 // Mobile-specific defaults: minimal layers for better usability
+// Only essential layers: conflicts, hotspots, sanctions, outages, natural, weather
 export const MOBILE_DEFAULT_MAP_LAYERS: MapLayers = {
   conflicts: true,
   bases: false,
@@ -61,8 +62,8 @@ export const MOBILE_DEFAULT_MAP_LAYERS: MapLayers = {
   ais: false,
   nuclear: false,
   irradiators: false,
-  sanctions: false,
-  weather: false,
+  sanctions: true,
+  weather: true,
   economic: false,
   countries: false,
   waterways: false,
@@ -71,7 +72,7 @@ export const MOBILE_DEFAULT_MAP_LAYERS: MapLayers = {
   protests: false,
   flights: false,
   military: false,
-  natural: false,
+  natural: true,
 };
 
 export const MONITOR_COLORS = [

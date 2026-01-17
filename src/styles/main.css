@@ -343,14 +343,48 @@ body {
   opacity: 1;
 }
 
+.map-section.pinned {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.map-pin-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.map-pin-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.map-pin-btn.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--bg);
+}
+
+.map-pin-btn.active:hover {
+  background: var(--green-dim);
+}
+
 .panels-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 4px;
   padding: 4px;
-  flex: 1;
-  overflow-y: auto;
   align-content: start;
+  min-height: 0;
 }
 
 .panel {
@@ -5148,27 +5182,65 @@ body.playback-mode .status-dot {
     z-index: 50;
   }
 
-  /* Ensure labels don't interfere with touch targets */
+  /* Hide ALL labels on mobile for cleaner view */
   .hotspot-label,
   .base-label,
   .earthquake-label,
   .nuclear-label,
-  .economic-label {
-    pointer-events: none;
+  .economic-label,
+  .weather-label,
+  .outage-label,
+  .cable-advisory-label,
+  .repair-ship-label,
+  .protest-label,
+  .flight-delay-label,
+  .military-flight-label,
+  .military-vessel-label,
+  .cluster-label,
+  .irradiator-label,
+  .conflict-label-overlay {
+    display: none !important;
   }
 
-  /* Make layer toggle buttons larger for touch */
-  .layer-toggle {
-    padding: 8px 12px;
-    font-size: 10px;
-    min-height: 36px;
-    min-width: 60px;
-  }
-
+  /* Hide layer toggle buttons on mobile - use fixed layers */
   .layer-toggles {
-    gap: 6px;
-    flex-wrap: wrap;
+    display: none !important;
+  }
+
+  /* Single-column panel layout on mobile */
+  .panels-grid {
+    display: flex !important;
+    flex-direction: column;
+    gap: 8px;
     padding: 8px;
+  }
+
+  .panel {
+    width: 100% !important;
+    min-height: 300px;
+    max-height: 400px;
+  }
+
+  /* Make map section smaller on mobile to show panels */
+  .map-section {
+    height: 40vh !important;
+    min-height: 250px !important;
+    max-height: 50vh !important;
+  }
+
+  /* Hide pin button and resize handle on mobile */
+  .map-pin-btn,
+  .map-resize-handle {
+    display: none !important;
+  }
+
+  /* Simplify time slider on mobile */
+  .time-slider {
+    padding: 4px 8px;
+  }
+
+  .time-slider-label {
+    display: none;
   }
 
   /* Larger map controls */

@@ -15,9 +15,10 @@ Real-time global intelligence dashboard aggregating news, markets, geopolitical 
 
 ### Interactive Global Map
 - **Zoom & Pan** - Smooth navigation with mouse/trackpad gestures
-- **Multiple Views** - Global, US, and MENA region presets
-- **Layer System** - Toggle visibility of different data layers
-- **Time Filtering** - Filter events by time range (1h to 7d)
+- **Regional Focus** - 8 preset views for rapid navigation (Global, Americas, Europe, MENA, Asia, Latin America, Africa, Oceania)
+- **Layer System** - Toggle visibility of 20+ data layers organized by category
+- **Time Filtering** - Filter events by time range (1h, 6h, 24h, 48h, 7d)
+- **Pinnable Map** - Pin the map to the top while scrolling through panels, or let it scroll with the page
 
 ### Data Layers
 
@@ -37,6 +38,7 @@ Layers are organized into logical groups for efficient monitoring:
 | **Military Bases** | 220+ global military installations from 9 operators |
 | **Nuclear Facilities** | Power plants, weapons labs, enrichment sites |
 | **Gamma Irradiators** | IAEA-tracked Category 1-3 radiation sources |
+| **APT Groups** | State-sponsored cyber threat actors with geographic attribution |
 
 **Infrastructure**
 | Layer | Description |
@@ -153,7 +155,9 @@ The dashboard continuously analyzes data streams to detect significant patterns 
 | **△ Triangulation** | Wire + Government + Intel sources align | The "authority triangle"—when official channels, wire services, and defense specialists all report the same thing |
 | **🔥 Velocity Spike** | Topic mention rate doubles with 6+ sources/hour | A story is accelerating rapidly across the news ecosystem |
 | **🔮 Prediction Leading** | Prediction market moves 5%+ with low news coverage | Markets pricing in information not yet reflected in news |
-| **📊 Silent Divergence** | Market moves 2%+ with minimal related news | Unexplained price action—possible insider knowledge or algorithm-driven |
+| **✓ Market Move Explained** | Market moves 2%+ with correlated news coverage | Price action has identifiable news catalyst—entity correlation found related stories |
+| **📊 Silent Divergence** | Market moves 2%+ with no correlated news after entity search | Unexplained price action after exhaustive search—possible insider knowledge or algorithm-driven |
+| **🔁 Flow-Price Divergence** | Pipeline disruption news without corresponding oil price move | Energy supply disruption not yet priced in—potential information edge |
 
 ### How It Works
 
@@ -163,6 +167,75 @@ The correlation engine maintains rolling snapshots of:
 - Prediction market probabilities
 
 Each refresh cycle compares current state to previous snapshot, applying thresholds and deduplication to avoid alert fatigue. Signals include confidence scores (60-95%) based on the strength of the pattern.
+
+### Entity-Aware Correlation
+
+The signal engine uses a **knowledge base of 45+ entities** to intelligently correlate market movements with news coverage. Rather than simple keyword matching, the system understands that "AVGO" (the ticker) relates to "Broadcom" (the company), "AI chips" (the sector), and entities like "Nvidia" (a competitor).
+
+#### Entity Knowledge Base
+
+Each entity in the registry contains:
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| **ID** | Canonical identifier | `broadcom` |
+| **Name** | Display name | `Broadcom Inc.` |
+| **Type** | Category | `company`, `commodity`, `crypto`, `country`, `person` |
+| **Aliases** | Alternative names | `AVGO`, `Broadcom`, `Broadcom Inc` |
+| **Keywords** | Related topics | `AI chips`, `semiconductors`, `VMware` |
+| **Sector** | Industry classification | `semiconductors` |
+| **Related** | Linked entities | `nvidia`, `intel`, `amd` |
+
+#### Entity Types
+
+| Type | Count | Examples |
+|------|-------|----------|
+| **Companies** | 30+ | Nvidia, Apple, Tesla, Broadcom, Boeing |
+| **Commodities** | 5+ | Oil, Gold, Natural Gas, Copper |
+| **Crypto** | 3 | Bitcoin, Ethereum, Solana |
+| **Countries** | 5+ | China, Russia, Iran, Israel, Ukraine |
+| **People** | 5+ | Trump, Musk, Powell, Xi Jinping |
+
+#### How Entity Matching Works
+
+When a market moves significantly (≥2%), the system:
+
+1. **Looks up the ticker** in the entity registry (e.g., `AVGO` → `broadcom`)
+2. **Gathers all identifiers**: aliases, keywords, sector peers, related entities
+3. **Scans all news clusters** for matches against any identifier
+4. **Scores confidence** based on match type:
+   - Alias match (exact name): 95%
+   - Keyword match (topic): 70%
+   - Related entity match: 60%
+
+If correlated news is found → **"Market Move Explained"** signal with the news headline.
+If no correlation after exhaustive search → **"Silent Divergence"** signal.
+
+#### Example: Broadcom +2.5%
+
+```
+1. Ticker AVGO detected with +2.5% move
+2. Entity lookup: broadcom
+3. Search terms: ["Broadcom", "AVGO", "AI chips", "semiconductors", "VMware", "nvidia", "intel", "amd"]
+4. News scan finds: "Broadcom AI Revenue Beats Estimates"
+5. Result: "✓ Market Move Explained: Broadcom AI Revenue Beats Estimates"
+```
+
+Without this system, the same move would generate a generic "Silent Divergence: AVGO +2.5%" signal.
+
+### Signal Deduplication
+
+To prevent alert fatigue, signals use **type-specific TTL (time-to-live)** values for deduplication:
+
+| Signal Type | TTL | Rationale |
+|-------------|-----|-----------|
+| **Silent Divergence** | 6 hours | Market moves persist; don't re-alert on same stock |
+| **Flow-Price Divergence** | 6 hours | Energy events unfold slowly |
+| **Explained Market Move** | 6 hours | Same correlation shouldn't repeat |
+| **Prediction Leading** | 2 hours | Prediction markets update more frequently |
+| **Other signals** | 30 minutes | Default for fast-moving events |
+
+Market signals use **symbol-only keys** (e.g., `silent_divergence:AVGO`) rather than including the price change. This means a stock moving +2.5% then +3.0% won't trigger duplicate alerts—the first alert covers the story.
 
 ---
 
@@ -227,6 +300,47 @@ Headlines are scored against curated word lists:
 
 Score determines sentiment classification: negative (<-1), neutral (-1 to +1), positive (>+1)
 
+### Entity Extraction
+
+News headlines are scanned against the entity knowledge base using **word-boundary regex matching**:
+
+```
+regex = /\b{escaped_alias}\b/gi
+```
+
+**Index Structure**:
+The entity index pre-builds five lookup maps for O(1) access:
+
+| Map | Key | Value | Purpose |
+|-----|-----|-------|---------|
+| `byId` | Entity ID | Full entity record | Direct lookup |
+| `byAlias` | Lowercase alias | Entity ID | Name matching |
+| `byKeyword` | Lowercase keyword | Set of entity IDs | Topic matching |
+| `bySector` | Sector name | Set of entity IDs | Sector queries |
+| `byType` | Entity type | Set of entity IDs | Type filtering |
+
+**Matching Algorithm**:
+
+1. **Alias matching** (highest confidence):
+   - Iterate all aliases (minimum 3 characters to avoid false positives)
+   - Word-boundary regex prevents partial matches ("AI" won't match "RAID")
+   - First alias match for each entity stops further searching (deduplication)
+
+2. **Keyword matching** (medium confidence):
+   - Simple substring check (faster than regex)
+   - Multiple entities may match same keyword
+   - Lower confidence (70%) than alias matches (95%)
+
+3. **Related entity expansion**:
+   - If entity has `related` field, those entities are also checked
+   - Example: AVGO move also searches for NVDA, INTC, AMD news
+
+**Performance**:
+- Index builds once on first access (cached singleton)
+- Alias map has ~150 entries for 45 entities
+- Keyword map has ~200 entries
+- Full news scan: O(aliases × clusters) ≈ 150 × 50 = 7,500 comparisons
+
 ### Baseline Deviation (Z-Score)
 
 The system maintains rolling baselines for news volume per topic:
@@ -268,6 +382,60 @@ The system counts matching news articles in the current feed, applies velocity a
 | **High** | >6 matches OR spike velocity | Red pulse |
 
 This creates a dynamic "heat map" of global attention based on live news flow.
+
+---
+
+## Regional Focus Navigation
+
+The FOCUS selector in the header provides instant navigation to strategic regions. Each preset is calibrated to center on the region's geographic area with an appropriate zoom level.
+
+### Available Regions
+
+| Region | Coverage | Primary Use Cases |
+|--------|----------|-------------------|
+| **Global** | Full world view | Overview, cross-regional comparison |
+| **Americas** | North America focus | US monitoring, NORAD activity |
+| **Europe** | EU + UK + Scandinavia + Western Russia | NATO activity, energy infrastructure |
+| **MENA** | Middle East + North Africa | Conflict zones, oil infrastructure |
+| **Asia** | East Asia + Southeast Asia | China-Taiwan, Korean peninsula |
+| **Latin America** | Central + South America | Regional instability, drug trafficking |
+| **Africa** | Sub-Saharan Africa | Conflict zones, resource extraction |
+| **Oceania** | Australia + Pacific | Indo-Pacific activity |
+
+### Quick Navigation
+
+The FOCUS dropdown enables rapid context switching:
+
+1. **Breaking news** - Jump to the affected region
+2. **Regional briefing** - Cycle through regions for situational awareness
+3. **Crisis monitoring** - Lock onto a specific theater
+
+Regional views are encoded in shareable URLs, enabling direct links to specific geographic contexts.
+
+---
+
+## Map Pinning
+
+By default, the map scrolls with the page, allowing you to scroll down to view panels below. The **pin button** (📌) in the map header toggles sticky behavior:
+
+| State | Behavior |
+|-------|----------|
+| **Unpinned** (default) | Map scrolls with page; scroll down to see panels |
+| **Pinned** | Map stays fixed at top; panels scroll beneath |
+
+### When to Pin
+
+- **Active monitoring** - Keep the map visible while reading news panels
+- **Cross-referencing** - Compare map markers with panel data
+- **Presentation** - Show the map while discussing panel content
+
+### When to Unpin
+
+- **Panel focus** - Read through panels without map taking screen space
+- **Mobile** - Pin is disabled on mobile for better space utilization
+- **Research** - Focus on data panels without geographic distraction
+
+Pin state persists across sessions via localStorage.
 
 ---
 
@@ -905,6 +1073,32 @@ This means an aircraft's details are fetched at most once per day, regardless of
 
 ---
 
+## Cyber Threat Actors (APT Groups)
+
+The map displays geographic attribution markers for major state-sponsored Advanced Persistent Threat (APT) groups. These markers show the approximate operational centers of known threat actors.
+
+### Tracked Groups
+
+| Group | Aliases | Sponsor | Notable Activity |
+|-------|---------|---------|-----------------|
+| **APT28/29** | Fancy Bear, Cozy Bear | Russia (GRU/FSB) | Election interference, government espionage |
+| **APT41** | Double Dragon | China (MSS) | Supply chain attacks, intellectual property theft |
+| **Lazarus** | Hidden Cobra | North Korea (RGB) | Financial theft, cryptocurrency heists |
+| **APT33/35** | Elfin, Charming Kitten | Iran (IRGC) | Critical infrastructure, aerospace targeting |
+
+### Why This Matters
+
+Cyber operations often correlate with geopolitical tensions. When news reports reference Russian cyber activity during a Ukraine escalation, or Iranian hacking during Middle East tensions, these markers provide geographic context for the threat landscape.
+
+### Visual Indicators
+
+APT markers appear as warning triangles (⚠) with distinct styling. Clicking a marker shows:
+- **Official designation** and common aliases
+- **State sponsor** and intelligence agency
+- **Primary targeting sectors**
+
+---
+
 ## Social Unrest Tracking
 
 The Protests layer aggregates civil unrest data from two independent sources, providing corroboration and global coverage.
@@ -1067,6 +1261,52 @@ When a service enters cooldown:
 
 ---
 
+## System Health Monitoring
+
+The status panel (accessed via the health indicator in the header) provides real-time visibility into data source status and system health.
+
+### Health Indicator
+
+The header displays a system health badge:
+
+| State | Visual | Meaning |
+|-------|--------|---------|
+| **Healthy** | Green dot | All data sources operational |
+| **Degraded** | Yellow dot | Some sources in cooldown |
+| **Unhealthy** | Red dot | Multiple sources failing |
+
+Click the indicator to expand the full status panel.
+
+### Data Source Status
+
+The status panel lists all data feeds with their current state:
+
+| Status | Icon | Description |
+|--------|------|-------------|
+| **Active** | ● Green | Fetching data normally |
+| **Cooldown** | ● Yellow | Temporarily paused (circuit breaker) |
+| **Disabled** | ○ Gray | Layer not enabled |
+| **Error** | ● Red | Persistent failure |
+
+### Per-Feed Information
+
+Each feed entry shows:
+- **Source name** - The data provider
+- **Last update** - Time since last successful fetch
+- **Next refresh** - Countdown to next scheduled fetch
+- **Cooldown remaining** - Time until circuit breaker resets (if in cooldown)
+
+### Why This Matters
+
+External APIs are unreliable. The status panel helps you understand:
+- **Data freshness** - Is the news feed current or stale?
+- **Coverage gaps** - Which sources are currently unavailable?
+- **Recovery timeline** - When will failed sources retry?
+
+This transparency enables informed interpretation of the dashboard data.
+
+---
+
 ## Conditional Data Loading
 
 API calls are expensive. The system only fetches data for **enabled layers**, reducing unnecessary network traffic and rate limit consumption.
@@ -1217,34 +1457,52 @@ Panel state survives browser restarts:
 
 ## Mobile Experience
 
-The dashboard adapts for smaller screens while maintaining core functionality.
+The dashboard is optimized for mobile devices with a streamlined interface that prioritizes usability on smaller screens.
 
-### Mobile Detection
+### Mobile-First Design
 
-On screens narrower than 768px:
+On screens narrower than 768px or touch devices:
 
-- **Warning modal** appears recommending desktop for full experience
-- **Reduced default layers** to prevent overwhelm
-- **Touch-optimized controls** for map navigation
-- **Simplified panel layout** with full-width panels
+- **Compact map** - Reduced height (40vh) to show more panels
+- **Single-column layout** - Panels stack vertically for easy scrolling
+- **Hidden map labels** - All marker labels are hidden to reduce visual clutter
+- **Fixed layer set** - Layer toggle buttons are hidden; a curated set of layers is enabled by default
+- **Simplified controls** - Map resize handle and pin button are hidden
+- **Touch-optimized markers** - Expanded touch targets (44px) for easy tapping
 
-### Layer Defaults by Device
+### Mobile Default Layers
 
-| Device | Default Layers |
-|--------|----------------|
-| **Desktop** | Conflicts, Hotspots, Military Bases, Sanctions, Weather |
-| **Mobile** | Conflicts, Hotspots, Weather |
+The mobile experience focuses on the most essential intelligence layers:
 
-Mobile users can still enable additional layers—defaults just prioritize performance.
+| Layer | Purpose |
+|-------|---------|
+| **Conflicts** | Active conflict zones |
+| **Hotspots** | Intelligence hotspots with activity levels |
+| **Sanctions** | Countries under economic sanctions |
+| **Outages** | Network disruptions |
+| **Natural** | Earthquakes, storms, wildfires |
+| **Weather** | Severe weather warnings |
+
+This curated set provides situational awareness without overwhelming the interface or consuming excessive data.
 
 ### Touch Gestures
 
 Map navigation supports:
 
-- **Pinch zoom**: Two-finger zoom in/out
-- **Drag pan**: Single-finger map movement
-- **Tap markers**: Show popup (replaces hover)
-- **Double-tap**: Quick zoom
+- **Pinch zoom** - Two-finger zoom in/out
+- **Drag pan** - Single-finger map movement
+- **Tap markers** - Show popup (replaces hover)
+- **Double-tap** - Quick zoom
+
+### Desktop Experience
+
+On larger screens, the full feature set is available:
+
+- Multi-column responsive panel grid
+- All layer toggles accessible
+- Map labels visible at appropriate zoom levels
+- Resizable map section
+- Pinnable map (keeps map visible while scrolling panels)
 
 ---
 
@@ -1488,7 +1746,8 @@ src/
 │   ├── airports.ts           # 30 monitored US airports
 │   ├── irradiators.ts        # IAEA gamma irradiator sites
 │   ├── nuclear-facilities.ts # Global nuclear infrastructure
-│   └── markets.ts            # Stock symbols, sectors
+│   ├── markets.ts            # Stock symbols, sectors
+│   └── entities.ts           # 45+ entity definitions (companies, commodities, people)
 ├── services/
 │   ├── ais.ts                # WebSocket vessel tracking
 │   ├── military-vessels.ts   # Naval vessel identification
@@ -1515,6 +1774,8 @@ src/
 │   ├── activity-tracker.ts   # New item detection & highlighting
 │   ├── analysis-worker.ts    # Web Worker manager
 │   ├── storage.ts            # IndexedDB snapshots & baselines
+│   ├── entity-index.ts       # Entity lookup maps (by alias, keyword, sector)
+│   ├── entity-extraction.ts  # News-to-entity matching for market correlation
 │   ├── country-instability.ts    # CII scoring algorithm
 │   ├── geo-convergence.ts        # Geographic convergence detection
 │   ├── infrastructure-cascade.ts # Dependency graph and cascade analysis
@@ -1719,13 +1980,21 @@ The full [ROADMAP.md](ROADMAP.md) documents implementation details, API endpoint
 
 ## Design Philosophy
 
-**Information density over aesthetics.** Every pixel should convey signal. The dark interface minimizes eye strain during extended monitoring sessions.
+**Information density over aesthetics.** Every pixel should convey signal. The dark interface minimizes eye strain during extended monitoring sessions. Panels are collapsible, draggable, and hideable—customize to show only what matters.
 
-**Authority matters.** Not all sources are equal. Wire services and official government channels are prioritized over aggregators and blogs.
+**Authority matters.** Not all sources are equal. Wire services and official government channels are prioritized over aggregators and blogs. When multiple sources report the same story, the most authoritative source is displayed as primary.
 
-**Correlation over accumulation.** Raw news feeds are noise. The value is in clustering related stories, detecting velocity changes, and identifying cross-source patterns.
+**Correlation over accumulation.** Raw news feeds are noise. The value is in clustering related stories, detecting velocity changes, and identifying cross-source patterns. A single "Broadcom +2.5% explained by AI chip news" signal is more valuable than showing both data points separately.
 
-**Local-first.** No accounts, no cloud sync. All preferences and history stored locally. The only network traffic is fetching public data.
+**Signal, not noise.** Deduplication is aggressive. The same market move doesn't generate repeated alerts. Signals include confidence scores so you can prioritize attention. Alert fatigue is the enemy of situational awareness.
+
+**Knowledge-first matching.** Simple keyword matching produces false positives. The entity knowledge base understands that AVGO is Broadcom, that Broadcom competes with Nvidia, and that both are in semiconductors. This semantic layer transforms naive string matching into intelligent correlation.
+
+**Fail gracefully.** External APIs are unreliable. Circuit breakers prevent cascading failures. Cached data displays during outages. The status panel shows exactly what's working and what isn't—no silent failures.
+
+**Local-first.** No accounts, no cloud sync. All preferences and history stored locally. The only network traffic is fetching public data. Your monitoring configuration is yours alone.
+
+**Compute where it matters.** CPU-intensive operations (clustering, correlation) run in Web Workers to keep the UI responsive. The main thread handles only rendering and user interaction.
 
 ---
 

@@ -124,13 +124,15 @@ export class SignalModal {
     const signalTypeLabels: Record<string, string> = {
       'prediction_leads_news': '🔮 Prediction Leading',
       'news_leads_markets': '📰 News Leading',
-      'silent_divergence': '📊 Silent Divergence',
+      'silent_divergence': '🔇 Silent Divergence',
       'velocity_spike': '🔥 Velocity Spike',
       'convergence': '◉ Convergence',
       'triangulation': '△ Triangulation',
       'flow_drop': '🛢️ Flow Drop',
       'flow_price_divergence': '📈 Flow/Price Divergence',
       'geo_convergence': '🌐 Geographic Convergence',
+      'explained_market_move': '✓ Market Move Explained',
+      'sector_cascade': '📊 Sector Cascade',
     };
 
     const html = this.currentSignals.map(signal => `
@@ -142,6 +144,9 @@ export class SignalModal {
           <span class="signal-confidence">Confidence: ${Math.round(signal.confidence * 100)}%</span>
           <span class="signal-time">${this.formatTime(signal.timestamp)}</span>
         </div>
+        ${signal.data.explanation ? `
+          <div class="signal-explanation">${escapeHtml(signal.data.explanation)}</div>
+        ` : ''}
         ${signal.data.relatedTopics?.length ? `
           <div class="signal-topics">
             ${signal.data.relatedTopics.map(t => `<span class="signal-topic">${escapeHtml(t)}</span>`).join('')}

@@ -94,6 +94,10 @@ export function generateSignalId(): string {
 }
 
 export function generateDedupeKey(type: string, identifier: string, value: number): string {
+  const marketSignals = ['silent_divergence', 'flow_price_divergence'];
+  if (marketSignals.includes(type)) {
+    return `${type}:${identifier}`;
+  }
   const roundedValue = Math.round(value * 10) / 10;
   return `${type}:${identifier}:${roundedValue}`;
 }

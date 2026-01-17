@@ -36,12 +36,9 @@ export function extractEntitiesFromTitle(title: string): ExtractedEntity[] {
 
 export function extractEntitiesFromCluster(cluster: ClusteredEventCore): NewsEntityContext {
   const primaryEntities = extractEntitiesFromTitle(cluster.primaryTitle);
-
-  const allEntityIds = new Set<string>();
   const entityMap = new Map<string, ExtractedEntity>();
 
   for (const entity of primaryEntities) {
-    allEntityIds.add(entity.entityId);
     if (!entityMap.has(entity.entityId)) {
       entityMap.set(entity.entityId, entity);
     }
