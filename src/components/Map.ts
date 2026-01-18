@@ -1374,16 +1374,9 @@ export class MapComponent {
     // Filter to show only significant events on map (all events still used for CII analysis)
     if (this.state.layers.protests) {
       const significantProtests = this.protests.filter((event) => {
-        // Always show: riots, high severity, or events with fatalities
-        if (event.eventType === 'riot') return true;
-        if (event.severity === 'high') return true;
-        if (event.fatalities && event.fatalities > 0) return true;
-        // Show medium severity at higher zoom levels
-        if (event.severity === 'medium' && this.state.zoom >= 3) return true;
-        // Show validated events
-        if (event.validated) return true;
-        // Hide low severity protests from map (still counted in CII)
-        return false;
+        // Only show riots and high severity (red markers)
+        // All protests still counted in CII analysis
+        return event.eventType === 'riot' || event.severity === 'high';
       });
 
       significantProtests.forEach((event) => {
