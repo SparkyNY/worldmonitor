@@ -202,6 +202,15 @@ class ActivityTracker {
   }
 
   /**
+   * Unregister a panel completely (cleanup for component destruction)
+   */
+  unregister(panelId: string): void {
+    this.unobservePanel(panelId);
+    this.onChangeCallbacks.delete(panelId);
+    this.panels.delete(panelId);
+  }
+
+  /**
    * Clear all tracking data
    */
   clear(): void {

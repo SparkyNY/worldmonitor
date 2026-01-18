@@ -14,6 +14,7 @@ export class Panel {
   protected countEl: HTMLElement | null = null;
   protected newBadgeEl: HTMLElement | null = null;
   protected panelId: string;
+  private tooltipCloseHandler: (() => void) | null = null;
 
   constructor(options: PanelOptions) {
     this.panelId = options.id;
@@ -47,7 +48,8 @@ export class Panel {
         tooltip.classList.toggle('visible');
       });
 
-      document.addEventListener('click', () => tooltip.classList.remove('visible'));
+      this.tooltipCloseHandler = () => tooltip.classList.remove('visible');
+      document.addEventListener('click', this.tooltipCloseHandler);
 
       const infoWrapper = document.createElement('div');
       infoWrapper.className = 'panel-info-wrapper';
@@ -165,5 +167,15 @@ export class Panel {
    */
   public getId(): string {
     return this.panelId;
+  }
+
+  /**
+   * Clean up event listeners and resources
+   */
+  public destroy(): void {
+    if (this.tooltipCloseHandler) {
+      document.removeEventListener('click', this.tooltipCloseHandler);
+      this.tooltipCloseHandler = null;
+    }
   }
 }

@@ -335,4 +335,19 @@ export class NewsPanel extends Panel {
       });
     });
   }
+
+  /**
+   * Clean up resources
+   */
+  public destroy(): void {
+    // Clean up windowed list
+    this.windowedList?.destroy();
+    this.windowedList = null;
+
+    // Unregister from activity tracker
+    activityTracker.unregister(this.panelId);
+
+    // Call parent destroy
+    super.destroy();
+  }
 }

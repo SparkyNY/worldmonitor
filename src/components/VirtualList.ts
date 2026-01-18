@@ -389,5 +389,19 @@ export class WindowedList<T> {
     element.classList.add('rendered');
     this.renderedChunks.add(chunkIndex);
   }
+
+  /**
+   * Clean up resources
+   */
+  destroy(): void {
+    if (this.scrollRAF !== null) {
+      cancelAnimationFrame(this.scrollRAF);
+      this.scrollRAF = null;
+    }
+    this.container.removeEventListener('scroll', this.handleScroll);
+    this.chunkElements.clear();
+    this.renderedChunks.clear();
+    this.items = [];
+  }
 }
 

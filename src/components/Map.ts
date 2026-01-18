@@ -110,6 +110,7 @@ export class MapComponent {
   private renderScheduled = false;
   private lastRenderTime = 0;
   private readonly MIN_RENDER_INTERVAL_MS = 100;
+  private timestampIntervalId: ReturnType<typeof setInterval> | null = null;
 
   constructor(container: HTMLElement, initialState: MapState) {
     this.container = container;
@@ -177,6 +178,10 @@ export class MapComponent {
 
   public destroy(): void {
     document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
+    if (this.timestampIntervalId) {
+      clearInterval(this.timestampIntervalId);
+      this.timestampIntervalId = null;
+    }
   }
 
   private createControls(): HTMLElement {
@@ -429,7 +434,7 @@ export class MapComponent {
     timestamp.className = 'map-timestamp';
     timestamp.id = 'mapTimestamp';
     this.updateTimestamp(timestamp);
-    setInterval(() => this.updateTimestamp(timestamp), 60000);
+    this.timestampIntervalId = setInterval(() => this.updateTimestamp(timestamp), 60000);
     return timestamp;
   }
 
