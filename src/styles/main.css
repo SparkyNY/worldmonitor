@@ -39,6 +39,14 @@ body {
   min-width: 100vw;
 }
 
+/* Pause all animations when tab is hidden or idle */
+body.animations-paused *,
+body.animations-paused *::before,
+body.animations-paused *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
+
 #app {
   height: 100%;
   width: 100%;

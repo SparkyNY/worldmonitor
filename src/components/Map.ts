@@ -107,6 +107,9 @@ export class MapComponent {
     nuclear: new Set(),
   };
   private boundVisibilityHandler!: () => void;
+  private renderScheduled = false;
+  private lastRenderTime = 0;
+  private readonly MIN_RENDER_INTERVAL_MS = 100;
 
   constructor(container: HTMLElement, initialState: MapState) {
     this.container = container;
@@ -602,7 +605,23 @@ export class MapComponent {
     this.clearClusterCanvas();
   }
 
+  public scheduleRender(): void {
+    if (this.renderScheduled) return;
+    this.renderScheduled = true;
+    requestAnimationFrame(() => {
+      this.renderScheduled = false;
+      this.render();
+    });
+  }
+
   public render(): void {
+    const now = performance.now();
+    if (now - this.lastRenderTime < this.MIN_RENDER_INTERVAL_MS) {
+      this.scheduleRender();
+      return;
+    }
+    this.lastRenderTime = now;
+
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
 

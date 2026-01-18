@@ -1002,6 +1002,11 @@ export class App {
 
     // Map pin toggle
     this.setupMapPin();
+
+    // Pause animations when tab is hidden
+    document.addEventListener('visibilitychange', () => {
+      document.body.classList.toggle('animations-paused', document.hidden);
+    });
   }
 
   private setupUrlStateSync(): void {
