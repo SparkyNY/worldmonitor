@@ -819,31 +819,6 @@ export class MapComponent {
     });
   }
 
-  private renderConflictLabels(projection: d3.GeoProjection): void {
-    CONFLICT_ZONES.forEach((zone) => {
-      const centerPos = projection(zone.center as [number, number]);
-      if (!centerPos) return;
-
-      const div = document.createElement('div');
-      div.className = 'conflict-label-overlay';
-      div.style.left = `${centerPos[0]}px`;
-      div.style.top = `${centerPos[1]}px`;
-      div.textContent = zone.name;
-
-      div.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const rect = this.container.getBoundingClientRect();
-        this.popup.show({
-          type: 'conflict',
-          data: zone,
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top,
-        });
-      });
-
-      this.overlays.appendChild(div);
-    });
-  }
 
   private renderSanctions(): void {
     if (!this.worldData) return;
@@ -874,10 +849,6 @@ export class MapComponent {
       this.renderCountryLabels(projection);
     }
 
-    // Conflict zone labels (HTML overlay with counter-scaling)
-    if (this.state.layers.conflicts) {
-      this.renderConflictLabels(projection);
-    }
 
     // Strategic waterways
     if (this.state.layers.waterways) {
