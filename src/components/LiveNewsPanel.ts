@@ -112,7 +112,25 @@ export class LiveNewsPanel extends Panel {
       this.wasPlayingBeforeIdle = true;
       this.isPlaying = false;
       this.updateLiveIndicator();
-      this.syncPlayerState();
+    }
+    // Destroy player completely to free memory (iframe consumes ~115 kB/s even when paused)
+    this.destroyPlayer();
+  }
+
+  private destroyPlayer(): void {
+    if (this.player) {
+      this.player.destroy();
+      this.player = null;
+    }
+    this.isPlayerReady = false;
+    this.currentVideoId = null;
+    // Clear the container to remove the iframe
+    if (this.playerContainer) {
+      this.playerContainer.innerHTML = '';
+      // Recreate the player element for when we resume
+      this.playerElement = document.createElement('div');
+      this.playerElement.id = this.playerElementId;
+      this.playerContainer.appendChild(this.playerElement);
     }
   }
 
@@ -120,7 +138,8 @@ export class LiveNewsPanel extends Panel {
     if (this.wasPlayingBeforeIdle && !this.isPlaying) {
       this.isPlaying = true;
       this.updateLiveIndicator();
-      this.syncPlayerState();
+      // Reinitialize the player
+      void this.initializePlayer();
     }
   }
 

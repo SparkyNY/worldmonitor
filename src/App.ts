@@ -81,6 +81,10 @@ export class App {
   private boundFullscreenHandler: (() => void) | null = null;
   private boundResizeHandler: (() => void) | null = null;
   private boundVisibilityHandler: (() => void) | null = null;
+  private idleTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private boundIdleResetHandler: (() => void) | null = null;
+  private isIdle = false;
+  private readonly IDLE_PAUSE_MS = 2 * 60 * 1000; // 2 minutes - pause animations when idle
 
   constructor(containerId: string) {
     const el = document.getElementById(containerId);
@@ -700,6 +704,18 @@ export class App {
       this.boundVisibilityHandler = null;
     }
 
+    // Clean up idle detection
+    if (this.idleTimeoutId) {
+      clearTimeout(this.idleTimeoutId);
+      this.idleTimeoutId = null;
+    }
+    if (this.boundIdleResetHandler) {
+      ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'].forEach(event => {
+        document.removeEventListener(event, this.boundIdleResetHandler!);
+      });
+      this.boundIdleResetHandler = null;
+    }
+
     // Clean up map and AIS
     this.map?.destroy();
     disconnectAisStream();
@@ -1075,8 +1091,47 @@ export class App {
     // Pause animations when tab is hidden
     this.boundVisibilityHandler = () => {
       document.body.classList.toggle('animations-paused', document.hidden);
+      // Also reset idle timer when tab becomes visible
+      if (!document.hidden) {
+        this.resetIdleTimer();
+      }
     };
     document.addEventListener('visibilitychange', this.boundVisibilityHandler);
+
+    // Idle detection - pause animations after 2 minutes of inactivity
+    this.setupIdleDetection();
+  }
+
+  private setupIdleDetection(): void {
+    this.boundIdleResetHandler = () => {
+      // User is active - resume animations if we were idle
+      if (this.isIdle) {
+        this.isIdle = false;
+        document.body.classList.remove('animations-paused');
+      }
+      this.resetIdleTimer();
+    };
+
+    // Track user activity
+    ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'].forEach(event => {
+      document.addEventListener(event, this.boundIdleResetHandler!, { passive: true });
+    });
+
+    // Start the idle timer
+    this.resetIdleTimer();
+  }
+
+  private resetIdleTimer(): void {
+    if (this.idleTimeoutId) {
+      clearTimeout(this.idleTimeoutId);
+    }
+    this.idleTimeoutId = setTimeout(() => {
+      if (!document.hidden) {
+        this.isIdle = true;
+        document.body.classList.add('animations-paused');
+        console.log('[App] User idle - pausing animations to save resources');
+      }
+    }, this.IDLE_PAUSE_MS);
   }
 
   private setupUrlStateSync(): void {
