@@ -655,8 +655,22 @@ export class MapComponent {
     // Simple viewBox matching container - keeps SVG and overlays aligned
     this.svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-    // Only rebuild static base layer when size changes
-    const shouldRenderBase = !this.baseRendered || width !== this.baseWidth || height !== this.baseHeight;
+    // Safety check: verify base layer groups exist in DOM and have content
+    // (protects against external clearing or DOM detachment)
+    const baseGroupExists = this.baseLayerGroup?.node()?.parentNode === this.svg.node();
+    const dynamicGroupExists = this.dynamicLayerGroup?.node()?.parentNode === this.svg.node();
+
+    // Recreate layer groups if they were removed
+    if (!baseGroupExists || !dynamicGroupExists) {
+      this.svg.selectAll('.map-base, .map-dynamic').remove();
+      this.baseLayerGroup = this.svg.append('g').attr('class', 'map-base');
+      this.dynamicLayerGroup = this.svg.append('g').attr('class', 'map-dynamic');
+      this.baseRendered = false;
+    }
+
+    // Only rebuild static base layer when size changes or content is missing
+    const baseHasContent = this.baseLayerGroup!.select('.country').node() !== null;
+    const shouldRenderBase = !this.baseRendered || !baseHasContent || width !== this.baseWidth || height !== this.baseHeight;
     if (shouldRenderBase && this.baseLayerGroup) {
       this.baseWidth = width;
       this.baseHeight = height;
