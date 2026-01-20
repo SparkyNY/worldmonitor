@@ -7,7 +7,7 @@ Real-time global intelligence dashboard aggregating news, markets, geopolitical 
 ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)
 ![D3.js](https://img.shields.io/badge/D3.js-F9A03C?style=flat&logo=d3.js&logoColor=white)
-![Version](https://img.shields.io/badge/version-1.4.2-blue)
+![Version](https://img.shields.io/badge/version-1.5.0-blue)
 
 ![World Monitor Dashboard](Screenshot.png)
 
@@ -132,11 +132,35 @@ Embedded YouTube live streams from major news networks with channel switching:
 | **Al Arabiya** | Middle East news (Arabic perspective) |
 | **Al Jazeera** | Middle East & international news |
 
-Features:
+**Core Features:**
 - **Channel Switcher** - One-click switching between networks
 - **Live Indicator** - Blinking dot shows stream status, click to pause/play
 - **Mute Toggle** - Audio control (muted by default)
 - **Double-Width Panel** - Larger video player for better viewing
+
+**Performance Optimizations:**
+
+The live stream panel uses the **YouTube IFrame Player API** rather than raw iframe embedding. This provides several advantages:
+
+| Feature | Benefit |
+|---------|---------|
+| **Persistent player** | No iframe reload on mute/play/channel change |
+| **API control** | Direct `playVideo()`, `pauseVideo()`, `mute()` calls |
+| **Reduced bandwidth** | Same stream continues across state changes |
+| **Faster switching** | Channel changes via `loadVideoById()` |
+
+**Idle Detection:**
+
+To conserve resources, the panel implements automatic idle pausing:
+
+| Trigger | Action |
+|---------|--------|
+| **Tab hidden** | Stream pauses (via Visibility API) |
+| **5 min idle** | Stream pauses (no mouse/keyboard activity) |
+| **User returns** | Stream resumes automatically |
+| **Manual pause** | User intent tracked separately |
+
+This prevents background tabs from consuming bandwidth while preserving user preference for manually-paused streams.
 
 ### Market Data
 - **Stocks** - Major indices and tech stocks via Finnhub (Yahoo Finance backup)
@@ -322,6 +346,89 @@ Sources are also categorized by function for triangulation detection:
 - **Mainstream** - Major news outlets (BBC, Guardian, NPR, Al Jazeera)
 - **Market** - Financial press (CNBC, MarketWatch, Financial Times)
 - **Tech** - Technology coverage (Hacker News, Ars Technica, MIT Tech Review)
+
+---
+
+## Entity Extraction System
+
+The dashboard extracts **named entities** (companies, countries, leaders, organizations) from news headlines to enable news-to-market correlation and entity-based filtering.
+
+### How It Works
+
+Headlines are scanned against a curated entity index containing:
+
+| Entity Type | Examples | Purpose |
+|-------------|----------|---------|
+| **Companies** | Apple, Tesla, NVIDIA, Boeing | Market symbol correlation |
+| **Countries** | Russia, China, Iran, Ukraine | Geopolitical attribution |
+| **Leaders** | Putin, Xi Jinping, Khamenei | Political event tracking |
+| **Organizations** | NATO, OPEC, Fed, SEC | Institutional news filtering |
+| **Commodities** | Oil, Gold, Bitcoin | Commodity news correlation |
+
+### Entity Matching
+
+Each entity has multiple match patterns for comprehensive detection:
+
+```
+Entity: NVIDIA (NVDA)
+  Aliases: nvidia, nvda, jensen huang
+  Keywords: gpu, h100, a100, cuda, ai chip
+  Match Types:
+    - Name match: "NVIDIA announces..." → 95% confidence
+    - Alias match: "Jensen Huang says..." → 90% confidence
+    - Keyword match: "H100 shortage..." → 70% confidence
+```
+
+### Confidence Scoring
+
+Entity extraction produces confidence scores based on match quality:
+
+| Match Type | Confidence | Example |
+|------------|------------|---------|
+| **Direct name** | 95% | "Apple reports earnings" |
+| **Alias** | 90% | "Tim Cook announces..." |
+| **Keyword** | 70% | "iPhone sales decline" |
+| **Related cluster** | 63% | Secondary headline mention (90% × 0.7) |
+
+### Market Correlation
+
+When a market symbol moves significantly, the system searches news clusters for related entities:
+
+1. **Symbol lookup** - Find entity by market symbol (e.g., `AAPL` → Apple)
+2. **News search** - Find clusters mentioning the entity or related entities
+3. **Confidence ranking** - Sort by extraction confidence
+4. **Result** - "Market Move Explained" or "Silent Divergence" signal
+
+This enables signals like:
+- **Explained**: "AVGO +5.2% — Broadcom mentioned in 3 news clusters (AI chip demand)"
+- **Silent**: "AVGO +5.2% — No correlated news after entity search"
+
+---
+
+## Signal Context ("Why It Matters")
+
+Every signal includes contextual information explaining its analytical significance:
+
+### Context Fields
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| **Why It Matters** | Analytical significance | "Markets pricing in information before news" |
+| **Actionable Insight** | What to do next | "Monitor for breaking news in 1-6 hours" |
+| **Confidence Note** | Signal reliability caveats | "Higher confidence if multiple markets align" |
+
+### Signal-Specific Context
+
+| Signal | Why It Matters |
+|--------|---------------|
+| **Prediction Leading** | Prediction markets often price in information before it becomes news—traders may have early access to developments |
+| **Silent Divergence** | Market moving without identifiable catalyst—possible insider knowledge, algorithmic trading, or unreported development |
+| **Velocity Spike** | Story accelerating across multiple sources—indicates growing significance and potential for market/policy impact |
+| **Triangulation** | The "authority triangle" (wire + government + intel) aligned—gold standard for breaking news confirmation |
+| **Flow-Price Divergence** | Supply disruption not yet reflected in prices—potential information edge or markets have better information |
+| **Hotspot Escalation** | Geopolitical hotspot showing escalation across news, instability, convergence, and military presence |
+
+This contextual layer transforms raw alerts into **actionable intelligence** by explaining the analytical reasoning behind each signal.
 
 ---
 
@@ -606,19 +713,41 @@ The CII tracks 24-hour changes to identify trajectory:
 - **Stable**: Change within ±5 points (steady state)
 - **Falling**: Score decreased by ≥5 points (de-escalation)
 
-### Alert Warmup Period
+### Learning Mode (15-Minute Warmup)
 
-On dashboard startup, all countries initially lack previous scores, causing every country to appear as a "new" change. Without mitigation, this would flood the Intelligence Findings panel with false-positive alerts.
+On dashboard startup, the CII system enters **Learning Mode**—a 15-minute calibration period where scores are calculated but alerts are suppressed. This prevents the flood of false-positive alerts that would otherwise occur as the system establishes baseline values.
 
-The CII system implements a **warmup period** that suppresses alerts for the first 2 refresh cycles:
+**Why 15 minutes?** Real-world testing showed that CII scores stabilize after approximately 10-20 minutes of data collection. The 15-minute window provides sufficient time for:
+- Multiple refresh cycles across all data sources
+- Trend detection to establish direction (rising/stable/falling)
+- Cross-source correlation to normalize bias
+
+**Visual Indicators**
+
+During Learning Mode, the dashboard provides clear visual feedback:
+
+| Location | Indicator |
+|----------|-----------|
+| **CII Panel** | Yellow banner with progress bar and countdown timer |
+| **Strategic Risk Overview** | "Learning Mode - Xm until reliable" status |
+| **Score Display** | Scores shown at 60% opacity (dimmed) |
+
+**Behavior**
 
 ```
-Cycle 1: Scores calculated, stored as baseline (no alerts)
-Cycle 2: Scores recalculated, compared to baseline (no alerts)
-Cycle 3+: Normal alert generation (threshold ≥10 point change)
+Minutes 0-15: Learning Mode Active
+  - CII scores calculated and displayed (dimmed)
+  - Trend detection active (stores baseline)
+  - All CII-related alerts suppressed
+  - Progress bar fills as time elapses
+
+After 15 minutes: Learning Complete
+  - Full opacity scores
+  - Alert generation enabled (threshold ≥10 point change)
+  - "All data sources active" status shown
 ```
 
-This ensures only genuine score changes—after the system has established baseline values—trigger alerts. The warmup completes within ~10 minutes of dashboard load.
+This ensures users understand that early scores are provisional while preventing alert fatigue during the calibration period.
 
 ### Keyword Attribution
 
@@ -1592,6 +1721,43 @@ Understanding data freshness is critical for decision-making:
 - A "critical" AIS stream means vessel positions are unreliable
 
 This visibility enables appropriate confidence calibration when interpreting the dashboard.
+
+### Core vs. Optional Sources
+
+Data sources are classified by their importance to risk assessment:
+
+| Classification | Sources | Impact |
+|----------------|---------|--------|
+| **Core** | GDELT, RSS feeds | Required for meaningful risk scores |
+| **Optional** | ACLED, Military, AIS, Weather, Economic | Enhance but not required |
+
+The Strategic Risk Overview panel adapts its display based on core source availability:
+
+| Status | Display Mode | Behavior |
+|--------|--------------|----------|
+| **Sufficient** | Full data view | All metrics shown with confidence |
+| **Limited** | Limited data view | Shows "Limited Data" warning banner |
+| **Insufficient** | Insufficient data view | "Insufficient Data" message, no risk score |
+
+### Freshness-Aware Risk Assessment
+
+The composite risk score is adjusted based on data freshness:
+
+```
+If core sources fresh:
+  → Full confidence in risk score
+  → "All data sources active" indicator
+
+If core sources stale:
+  → Display warning: "Limited Data - [active sources]"
+  → Score shown but flagged as potentially unreliable
+
+If core sources unavailable:
+  → "Insufficient data for risk assessment"
+  → No score displayed
+```
+
+This prevents false "all clear" signals when the system actually lacks data to make that determination.
 
 ---
 
