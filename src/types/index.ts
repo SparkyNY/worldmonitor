@@ -126,6 +126,7 @@ export interface Hotspot {
   lon: number;
   keywords: string[];
   subtext?: string;
+  location?: string;  // Human-readable location (e.g., "Sahel Region, West Africa")
   agencies?: string[];
   level?: 'low' | 'elevated' | 'high';
   description?: string;

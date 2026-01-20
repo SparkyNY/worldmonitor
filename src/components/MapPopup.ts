@@ -324,6 +324,12 @@ export class MapPopup {
         ${hotspot.description ? `<p class="popup-description">${escapeHtml(hotspot.description)}</p>` : ''}
         ${escalationSection}
         <div class="popup-stats">
+          ${hotspot.location ? `
+            <div class="popup-stat">
+              <span class="stat-label">LOCATION</span>
+              <span class="stat-value">${escapeHtml(hotspot.location)}</span>
+            </div>
+          ` : ''}
           <div class="popup-stat">
             <span class="stat-label">COORDINATES</span>
             <span class="stat-value">${escapeHtml(`${hotspot.lat.toFixed(2)}°N, ${hotspot.lon.toFixed(2)}°E`)}</span>
