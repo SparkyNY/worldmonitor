@@ -118,6 +118,7 @@ const TECH_PANELS: Record<string, PanelConfig> = {
   polymarket: { name: 'Tech Predictions', enabled: true, priority: 2 },
   funding: { name: 'Funding & VC', enabled: true, priority: 1 },
   producthunt: { name: 'Product Hunt', enabled: true, priority: 1 },
+  events: { name: 'Tech Events', enabled: true, priority: 1 },
   'service-status': { name: 'Service Status', enabled: true, priority: 2 },
   economic: { name: 'Economic Indicators', enabled: true, priority: 2 },
   monitors: { name: 'My Monitors', enabled: true, priority: 2 },

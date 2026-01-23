@@ -333,7 +333,7 @@ export class MapComponent {
     ];
     const techLayers: (keyof MapLayers)[] = [
       'cables', 'datacenters', 'outages',                // tech infrastructure
-      'startupHubs', 'cloudRegions', 'techHQs', 'techEvents', // tech ecosystem
+      'startupHubs', 'cloudRegions', 'accelerators', 'techHQs', 'techEvents', // tech ecosystem
       'natural', 'weather',                               // natural events
       'economic', 'countries',                            // economic/geographic
     ];
