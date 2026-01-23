@@ -21,7 +21,7 @@ import { buildMapUrl, debounce, loadFromStorage, parseMapUrlState, saveToStorage
 import { escapeHtml } from '@/utils/sanitize';
 import type { ParsedMapUrlState } from '@/utils';
 import {
-  MapComponent,
+  MapContainer,
   NewsPanel,
   MarketPanel,
   HeatmapPanel,
@@ -60,7 +60,7 @@ import type { PredictionMarket, MarketData, ClusteredEvent } from '@/types';
 
 export class App {
   private container: HTMLElement;
-  private map: MapComponent | null = null;
+  private map: MapContainer | null = null;
   private panels: Record<string, Panel> = {};
   private newsPanels: Record<string, NewsPanel> = {};
   private allNews: NewsItem[] = [];
@@ -916,8 +916,9 @@ export class App {
 
     // Initialize map in the map section
     // Default to MENA view on mobile for better focus
+    // Uses deck.gl (WebGL) on desktop, falls back to D3/SVG on mobile
     const mapContainer = document.getElementById('mapContainer') as HTMLElement;
-    this.map = new MapComponent(mapContainer, {
+    this.map = new MapContainer(mapContainer, {
       zoom: this.isMobile ? 2.5 : 1.0,
       pan: { x: 0, y: 0 },  // Centered view to show full world
       view: this.isMobile ? 'mena' : 'global',

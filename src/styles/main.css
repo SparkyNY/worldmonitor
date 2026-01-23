@@ -8571,3 +8571,387 @@ body.playback-mode .status-dot {
   border-radius: 4px;
   margin-top: 8px;
 }
+
+/* ===== deck.gl Map Styles ===== */
+.map-container.deckgl-mode {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.deckgl-map-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#deckgl-basemap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#deckgl-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#deckgl-overlay canvas {
+  pointer-events: auto;
+}
+
+/* deck.gl Controls */
+.deckgl-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+}
+
+.deckgl-controls .zoom-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.deckgl-controls .map-btn {
+  width: 32px;
+  height: 32px;
+  background: rgba(10, 15, 12, 0.95);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.deckgl-controls .map-btn:hover {
+  background: rgba(30, 40, 35, 0.95);
+  border-color: var(--green);
+}
+
+.deckgl-controls .view-selector {
+  margin-top: 4px;
+}
+
+.deckgl-controls .view-select {
+  width: 100%;
+  padding: 6px 8px;
+  background: rgba(10, 15, 12, 0.95);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.deckgl-controls .view-select:hover {
+  border-color: var(--green);
+}
+
+/* deck.gl Time Slider */
+.deckgl-time-slider {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 100;
+  background: rgba(10, 15, 12, 0.95);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.deckgl-time-slider .time-options {
+  display: flex;
+  gap: 2px;
+}
+
+.deckgl-time-slider .time-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.deckgl-time-slider .time-btn:hover {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.deckgl-time-slider .time-btn.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--bg);
+  font-weight: bold;
+}
+
+/* deck.gl Layer Toggles */
+.deckgl-layer-toggles {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 100;
+  background: rgba(10, 15, 12, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  max-width: 220px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.deckgl-layer-toggles .toggle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.deckgl-layer-toggles .toggle-collapse {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.deckgl-layer-toggles .toggle-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deckgl-layer-toggles .toggle-list.collapsed {
+  display: none;
+}
+
+.deckgl-layer-toggles .layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.deckgl-layer-toggles .layer-toggle:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.deckgl-layer-toggles .layer-toggle input {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--green);
+}
+
+.deckgl-layer-toggles .toggle-icon {
+  font-size: 12px;
+  width: 18px;
+  text-align: center;
+}
+
+.deckgl-layer-toggles .toggle-label {
+  font-size: 10px;
+  color: var(--text);
+}
+
+.deckgl-layer-toggles .layer-toggle.loading .toggle-label {
+  color: var(--yellow);
+  animation: layer-loading 0.8s ease-in-out infinite;
+}
+
+.deckgl-layer-toggles .layer-toggle.has-data .toggle-label {
+  color: var(--green);
+}
+
+/* deck.gl Legend */
+.deckgl-legend {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  z-index: 100;
+  background: rgba(10, 15, 12, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 14px;
+}
+
+.deckgl-legend .legend-title {
+  font-size: 9px;
+  font-weight: bold;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.deckgl-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.deckgl-legend .legend-item:last-child {
+  margin-bottom: 0;
+}
+
+.deckgl-legend .legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.deckgl-legend .legend-label {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+/* deck.gl Timestamp */
+.deckgl-timestamp {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: rgba(10, 15, 12, 0.8);
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 9px;
+  color: var(--text-dim);
+  font-family: inherit;
+  letter-spacing: 0.5px;
+}
+
+/* deck.gl Tooltip */
+.deckgl-tooltip {
+  background: rgba(10, 15, 12, 0.95);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text);
+  max-width: 250px;
+  pointer-events: none;
+}
+
+.deckgl-tooltip strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* MapLibre GL overrides for dark theme */
+.maplibregl-map {
+  font-family: inherit;
+}
+
+.maplibregl-popup-content {
+  background: rgba(10, 15, 12, 0.95);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: 11px;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: rgba(10, 15, 12, 0.95);
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgba(10, 15, 12, 0.7) !important;
+  color: var(--text-dim) !important;
+  font-size: 9px !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--text-dim) !important;
+}
+
+/* Hide MapLibre navigation controls (we use custom ones) */
+.maplibregl-ctrl-top-right,
+.maplibregl-ctrl-bottom-right {
+  display: none;
+}
+
+/* deck.gl mode indicator */
+.map-container.deckgl-mode::after {
+  content: 'WebGL';
+  position: absolute;
+  bottom: 10px;
+  right: 170px;
+  z-index: 99;
+  background: rgba(0, 200, 100, 0.15);
+  color: var(--green);
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 8px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/* Responsive adjustments for deck.gl on smaller desktops */
+@media (max-width: 1200px) {
+  .deckgl-layer-toggles {
+    max-width: 180px;
+  }
+
+  .deckgl-legend {
+    padding: 8px 10px;
+  }
+
+  .deckgl-legend .legend-title {
+    font-size: 8px;
+  }
+
+  .deckgl-legend .legend-label {
+    font-size: 8px;
+  }
+}
+
+/* Scrollbar styling for layer toggles */
+.deckgl-layer-toggles::-webkit-scrollbar {
+  width: 4px;
+}
+
+.deckgl-layer-toggles::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.deckgl-layer-toggles::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.deckgl-layer-toggles::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
