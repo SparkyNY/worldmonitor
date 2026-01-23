@@ -331,15 +331,14 @@ const TECH_FEEDS: Record<string, Feed[]> = {
     { name: 'AngelList News', url: rss('https://news.google.com/rss/search?q=site:angellist.com+OR+"AngelList"+funding+when:7d&hl=en-US&gl=US&ceid=US:en') },
   ],
   github: [
-    { name: 'GitHub Trending', url: rss('https://rsshub.app/github/trending/daily/all') },
-    { name: 'GitHub Trending JS', url: rss('https://rsshub.app/github/trending/daily/javascript') },
-    { name: 'GitHub Trending Python', url: rss('https://rsshub.app/github/trending/daily/python') },
-    { name: 'GitHub Trending TS', url: rss('https://rsshub.app/github/trending/daily/typescript') },
+    { name: 'GitHub Blog', url: rss('https://github.blog/feed/') },
+    { name: 'GitHub Trending', url: rss('https://news.google.com/rss/search?q=site:github.com+trending+OR+"GitHub+trending"+when:3d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Open Source News', url: rss('https://news.google.com/rss/search?q="open+source"+project+release+OR+launch+when:3d&hl=en-US&gl=US&ceid=US:en') },
   ],
   ipo: [
     { name: 'IPO News', url: rss('https://news.google.com/rss/search?q=(IPO+OR+"initial+public+offering"+OR+SPAC)+tech+when:7d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'Renaissance IPO', url: rss('https://news.google.com/rss/search?q=site:renaissancecapital.com+IPO+when:14d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'CNBC IPO', url: rss('https://www.cnbc.com/id/28185165/device/rss/rss.html') },
+    { name: 'Tech IPO News', url: rss('https://news.google.com/rss/search?q=tech+IPO+OR+"tech+company"+IPO+when:7d&hl=en-US&gl=US&ceid=US:en') },
   ],
   funding: [
     { name: 'Crunchbase News', url: rss('https://news.crunchbase.com/feed/') },

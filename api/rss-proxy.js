@@ -81,6 +81,11 @@ const ALLOWED_DOMAINS = [
   'news.crunchbase.com',
   'www.saastr.com',
   'feeds.feedburner.com',
+  // Additional tech variant domains
+  'www.producthunt.com',
+  'www.axios.com',
+  'github.blog',
+  'githubnext.com',
 ];
 
 export default async function handler(req) {

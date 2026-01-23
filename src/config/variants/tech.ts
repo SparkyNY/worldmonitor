@@ -71,8 +71,8 @@ export const FEEDS: Record<string, Feed[]> = {
   // Policy & Regulation
   policy: [
     { name: 'Politico Tech', url: rss('https://rss.politico.com/technology.xml') },
-    { name: 'Protocol Policy', url: rss('https://www.protocol.com/feeds/feed.rss') },
-    { name: 'Axios AI', url: rss('https://www.axios.com/technology/artificial-intelligence') },
+    { name: 'AI Regulation', url: rss('https://news.google.com/rss/search?q=AI+regulation+OR+"artificial+intelligence"+law+OR+policy+when:7d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Tech Antitrust', url: rss('https://news.google.com/rss/search?q=tech+antitrust+OR+FTC+Google+OR+FTC+Apple+OR+FTC+Amazon+when:7d&hl=en-US&gl=US&ceid=US:en') },
   ],
 
   // Markets & Finance (tech-focused)
