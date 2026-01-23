@@ -397,7 +397,8 @@ export class DeckGLMap {
     return new PathLayer({
       id: 'cables-layer',
       data: UNDERSEA_CABLES,
-      getPath: (d) => d.points.map((p: [number, number]) => [p[1], p[0]]),
+      // Points are already [lon, lat] which is what deck.gl expects
+      getPath: (d) => d.points,
       getColor: (d) =>
         highlightedCables.has(d.id) ? COLORS.cableHighlight : COLORS.cable,
       getWidth: (d) => highlightedCables.has(d.id) ? 3 : 1,
@@ -413,7 +414,8 @@ export class DeckGLMap {
     return new PathLayer({
       id: 'pipelines-layer',
       data: PIPELINES,
-      getPath: (d) => d.points.map((p: [number, number]) => [p[1], p[0]]),
+      // Points are already [lon, lat] which is what deck.gl expects
+      getPath: (d) => d.points,
       getColor: (d) => {
         if (highlightedPipelines.has(d.id)) {
           return [255, 100, 100, 200] as [number, number, number, number];
@@ -437,7 +439,8 @@ export class DeckGLMap {
         properties: { id: zone.id, name: zone.name, intensity: zone.intensity },
         geometry: {
           type: 'Polygon' as const,
-          coordinates: [zone.coords.map(c => [c[1], c[0]])],
+          // Coords are already [lon, lat] which is GeoJSON standard
+          coordinates: [zone.coords],
         },
       })),
     };
@@ -786,6 +789,10 @@ export class DeckGLMap {
       return { html: `<div class="deckgl-tooltip"><strong>${obj.name || ''}</strong><br/>${obj.operatorCountry || ''}</div>` };
     }
 
+    if (layerId === 'military-flights-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.callsign || obj.registration || 'Military Aircraft'}</strong><br/>${obj.type || ''}</div>` };
+    }
+
     if (layerId === 'protests-layer') {
       return { html: `<div class="deckgl-tooltip"><strong>${obj.title || ''}</strong><br/>${obj.country || ''}</div>` };
     }
@@ -802,8 +809,61 @@ export class DeckGLMap {
       return { html: `<div class="deckgl-tooltip"><strong>${obj.name || ''}</strong><br/>${obj.owner || ''}</div>` };
     }
 
+    if (layerId === 'cables-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.name || ''}</strong><br/>Undersea Cable</div>` };
+    }
+
+    if (layerId === 'pipelines-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.name || ''}</strong><br/>${obj.type || ''} Pipeline</div>` };
+    }
+
+    if (layerId === 'conflict-zones-layer') {
+      const props = obj.properties || obj;
+      return { html: `<div class="deckgl-tooltip"><strong>${props.name || ''}</strong><br/>Conflict Zone</div>` };
+    }
+
+    if (layerId === 'natural-events-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.title || ''}</strong><br/>${obj.category || 'Natural Event'}</div>` };
+    }
+
+    if (layerId === 'weather-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.event || 'Weather Alert'}</strong><br/>${obj.severity || ''}</div>` };
+    }
+
+    if (layerId === 'outages-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.asn || 'Internet Outage'}</strong><br/>${obj.country || ''}</div>` };
+    }
+
+    if (layerId === 'ais-density-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>Ship Traffic</strong><br/>Intensity: ${obj.intensity || ''}</div>` };
+    }
+
+    if (layerId === 'waterways-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.name || ''}</strong><br/>Strategic Waterway</div>` };
+    }
+
+    if (layerId === 'economic-centers-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.name || ''}</strong><br/>${obj.country || ''}</div>` };
+    }
+
     if (layerId === 'startup-hubs-layer') {
       return { html: `<div class="deckgl-tooltip"><strong>${obj.city || ''}</strong><br/>${obj.country || ''}</div>` };
+    }
+
+    if (layerId === 'tech-hqs-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.company || ''}</strong><br/>${obj.city || ''}</div>` };
+    }
+
+    if (layerId === 'accelerators-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.name || ''}</strong><br/>${obj.city || ''}</div>` };
+    }
+
+    if (layerId === 'cloud-regions-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.provider || ''}</strong><br/>${obj.region || ''}</div>` };
+    }
+
+    if (layerId === 'tech-events-layer') {
+      return { html: `<div class="deckgl-tooltip"><strong>${obj.title || ''}</strong><br/>${obj.location || ''}</div>` };
     }
 
     return null;
@@ -814,8 +874,12 @@ export class DeckGLMap {
 
     const layerId = info.layer?.id || '';
 
-    if (layerId === 'hotspots-layer' && this.onHotspotClick) {
-      this.onHotspotClick(info.object as Hotspot);
+    // Hotspots have their own click handler - don't show popup
+    if (layerId === 'hotspots-layer') {
+      if (this.onHotspotClick) {
+        this.onHotspotClick(info.object as Hotspot);
+      }
+      return;
     }
 
     // Show popup for other layers - cast to expected popup data type
@@ -1325,7 +1389,8 @@ export class DeckGLMap {
   public triggerConflictClick(id: string): void {
     const conflict = CONFLICT_ZONES.find(c => c.id === id);
     if (conflict) {
-      this.setCenter(conflict.center[0], conflict.center[1]);
+      // center is [lon, lat], but setCenter expects (lat, lon)
+      this.setCenter(conflict.center[1], conflict.center[0]);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.popup.show(conflict as any);
     }
@@ -1346,7 +1411,8 @@ export class DeckGLMap {
       const midIdx = Math.floor(pipeline.points.length / 2);
       const midPoint = pipeline.points[midIdx];
       if (midPoint) {
-        this.setCenter(midPoint[0], midPoint[1]);
+        // Points are [lon, lat], but setCenter expects (lat, lon)
+        this.setCenter(midPoint[1], midPoint[0]);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.popup.show(pipeline as any);
@@ -1359,7 +1425,8 @@ export class DeckGLMap {
       const midIdx = Math.floor(cable.points.length / 2);
       const midPoint = cable.points[midIdx];
       if (midPoint) {
-        this.setCenter(midPoint[0], midPoint[1]);
+        // Points are [lon, lat], but setCenter expects (lat, lon)
+        this.setCenter(midPoint[1], midPoint[0]);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.popup.show(cable as any);
