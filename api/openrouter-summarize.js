@@ -44,6 +44,41 @@ function hashString(str) {
   return Math.abs(hash).toString(36);
 }
 
+// Deduplicate similar headlines (same story from different sources)
+function deduplicateHeadlines(headlines) {
+  const seen = new Set();
+  const unique = [];
+
+  for (const headline of headlines) {
+    // Normalize: lowercase, remove punctuation, collapse whitespace
+    const normalized = headline.toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Extract key words (4+ chars) for similarity check
+    const words = new Set(normalized.split(' ').filter(w => w.length >= 4));
+
+    // Check if this headline is too similar to any we've seen
+    let isDuplicate = false;
+    for (const seenWords of seen) {
+      const intersection = [...words].filter(w => seenWords.has(w));
+      const similarity = intersection.length / Math.min(words.size, seenWords.size);
+      if (similarity > 0.6) {
+        isDuplicate = true;
+        break;
+      }
+    }
+
+    if (!isDuplicate) {
+      seen.add(words);
+      unique.push(headline);
+    }
+  }
+
+  return unique;
+}
+
 export default async function handler(request) {
   // Only allow POST
   if (request.method !== 'POST') {
@@ -95,20 +130,21 @@ export default async function handler(request) {
       }
     }
 
-    // Build prompt based on mode
-    const headlineText = headlines.slice(0, 8).map((h, i) => `${i + 1}. ${h}`).join('\n');
+    // Deduplicate similar headlines (same story from different sources)
+    const uniqueHeadlines = deduplicateHeadlines(headlines.slice(0, 8));
+    const headlineText = uniqueHeadlines.map((h, i) => `${i + 1}. ${h}`).join('\n');
 
     let systemPrompt, userPrompt;
 
     if (mode === 'brief') {
-      systemPrompt = 'Ultra-concise news analyst. Max 2 sentences, 40 words total. No filler. Start with the key fact.';
-      userPrompt = `Headlines:\n${headlineText}\n\n2 sentences max, 40 words. Key developments only:`;
+      systemPrompt = 'You synthesize news into a single flowing paragraph. Never use bullet points, numbered lists, or "Here are". Just write the summary directly. Combine related stories. Be extremely concise.';
+      userPrompt = `Synthesize these headlines into one paragraph (2-3 sentences max):\n${headlineText}`;
     } else if (mode === 'analysis') {
-      systemPrompt = 'You are a geopolitical analyst. Analyze news headlines to identify patterns, risks, and implications. Be concise but insightful.';
-      userPrompt = `Analyze these news headlines for key patterns and implications:\n\n${headlineText}\n\nProvide a brief analysis (3-4 sentences):`;
+      systemPrompt = 'Geopolitical analyst. Write flowing prose, no bullets or lists. Identify the key pattern or risk.';
+      userPrompt = `Analyze the key pattern in these headlines (2-3 sentences):\n${headlineText}`;
     } else {
-      systemPrompt = 'You are a news summarizer. Be concise and factual.';
-      userPrompt = `Summarize: ${headlineText}`;
+      systemPrompt = 'News synthesizer. Write one flowing paragraph, no bullets. Combine similar stories.';
+      userPrompt = `Synthesize into one paragraph:\n${headlineText}`;
     }
 
     const response = await fetch(OPENROUTER_API_URL, {
@@ -126,7 +162,7 @@ export default async function handler(request) {
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.3,
-        max_tokens: 80,
+        max_tokens: 150,
         top_p: 0.9,
       }),
     });

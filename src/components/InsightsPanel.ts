@@ -32,30 +32,60 @@ export class InsightsPanel extends Panel {
     }
   }
 
-  // High-impact geopolitical keywords that should boost importance
-  private static readonly CRITICAL_KEYWORDS = [
-    // Military/Conflict
-    'war', 'armada', 'military', 'attack', 'invasion', 'strike', 'troops', 'missile',
-    'nuclear', 'bomb', 'airstrike', 'artillery', 'combat', 'offensive', 'deployed',
-    // Crisis/Emergency
-    'crisis', 'emergency', 'catastrophe', 'disaster', 'collapse', 'martial law',
-    // Geopolitical flashpoints
+  // High-priority military/conflict keywords (huge boost)
+  private static readonly MILITARY_KEYWORDS = [
+    'war', 'armada', 'invasion', 'airstrike', 'strike', 'missile', 'troops',
+    'deployed', 'offensive', 'artillery', 'bomb', 'combat', 'fleet', 'warship',
+    'carrier', 'navy', 'airforce', 'deployment', 'mobilization', 'attack',
+  ];
+
+  // Geopolitical flashpoints (major boost)
+  private static readonly FLASHPOINT_KEYWORDS = [
     'iran', 'russia', 'china', 'taiwan', 'ukraine', 'north korea', 'israel', 'gaza',
-    // Leadership/Diplomacy at high stakes
-    'summit', 'sanctions', 'ultimatum', 'threat', 'retaliation', 'escalation',
+    'syria', 'yemen', 'hezbollah', 'hamas', 'kremlin', 'pentagon', 'nato',
+  ];
+
+  // Crisis keywords (moderate boost)
+  private static readonly CRISIS_KEYWORDS = [
+    'crisis', 'emergency', 'catastrophe', 'disaster', 'collapse', 'martial law',
+    'sanctions', 'ultimatum', 'threat', 'retaliation', 'escalation', 'tensions',
+  ];
+
+  // Business/tech context that should REDUCE score (demote business news with military words)
+  private static readonly DEMOTE_KEYWORDS = [
+    'ceo', 'earnings', 'stock', 'startup', 'data center', 'datacenter', 'revenue',
+    'quarterly', 'profit', 'investor', 'ipo', 'funding', 'valuation',
   ];
 
   private getImportanceScore(cluster: ClusteredEvent): number {
     let score = 0;
     const titleLower = cluster.primaryTitle.toLowerCase();
 
-    // Source confirmation (most important signal)
-    score += cluster.sourceCount * 15;
+    // Source confirmation (base signal)
+    score += cluster.sourceCount * 10;
 
-    // Critical keyword boost (major geopolitical events)
-    const keywordMatches = InsightsPanel.CRITICAL_KEYWORDS.filter(kw => titleLower.includes(kw));
-    if (keywordMatches.length > 0) {
-      score += 40 + (keywordMatches.length * 10); // +40 base, +10 per additional keyword
+    // Military keywords: highest priority (+80 base, +20 per match)
+    const militaryMatches = InsightsPanel.MILITARY_KEYWORDS.filter(kw => titleLower.includes(kw));
+    if (militaryMatches.length > 0) {
+      score += 80 + (militaryMatches.length * 20);
+    }
+
+    // Flashpoint keywords: high priority (+60 base, +15 per match)
+    const flashpointMatches = InsightsPanel.FLASHPOINT_KEYWORDS.filter(kw => titleLower.includes(kw));
+    if (flashpointMatches.length > 0) {
+      score += 60 + (flashpointMatches.length * 15);
+    }
+
+    // Crisis keywords: moderate priority (+30 base, +10 per match)
+    const crisisMatches = InsightsPanel.CRISIS_KEYWORDS.filter(kw => titleLower.includes(kw));
+    if (crisisMatches.length > 0) {
+      score += 30 + (crisisMatches.length * 10);
+    }
+
+    // Demote business/tech news that happens to contain military words
+    const demoteMatches = InsightsPanel.DEMOTE_KEYWORDS.filter(kw => titleLower.includes(kw));
+    if (demoteMatches.length > 0) {
+      score *= 0.3; // Heavy penalty for business context
     }
 
     // Velocity multiplier
