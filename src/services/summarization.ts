@@ -5,6 +5,7 @@
  */
 
 import { mlWorker } from './ml-worker';
+import { SITE_VARIANT } from '@/config';
 
 export type SummarizationProvider = 'groq' | 'openrouter' | 'browser' | 'cache';
 
@@ -21,7 +22,7 @@ async function tryGroq(headlines: string[], geoContext?: string): Promise<Summar
     const response = await fetch('/api/groq-summarize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ headlines, mode: 'brief', geoContext }),
+      body: JSON.stringify({ headlines, mode: 'brief', geoContext, variant: SITE_VARIANT }),
     });
 
     if (!response.ok) {
@@ -49,7 +50,7 @@ async function tryOpenRouter(headlines: string[], geoContext?: string): Promise<
     const response = await fetch('/api/openrouter-summarize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ headlines, mode: 'brief', geoContext }),
+      body: JSON.stringify({ headlines, mode: 'brief', geoContext, variant: SITE_VARIANT }),
     });
 
     if (!response.ok) {

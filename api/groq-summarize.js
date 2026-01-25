@@ -36,12 +36,13 @@ function getRedis() {
   return redis;
 }
 
-// Generate cache key from headlines and geoContext
-function getCacheKey(headlines, mode, geoContext = '') {
+// Generate cache key from headlines, geoContext, and variant
+function getCacheKey(headlines, mode, geoContext = '', variant = 'full') {
   const sorted = headlines.slice(0, 8).sort().join('|');
   const geoHash = geoContext ? ':g' + hashString(geoContext).slice(0, 6) : '';
   const hash = hashString(`${mode}:${sorted}`);
-  return `summary:${hash}${geoHash}`;
+  // Include variant to prevent cross-site cache collisions
+  return `summary:${variant}:${hash}${geoHash}`;
 }
 
 // Simple hash function for cache keys
@@ -107,7 +108,7 @@ export default async function handler(request) {
   }
 
   try {
-    const { headlines, mode = 'brief', geoContext = '' } = await request.json();
+    const { headlines, mode = 'brief', geoContext = '', variant = 'full' } = await request.json();
 
     if (!headlines || !Array.isArray(headlines) || headlines.length === 0) {
       return new Response(JSON.stringify({ error: 'Headlines array required' }), {
@@ -118,7 +119,7 @@ export default async function handler(request) {
 
     // Check Redis cache first
     const redisClient = getRedis();
-    const cacheKey = getCacheKey(headlines, mode, geoContext);
+    const cacheKey = getCacheKey(headlines, mode, geoContext, variant);
 
     if (redisClient) {
       try {
