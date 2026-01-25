@@ -230,7 +230,8 @@ const FULL_FEEDS: Record<string, Feed[]> = {
   middleeast: [
     { name: 'BBC Middle East', url: rss('https://feeds.bbci.co.uk/news/world/middle_east/rss.xml') },
     { name: 'Al Jazeera', url: rss('https://www.aljazeera.com/xml/rss/all.xml') },
-    { name: 'Al Arabiya', url: railwayRss('https://english.alarabiya.net/feed/rss2/en.xml') },
+    // AlArabiya blocks cloud IPs (Cloudflare), use Google News fallback
+    { name: 'Al Arabiya', url: rss('https://news.google.com/rss/search?q=site:english.alarabiya.net+when:2d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'Arab News', url: railwayRss('https://www.arabnews.com/cat/2/rss.xml') },
     { name: 'Times of Israel', url: railwayRss('https://www.timesofisrael.com/feed/') },
     { name: 'Guardian ME', url: rss('https://www.theguardian.com/world/middleeast/rss') },
