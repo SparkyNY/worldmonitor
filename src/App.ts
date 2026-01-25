@@ -129,6 +129,33 @@ export class App {
         STORAGE_KEYS.panels,
         DEFAULT_PANELS
       );
+
+      // One-time migration: reorder panels for existing users (v1.8 panel layout)
+      // Puts live-news, insights, cii, strategic-risk at the top
+      const PANEL_ORDER_MIGRATION_KEY = 'worldmonitor-panel-order-v1.8';
+      if (!localStorage.getItem(PANEL_ORDER_MIGRATION_KEY)) {
+        const savedOrder = localStorage.getItem('panel-order');
+        if (savedOrder) {
+          try {
+            const order: string[] = JSON.parse(savedOrder);
+            // Priority panels that should be at the top (after live-news which is handled separately)
+            const priorityPanels = ['insights', 'cii', 'strategic-risk'];
+            // Remove priority panels from their current positions
+            const filtered = order.filter(k => !priorityPanels.includes(k) && k !== 'live-news');
+            // Find live-news position (should be first, but just in case)
+            const liveNewsIdx = order.indexOf('live-news');
+            // Build new order: live-news first, then priority panels, then rest
+            const newOrder = liveNewsIdx !== -1 ? ['live-news'] : [];
+            newOrder.push(...priorityPanels.filter(p => order.includes(p)));
+            newOrder.push(...filtered);
+            localStorage.setItem('panel-order', JSON.stringify(newOrder));
+            console.log('[App] Migrated panel order to v1.8 layout');
+          } catch {
+            // Invalid saved order, will use defaults
+          }
+        }
+        localStorage.setItem(PANEL_ORDER_MIGRATION_KEY, 'done');
+      }
     }
 
     this.initialUrlState = parseMapUrlState(window.location.search, this.mapLayers);
