@@ -127,6 +127,7 @@ const TECH_PANELS: Record<string, PanelConfig> = {
   events: { name: 'Tech Events', enabled: true, priority: 1 },
   'service-status': { name: 'Service Status', enabled: true, priority: 2 },
   economic: { name: 'Economic Indicators', enabled: true, priority: 2 },
+  'tech-readiness': { name: 'Tech Readiness Index', enabled: true, priority: 1 },
   monitors: { name: 'My Monitors', enabled: true, priority: 2 },
 };
 

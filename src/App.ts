@@ -50,6 +50,7 @@ import {
   TechEventsPanel,
   ServiceStatusPanel,
   InsightsPanel,
+  TechReadinessPanel,
 } from '@/components';
 import type { SearchResult } from '@/components/SearchModal';
 import { INTEL_HOTSPOTS, CONFLICT_ZONES, MILITARY_BASES, UNDERSEA_CABLES, NUCLEAR_FACILITIES } from '@/config/geo';
@@ -1156,21 +1157,24 @@ export class App {
     this.newsPanels['energy'] = energyPanel;
     this.panels['energy'] = energyPanel;
 
-    const gdeltIntelPanel = new GdeltIntelPanel();
-    this.panels['gdelt-intel'] = gdeltIntelPanel;
+    // Geopolitical-only panels (not needed for tech variant)
+    if (SITE_VARIANT === 'full') {
+      const gdeltIntelPanel = new GdeltIntelPanel();
+      this.panels['gdelt-intel'] = gdeltIntelPanel;
 
-    const ciiPanel = new CIIPanel();
-    this.panels['cii'] = ciiPanel;
+      const ciiPanel = new CIIPanel();
+      this.panels['cii'] = ciiPanel;
 
-    const cascadePanel = new CascadePanel();
-    this.panels['cascade'] = cascadePanel;
+      const cascadePanel = new CascadePanel();
+      this.panels['cascade'] = cascadePanel;
 
-    const strategicRiskPanel = new StrategicRiskPanel();
-    strategicRiskPanel.setLocationClickHandler((lat, lon) => {
-      this.map?.setCenter(lat, lon);
-      this.map?.setZoom(4);
-    });
-    this.panels['strategic-risk'] = strategicRiskPanel;
+      const strategicRiskPanel = new StrategicRiskPanel();
+      strategicRiskPanel.setLocationClickHandler((lat, lon) => {
+        this.map?.setCenter(lat, lon);
+        this.map?.setZoom(4);
+      });
+      this.panels['strategic-risk'] = strategicRiskPanel;
+    }
 
     const liveNewsPanel = new LiveNewsPanel();
     this.panels['live-news'] = liveNewsPanel;
@@ -1181,6 +1185,10 @@ export class App {
     // Service Status Panel (primarily for tech variant)
     const serviceStatusPanel = new ServiceStatusPanel();
     this.panels['service-status'] = serviceStatusPanel;
+
+    // Tech Readiness Panel (tech variant only - World Bank tech indicators)
+    const techReadinessPanel = new TechReadinessPanel();
+    this.panels['tech-readiness'] = techReadinessPanel;
 
     // AI Insights Panel (desktop only - hides itself on mobile)
     const insightsPanel = new InsightsPanel();
