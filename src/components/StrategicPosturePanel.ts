@@ -105,7 +105,7 @@ export class StrategicPosturePanel extends Panel {
         posture.submarines = theaterVessels.filter((v) => v.vesselType === 'submarine').length;
         posture.patrol = theaterVessels.filter((v) => v.vesselType === 'patrol').length;
         posture.auxiliaryVessels = theaterVessels.filter(
-          (v) => v.vesselType === 'special' || v.vesselType === 'amphibious' || v.vesselType === 'icebreaker' || v.vesselType === 'research'
+          (v) => v.vesselType === 'auxiliary' || v.vesselType === 'special' || v.vesselType === 'amphibious' || v.vesselType === 'icebreaker' || v.vesselType === 'research'
         ).length;
         posture.totalVessels = theaterVessels.length;
 
@@ -227,6 +227,7 @@ export class StrategicPosturePanel extends Panel {
       p.reconnaissance > 0 ? `<div class="posture-row"><span class="posture-icon">🔍</span><span class="posture-count">${p.reconnaissance}</span><span class="posture-label">Recon</span></div>` : '',
       p.transport > 0 ? `<div class="posture-row"><span class="posture-icon">📦</span><span class="posture-count">${p.transport}</span><span class="posture-label">Transport</span></div>` : '',
       p.bombers > 0 ? `<div class="posture-row"><span class="posture-icon">💣</span><span class="posture-count">${p.bombers}</span><span class="posture-label">Bombers</span></div>` : '',
+      p.drones > 0 ? `<div class="posture-row"><span class="posture-icon">🛸</span><span class="posture-count">${p.drones}</span><span class="posture-label">Drones</span></div>` : '',
     ].filter(Boolean).join('');
 
     // Build vessel rows
@@ -236,6 +237,7 @@ export class StrategicPosturePanel extends Panel {
       p.frigates > 0 ? `<div class="posture-row"><span class="posture-icon">🛥️</span><span class="posture-count">${p.frigates}</span><span class="posture-label">Frigates</span></div>` : '',
       p.submarines > 0 ? `<div class="posture-row"><span class="posture-icon">🦈</span><span class="posture-count">${p.submarines}</span><span class="posture-label">Submarines</span></div>` : '',
       p.patrol > 0 ? `<div class="posture-row"><span class="posture-icon">🚤</span><span class="posture-count">${p.patrol}</span><span class="posture-label">Patrol</span></div>` : '',
+      p.auxiliaryVessels > 0 ? `<div class="posture-row"><span class="posture-icon">🔧</span><span class="posture-count">${p.auxiliaryVessels}</span><span class="posture-label">Auxiliary</span></div>` : '',
     ].filter(Boolean).join('');
 
     return `
