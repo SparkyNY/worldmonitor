@@ -51,7 +51,6 @@ const COUNTRY_INDEX = {
   EG: { symbol: '^EGX30.CA', name: 'EGX 30' },
   CL: { symbol: '^IPSA', name: 'IPSA' },
   PE: { symbol: '^SPBLPGPT', name: 'S&P Lima' },
-  KW: { symbol: '^BKP.KW', name: 'Boursa Kuwait' },
   AT: { symbol: '^ATX', name: 'ATX' },
   BE: { symbol: '^BFX', name: 'BEL 20' },
   FI: { symbol: '^OMXH25', name: 'OMX Helsinki 25' },
