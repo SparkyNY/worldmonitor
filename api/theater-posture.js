@@ -102,43 +102,20 @@ const POSTURE_THEATERS = [
   },
 ];
 
-// Military ICAO hex ranges by country (24-bit Mode S addresses)
-// US military has dedicated AE/AF block; others mixed with commercial
-const MILITARY_HEX_RANGES = [
-  // United States Military (dedicated military block)
-  { start: 0xAE0000, end: 0xAFFFFF, country: 'USA' },
-  // United Kingdom Military
-  { start: 0x43C000, end: 0x43CFFF, country: 'UK' },
-  // France Military
-  { start: 0x3E8000, end: 0x3EBFFF, country: 'France' },
-  // Germany Military
-  { start: 0x3F0000, end: 0x3FFFFF, country: 'Germany' },
-  // NATO international
-  { start: 0x0A0000, end: 0x0AFFFF, country: 'NATO' },
-  // Russia Military
-  { start: 0x150000, end: 0x15FFFF, country: 'Russia' },
-  // China Military
-  { start: 0x780000, end: 0x783FFF, country: 'China' },
-  // Australia Military
-  { start: 0x7CF000, end: 0x7CFFFF, country: 'Australia' },
-  // Japan Military
-  { start: 0x870000, end: 0x87FFFF, country: 'Japan' },
-];
+// Military hex database from ADS-B Exchange (updated daily at adsbexchange.com)
+// Contains ~20k verified military aircraft hex IDs
+import { MILITARY_HEX_LIST } from './data/military-hex-db.js';
 
-// Check if ICAO hex is in military range
+// Create Set for O(1) lookup
+const MILITARY_HEX_SET = new Set(MILITARY_HEX_LIST.map(h => h.toLowerCase()));
+console.log(`[TheaterPosture] Loaded ${MILITARY_HEX_SET.size} military hex IDs from ADS-B Exchange`);
+
+// Check if ICAO hex is in military database
 function isMilitaryHex(hexId) {
   if (!hexId) return false;
   // Handle both string and number, remove ~ prefix if present
   const cleanHex = String(hexId).replace(/^~/, '').toLowerCase();
-  const num = parseInt(cleanHex, 16);
-  if (isNaN(num)) return false;
-
-  for (const range of MILITARY_HEX_RANGES) {
-    if (num >= range.start && num <= range.end) {
-      return true;
-    }
-  }
-  return false;
+  return MILITARY_HEX_SET.has(cleanHex);
 }
 
 // Military callsign prefixes for identification
