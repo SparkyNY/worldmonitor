@@ -295,29 +295,38 @@ async function fetchMilitaryFlightsFromWingbits() {
     console.log('[TheaterPosture] Wingbits returned', data.length, 'theater results');
 
     // Transform Wingbits data to our format
+    // Wingbits uses short field names: h=icao24, f=flight, la=lat, lo=lon, ab=alt, th=heading, gs=speed
     const flights = [];
     const seenIds = new Set();
 
     for (const areaResult of data) {
-      const areaFlights = areaResult.flights || areaResult.data || [];
-      for (const f of areaFlights) {
-        // Skip duplicates (aircraft may appear in multiple theaters)
-        if (seenIds.has(f.icao24 || f.id)) continue;
-        seenIds.add(f.icao24 || f.id);
+      // Batch response: each area result has flights in various possible formats
+      const areaFlights = areaResult.flights || areaResult.data || areaResult || [];
+      const flightList = Array.isArray(areaFlights) ? areaFlights : [];
 
-        const callsign = f.callsign || f.flight || '';
+      for (const f of flightList) {
+        // Get icao24 - Wingbits uses 'h' for hex ID
+        const icao24 = f.h || f.icao24 || f.id;
+        if (!icao24) continue;
+
+        // Skip duplicates (aircraft may appear in multiple theaters)
+        if (seenIds.has(icao24)) continue;
+        seenIds.add(icao24);
+
+        // Get callsign - Wingbits uses 'f' for flight
+        const callsign = f.f || f.callsign || f.flight || '';
 
         // Skip if not military
         if (!isMilitaryCallsign(callsign)) continue;
 
         flights.push({
-          id: f.icao24 || f.id,
+          id: icao24,
           callsign: callsign.trim(),
-          lat: f.latitude || f.lat,
-          lon: f.longitude || f.lon || f.lng,
-          altitude: f.altitude || f.alt || 0,
-          heading: f.heading || f.track || 0,
-          speed: f.groundSpeed || f.speed || f.velocity || 0,
+          lat: f.la || f.latitude || f.lat,
+          lon: f.lo || f.longitude || f.lon || f.lng,
+          altitude: f.ab || f.altitude || f.alt || 0,
+          heading: f.th || f.heading || f.track || 0,
+          speed: f.gs || f.groundSpeed || f.speed || f.velocity || 0,
           aircraftType: detectAircraftType(callsign),
           operator: f.operator || 'unknown',
           source: 'wingbits',
