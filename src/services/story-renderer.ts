@@ -194,9 +194,10 @@ export function renderStoryToCanvas(data: StoryData): HTMLCanvasElement {
     ctx.fillStyle = convColor;
     ctx.font = '800 42px Inter, system-ui, sans-serif';
     ctx.fillText(`${convScore}`, PAD, y);
+    const convScoreW = ctx.measureText(`${convScore}`).width;
     ctx.fillStyle = '#666';
     ctx.font = '400 26px Inter, system-ui, sans-serif';
-    ctx.fillText('/100 convergence', PAD + ctx.measureText(`${convScore}`).width + 8, y);
+    ctx.fillText('/100 convergence', PAD + convScoreW + 8, y);
 
     if (data.convergence.signalTypes.length > 0) {
       y += 32;
