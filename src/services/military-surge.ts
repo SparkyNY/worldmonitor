@@ -2,6 +2,7 @@ import type { MilitaryFlight, MilitaryOperator } from '@/types';
 import type { SignalType } from '@/utils/analysis-constants';
 import { MILITARY_BASES_EXPANDED } from '@/config/bases-expanded';
 import { focalPointDetector } from './focal-point-detector';
+import { getCountryScore } from './country-instability';
 
 // Foreign military concentration detection - immediate alerts, no baseline needed
 interface GeoRegion {
@@ -689,7 +690,7 @@ const POSTURE_THEATERS: PostureTheater[] = [
     regions: ['persian-gulf', 'strait-hormuz', 'iran-border'],
     bounds: { north: 42, south: 20, east: 65, west: 30 },
     thresholds: { elevated: 8, critical: 20 },
-    navalThresholds: { elevated: 4, critical: 10 },
+    navalThresholds: { elevated: 2, critical: 5 },  // Low: AIS coverage poor in Persian Gulf, military vessels go dark
     strikeIndicators: { minTankers: 2, minAwacs: 1, minFighters: 5 },
   },
   {
@@ -924,8 +925,20 @@ export function getTheaterPostureSummaries(flights: MilitaryFlight[]): TheaterPo
 }
 
 /**
+ * Map theater target nations to ISO2 country codes for CII lookup.
+ */
+const TARGET_NATION_CODES: Record<string, string> = {
+  'Iran': 'IR',
+  'Taiwan': 'TW',
+  'North Korea': 'KP',
+  'Gaza': 'PS',
+  'Yemen': 'YE',
+};
+
+/**
  * Recalculate posture level after vessels have been merged into summaries.
  * Uses "either triggers" logic: if aircraft OR vessels exceed thresholds, level escalates.
+ * CII boost: theaters whose target nation has CII ≥ 70 get elevated, ≥ 85 get critical.
  */
 export function recalcPostureWithVessels(postures: TheaterPostureSummary[]): void {
   for (const p of postures) {
@@ -940,7 +953,19 @@ export function recalcPostureWithVessels(postures: TheaterPostureSummary[]): voi
       p.totalVessels >= theater.navalThresholds.critical ? 2
         : p.totalVessels >= theater.navalThresholds.elevated ? 1 : 0;
 
-    const combined = Math.max(airLevel, navalLevel) as 0 | 1 | 2;
+    // CII boost: high instability in target nation elevates theater posture
+    let ciiLevel: 0 | 1 | 2 = 0;
+    if (theater.targetNation) {
+      const code = TARGET_NATION_CODES[theater.targetNation];
+      if (code) {
+        const cii = getCountryScore(code);
+        if (cii !== null) {
+          ciiLevel = cii >= 85 ? 2 : cii >= 70 ? 1 : 0;
+        }
+      }
+    }
+
+    const combined = Math.max(airLevel, navalLevel, ciiLevel) as 0 | 1 | 2;
     p.postureLevel = combined === 2 ? 'critical' : combined === 1 ? 'elevated' : 'normal';
 
     // Rebuild headline with combined context

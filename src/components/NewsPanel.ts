@@ -417,7 +417,7 @@ export class NewsPanel extends Panel {
     const catLabel = cat && cat !== 'general' ? cat.charAt(0).toUpperCase() + cat.slice(1) : '';
     const catColor = cluster.threat ? THREAT_COLORS[cluster.threat.level] : '';
     const categoryBadge = catLabel
-      ? `<span class="category-tag" style="color:${catColor};border-color:${catColor}40;background:${catColor}15">${catLabel}</span>`
+      ? `<span class="category-tag" style="color:${catColor};border-color:${catColor}40;background:${catColor}20">${catLabel}</span>`
       : '';
 
     // Build class list for item
