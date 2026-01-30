@@ -78,6 +78,7 @@ export class CIIPanel extends Panel {
         </div>
         <div class="cii-components">
           <span title="Unrest">U:${country.components.unrest}</span>
+          <span title="Conflict">C:${country.components.conflict}</span>
           <span title="Security">S:${country.components.security}</span>
           <span title="Information">I:${country.components.information}</span>
         </div>

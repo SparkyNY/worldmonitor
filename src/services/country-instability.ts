@@ -2,6 +2,9 @@ import type { SocialUnrestEvent, MilitaryFlight, MilitaryVessel, ClusteredEvent,
 import { INTEL_HOTSPOTS, CONFLICT_ZONES, STRATEGIC_WATERWAYS } from '@/config/geo';
 import { TIER1_COUNTRIES } from '@/config/countries';
 import { focalPointDetector } from './focal-point-detector';
+import type { ConflictEvent } from './conflicts';
+import type { UcdpConflictStatus } from './ucdp';
+import type { HapiConflictSummary } from './hapi';
 
 export interface CountryScore {
   code: string;
@@ -16,12 +19,16 @@ export interface CountryScore {
 
 export interface ComponentScores {
   unrest: number;
+  conflict: number;
   security: number;
   information: number;
 }
 
 interface CountryData {
   protests: SocialUnrestEvent[];
+  conflicts: ConflictEvent[];
+  ucdpStatus: UcdpConflictStatus | null;
+  hapiSummary: HapiConflictSummary | null;
   militaryFlights: MilitaryFlight[];
   militaryVessels: MilitaryVessel[];
   newsEvents: ClusteredEvent[];
@@ -160,7 +167,7 @@ const countryDataMap = new Map<string, CountryData>();
 const previousScores = new Map<string, number>();
 
 function initCountryData(): CountryData {
-  return { protests: [], militaryFlights: [], militaryVessels: [], newsEvents: [], outages: [] };
+  return { protests: [], conflicts: [], ucdpStatus: null, hapiSummary: null, militaryFlights: [], militaryVessels: [], newsEvents: [], outages: [] };
 }
 
 export function clearCountryData(): void {
@@ -186,6 +193,32 @@ export function ingestProtestsForCII(events: SocialUnrestEvent[]): void {
     if (!countryDataMap.has(code)) countryDataMap.set(code, initCountryData());
     countryDataMap.get(code)!.protests.push(e);
     trackHotspotActivity(e.lat, e.lon, e.severity === 'high' ? 2 : 1);
+  }
+}
+
+export function ingestConflictsForCII(events: ConflictEvent[]): void {
+  for (const e of events) {
+    const code = normalizeCountryName(e.country);
+    if (!code || !TIER1_COUNTRIES[code]) continue;
+    if (!countryDataMap.has(code)) countryDataMap.set(code, initCountryData());
+    countryDataMap.get(code)!.conflicts.push(e);
+    trackHotspotActivity(e.lat, e.lon, e.fatalities > 0 ? 3 : 2);
+  }
+}
+
+export function ingestUcdpForCII(classifications: Map<string, UcdpConflictStatus>): void {
+  for (const [code, status] of classifications) {
+    if (!TIER1_COUNTRIES[code]) continue;
+    if (!countryDataMap.has(code)) countryDataMap.set(code, initCountryData());
+    countryDataMap.get(code)!.ucdpStatus = status;
+  }
+}
+
+export function ingestHapiForCII(summaries: Map<string, HapiConflictSummary>): void {
+  for (const [code, summary] of summaries) {
+    if (!TIER1_COUNTRIES[code]) continue;
+    if (!countryDataMap.has(code)) countryDataMap.set(code, initCountryData());
+    countryDataMap.get(code)!.hapiSummary = summary;
   }
 }
 
@@ -404,6 +437,41 @@ function calcUnrestScore(data: CountryData, countryCode: string): number {
   return Math.min(100, baseScore + fatalityBoost + severityBoost + outageBoost);
 }
 
+function calcConflictScore(data: CountryData, countryCode: string): number {
+  const events = data.conflicts;
+  const multiplier = EVENT_MULTIPLIER[countryCode] ?? 1.0;
+
+  if (events.length === 0 && !data.hapiSummary) return 0;
+
+  const battleCount = events.filter(e => e.eventType === 'battle').length;
+  const explosionCount = events.filter(e => e.eventType === 'explosion' || e.eventType === 'remote_violence').length;
+  const civilianCount = events.filter(e => e.eventType === 'violence_against_civilians').length;
+  const totalFatalities = events.reduce((sum, e) => sum + e.fatalities, 0);
+
+  const eventScore = Math.min(50, (battleCount * 3 + explosionCount * 4 + civilianCount * 5) * multiplier);
+  const fatalityScore = Math.min(40, Math.sqrt(totalFatalities) * 5 * multiplier);
+  const civilianBoost = civilianCount > 0 ? Math.min(10, civilianCount * 3) : 0;
+
+  // HAPI fallback: if no ACLED conflict events but HAPI shows political violence
+  let hapiFallback = 0;
+  if (events.length === 0 && data.hapiSummary) {
+    const h = data.hapiSummary;
+    hapiFallback = Math.min(60, (h.eventsPoliticalViolence * 2 + h.eventsCivilianTargeting * 3) * multiplier);
+  }
+
+  return Math.min(100, Math.max(eventScore + fatalityScore + civilianBoost, hapiFallback));
+}
+
+function getUcdpFloor(data: CountryData): number {
+  const status = data.ucdpStatus;
+  if (!status) return 0;
+  switch (status.intensity) {
+    case 'war': return 70;
+    case 'minor': return 50;
+    case 'none': return 0;
+  }
+}
+
 function calcSecurityScore(data: CountryData): number {
   const flights = data.militaryFlights.length;
   const vessels = data.militaryVessels.length;
@@ -466,47 +534,30 @@ export function calculateCII(): CountryScore[] {
     const data = countryDataMap.get(code) || initCountryData();
     const baselineRisk = BASELINE_RISK[code] ?? 20;
 
-    // Calculate component scores with country-specific adjustments (rounded for display)
     const components: ComponentScores = {
       unrest: Math.round(calcUnrestScore(data, code)),
+      conflict: Math.round(calcConflictScore(data, code)),
       security: Math.round(calcSecurityScore(data)),
       information: Math.round(calcInformationScore(data, code)),
     };
 
-    // Calculate event-based score (weighted components)
-    const eventScore = components.unrest * 0.4 + components.security * 0.3 + components.information * 0.3;
+    // Weighted components: conflict gets highest weight (armed conflict is strongest signal)
+    const eventScore = components.unrest * 0.25 + components.conflict * 0.30 + components.security * 0.20 + components.information * 0.25;
 
-    // Hotspot proximity boost - events near strategic locations are more significant
     const hotspotBoost = getHotspotBoost(code);
-
-    // News urgency boost - high information score means breaking news (reduced to prevent score inflation)
     const newsUrgencyBoost = components.information >= 70 ? 5
       : components.information >= 50 ? 3
       : 0;
-
-    // Focal point intelligence boost - FocalPointDetector correlates news entities with map signals
-    // Reduced to prevent multiple countries hitting 100
     const focalUrgency = focalUrgencies.get(code);
     const focalBoost = focalUrgency === 'critical' ? 8
       : focalUrgency === 'elevated' ? 4
       : 0;
 
-    // Blend baseline risk with detected events + all boosts
-    // - 40% baseline risk (geopolitical context always matters)
-    // - 60% event-based (current detected activity)
-    // - Boosts: hotspot(10) + news(5) + focal(8) = max 23 points
     const blendedScore = baselineRisk * 0.4 + eventScore * 0.6 + hotspotBoost + newsUrgencyBoost + focalBoost;
 
-    // Active conflict zones have a FLOOR score - they're inherently more unstable
-    // than peaceful countries regardless of detected events
-    const conflictFloor: Record<string, number> = {
-      UA: 72,  // Active full-scale war
-      SY: 66,  // Civil war
-      YE: 66,  // Civil war
-      MM: 60,  // Coup/civil conflict
-      IL: 60,  // Active Gaza/Lebanon conflict
-    };
-    const floor = conflictFloor[code] ?? 0;
+    // UCDP-derived conflict floor replaces hardcoded floors
+    // war (1000+ deaths/yr) → 70, minor (25-999) → 50, none → 0
+    const floor = getUcdpFloor(data);
     const score = Math.round(Math.min(100, Math.max(floor, blendedScore)));
 
     const prev = previousScores.get(code) ?? score;
@@ -539,11 +590,12 @@ export function getCountryScore(code: string): number | null {
   const baselineRisk = BASELINE_RISK[code] ?? 20;
   const components: ComponentScores = {
     unrest: calcUnrestScore(data, code),
+    conflict: calcConflictScore(data, code),
     security: calcSecurityScore(data),
     information: calcInformationScore(data, code),
   };
 
-  const eventScore = components.unrest * 0.4 + components.security * 0.3 + components.information * 0.3;
+  const eventScore = components.unrest * 0.25 + components.conflict * 0.30 + components.security * 0.20 + components.information * 0.25;
   const hotspotBoost = getHotspotBoost(code);
   const newsUrgencyBoost = components.information >= 70 ? 5
     : components.information >= 50 ? 3
@@ -554,11 +606,6 @@ export function getCountryScore(code: string): number | null {
     : 0;
   const blendedScore = baselineRisk * 0.4 + eventScore * 0.6 + hotspotBoost + newsUrgencyBoost + focalBoost;
 
-  // Active conflict zones have floor scores
-  const conflictFloor: Record<string, number> = {
-    UA: 72, SY: 66, YE: 66, MM: 60, IL: 60,
-  };
-  const floor = conflictFloor[code] ?? 0;
-
+  const floor = getUcdpFloor(data);
   return Math.round(Math.min(100, Math.max(floor, blendedScore)));
 }

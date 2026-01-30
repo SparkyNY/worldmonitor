@@ -17,8 +17,11 @@ export type DataSourceId =
   | 'weather'    // Weather alerts
   | 'economic'   // Economic indicators (FRED)
   | 'oil'        // EIA oil analytics
-  | 'spending'   // USASpending.gov
-  | 'firms';     // NASA FIRMS satellite fires
+  | 'spending'        // USASpending.gov
+  | 'firms'          // NASA FIRMS satellite fires
+  | 'acled_conflict' // ACLED battles/explosions/violence
+  | 'ucdp'           // UCDP conflict classification
+  | 'hapi';          // HDX HAPI aggregated conflict data
 
 export type FreshnessStatus = 'fresh' | 'stale' | 'very_stale' | 'no_data' | 'disabled' | 'error';
 
@@ -69,6 +72,9 @@ const SOURCE_METADATA: Record<DataSourceId, { name: string; requiredForRisk: boo
   oil: { name: 'Oil Analytics (EIA)', requiredForRisk: false, panelId: 'economic' },
   spending: { name: 'Gov Spending', requiredForRisk: false, panelId: 'economic' },
   firms: { name: 'FIRMS Satellite Fires', requiredForRisk: false, panelId: 'map' },
+  acled_conflict: { name: 'Armed Conflicts (ACLED)', requiredForRisk: false, panelId: 'protests' },
+  ucdp: { name: 'Conflict Classification (UCDP)', requiredForRisk: false, panelId: 'protests' },
+  hapi: { name: 'Conflict Aggregates (HDX)', requiredForRisk: false, panelId: 'protests' },
 };
 
 class DataFreshnessTracker {
@@ -312,6 +318,9 @@ const INTELLIGENCE_GAP_MESSAGES: Record<DataSourceId, string> = {
   oil: 'Oil market analytics unavailable—EIA data not updating',
   spending: 'Government spending data unavailable',
   firms: 'Satellite fire detection unavailable—NASA FIRMS data not updating',
+  acled_conflict: 'Armed conflict events may be missed—ACLED conflict data unavailable',
+  ucdp: 'Conflict classification unavailable—UCDP data not loading',
+  hapi: 'Aggregated conflict data unavailable—HDX HAPI not responding',
 };
 
 /**

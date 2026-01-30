@@ -160,6 +160,7 @@ export async function renderStoryToCanvas(data: StoryData): Promise<HTMLCanvasEl
     y += 44;
     const comps = [
       { label: 'UNREST', val: data.cii.components.unrest, color: '#f97316' },
+      { label: 'CONFLICT', val: data.cii.components.conflict, color: '#dc2626' },
       { label: 'SECURITY', val: data.cii.components.security, color: '#ef4444' },
       { label: 'INFORMATION', val: data.cii.components.information, color: '#8b5cf6' },
     ];

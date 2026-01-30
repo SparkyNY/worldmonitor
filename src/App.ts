@@ -23,8 +23,11 @@ import { fetchAllFires, flattenFires, computeRegionStats } from '@/services/firm
 import { SatelliteFiresPanel } from '@/components/SatelliteFiresPanel';
 import { analyzeFlightsForSurge, surgeAlertToSignal, detectForeignMilitaryPresence, foreignPresenceToSignal, type TheaterPostureSummary } from '@/services/military-surge';
 import { fetchCachedTheaterPosture } from '@/services/cached-theater-posture';
-import { ingestProtestsForCII, ingestMilitaryForCII, ingestNewsForCII, ingestOutagesForCII, startLearning, isInLearningMode, calculateCII } from '@/services/country-instability';
+import { ingestProtestsForCII, ingestMilitaryForCII, ingestNewsForCII, ingestOutagesForCII, ingestConflictsForCII, ingestUcdpForCII, ingestHapiForCII, startLearning, isInLearningMode, calculateCII } from '@/services/country-instability';
 import { dataFreshness, type DataSourceId } from '@/services/data-freshness';
+import { fetchConflictEvents } from '@/services/conflicts';
+import { fetchUcdpClassifications } from '@/services/ucdp';
+import { fetchHapiSummary } from '@/services/hapi';
 import { buildMapUrl, debounce, loadFromStorage, parseMapUrlState, saveToStorage, ExportPanel, getCircuitBreakerCooldownInfo, isMobileDevice } from '@/utils';
 import { reverseGeocode } from '@/utils/reverse-geocode';
 import { CountryIntelModal } from '@/components/CountryIntelModal';
@@ -2724,6 +2727,42 @@ export class App {
       } catch (error) {
         console.error('[Intelligence] Protests fetch failed:', error);
         dataFreshness.recordError('acled', String(error));
+      }
+    })());
+
+    // Fetch armed conflict events (battles, explosions, violence) for CII
+    tasks.push((async () => {
+      try {
+        const conflictData = await fetchConflictEvents();
+        ingestConflictsForCII(conflictData.events);
+        if (conflictData.count > 0) dataFreshness.recordUpdate('acled_conflict', conflictData.count);
+      } catch (error) {
+        console.error('[Intelligence] Conflict events fetch failed:', error);
+        dataFreshness.recordError('acled_conflict', String(error));
+      }
+    })());
+
+    // Fetch UCDP conflict classifications (war vs minor vs none)
+    tasks.push((async () => {
+      try {
+        const classifications = await fetchUcdpClassifications();
+        ingestUcdpForCII(classifications);
+        if (classifications.size > 0) dataFreshness.recordUpdate('ucdp', classifications.size);
+      } catch (error) {
+        console.error('[Intelligence] UCDP fetch failed:', error);
+        dataFreshness.recordError('ucdp', String(error));
+      }
+    })());
+
+    // Fetch HDX HAPI aggregated conflict data (fallback/validation)
+    tasks.push((async () => {
+      try {
+        const summaries = await fetchHapiSummary();
+        ingestHapiForCII(summaries);
+        if (summaries.size > 0) dataFreshness.recordUpdate('hapi', summaries.size);
+      } catch (error) {
+        console.error('[Intelligence] HAPI fetch failed:', error);
+        dataFreshness.recordError('hapi', String(error));
       }
     })());
 

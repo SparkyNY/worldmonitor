@@ -150,6 +150,7 @@ export class CountryIntelModal {
           <div class="cii-label">Instability Index ${this.scoreBar(score.score)}</div>
           <div class="cii-components">
             <span title="Unrest">📢 ${score.components.unrest.toFixed(0)}</span>
+            <span title="Conflict">⚔ ${score.components.conflict.toFixed(0)}</span>
             <span title="Security">🛡️ ${score.components.security.toFixed(0)}</span>
             <span title="Information">📡 ${score.components.information.toFixed(0)}</span>
             <span class="cii-trend ${score.trend}">${score.trend === 'rising' ? '↗' : score.trend === 'falling' ? '↘' : '→'} ${score.trend}</span>
