@@ -5,6 +5,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
 use keyring::Entry;
+use serde_json::{Map, Value};
 use tauri::{AppHandle, Manager, RunEvent};
 
 const LOCAL_API_PORT: &str = "46123";
@@ -68,6 +69,58 @@ fn delete_secret(key: String) -> Result<(), String> {
         Err(keyring::Error::NoEntry) => Ok(()),
         Err(err) => Err(format!("Failed to delete keyring secret: {err}")),
     }
+}
+
+fn cache_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {e}"))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create app data directory {}: {e}", dir.display()))?;
+    Ok(dir.join("persistent-cache.json"))
+}
+
+#[tauri::command]
+fn read_cache_entry(app: AppHandle, key: String) -> Result<Option<Value>, String> {
+    let path = cache_file_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let contents = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read cache store {}: {e}", path.display()))?;
+    let parsed: Value = serde_json::from_str(&contents).unwrap_or_else(|_| Value::Object(Map::new()));
+    let Some(root) = parsed.as_object() else {
+        return Ok(None);
+    };
+
+    Ok(root.get(&key).cloned())
+}
+
+#[tauri::command]
+fn write_cache_entry(app: AppHandle, key: String, value: String) -> Result<(), String> {
+    let path = cache_file_path(&app)?;
+
+    let mut root: Map<String, Value> = if path.exists() {
+        let contents = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read cache store {}: {e}", path.display()))?;
+        serde_json::from_str::<Value>(&contents)
+            .ok()
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default()
+    } else {
+        Map::new()
+    };
+
+    let parsed_value: Value = serde_json::from_str(&value)
+        .map_err(|e| format!("Invalid cache payload JSON: {e}"))?;
+    root.insert(key, parsed_value);
+
+    let serialized = serde_json::to_string_pretty(&Value::Object(root))
+        .map_err(|e| format!("Failed to serialize cache store: {e}"))?;
+    std::fs::write(&path, serialized)
+        .map_err(|e| format!("Failed to write cache store {}: {e}", path.display()))
 }
 
 fn local_api_paths(app: &AppHandle) -> (PathBuf, PathBuf) {
@@ -144,7 +197,9 @@ fn main() {
             list_supported_secret_keys,
             get_secret,
             set_secret,
-            delete_secret
+            delete_secret,
+            read_cache_entry,
+            write_cache_entry
         ])
         .setup(|app| {
             if let Err(err) = start_local_api(&app.handle()) {

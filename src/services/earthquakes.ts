@@ -1,6 +1,7 @@
 import type { Earthquake } from '@/types';
 import { API_URLS } from '@/config';
 import { createCircuitBreaker } from '@/utils';
+import { getPersistentCache, setPersistentCache } from './persistent-cache';
 
 interface USGSFeature {
   id: string;
@@ -19,10 +20,17 @@ interface USGSResponse {
   features: USGSFeature[];
 }
 
+const OVERLAY_CACHE_KEY = 'map-overlay:earthquakes';
 const breaker = createCircuitBreaker<Earthquake[]>({ name: 'USGS Earthquakes' });
 
+async function getFallbackEarthquakes(): Promise<Earthquake[]> {
+  const entry = await getPersistentCache<Array<Omit<Earthquake, 'time'> & { time: string }>>(OVERLAY_CACHE_KEY);
+  if (!entry?.data) return [];
+  return entry.data.map(item => ({ ...item, time: new Date(item.time) }));
+}
+
 export async function fetchEarthquakes(): Promise<Earthquake[]> {
-  return breaker.execute(async () => {
+  const live = await breaker.execute(async () => {
     const response = await fetch(API_URLS.earthquakes);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -38,8 +46,22 @@ export async function fetchEarthquakes(): Promise<Earthquake[]> {
       url: feature.properties.url,
     }));
   }, []);
+
+  if (live.length > 0) {
+    void setPersistentCache(
+      OVERLAY_CACHE_KEY,
+      live.map(item => ({ ...item, time: item.time.toISOString() }))
+    );
+    return live;
+  }
+
+  return getFallbackEarthquakes();
 }
 
 export function getEarthquakesStatus(): string {
   return breaker.getStatus();
+}
+
+export function getEarthquakesDataState() {
+  return breaker.getDataState();
 }

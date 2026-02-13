@@ -9,6 +9,7 @@ import { getTheaterPostureSummaries } from '@/services/military-surge';
 import { isMobileDevice } from '@/utils';
 import { escapeHtml, sanitizeUrl } from '@/utils/sanitize';
 import { SITE_VARIANT } from '@/config';
+import { getPersistentCache, setPersistentCache } from '@/services/persistent-cache';
 import type { ClusteredEvent, FocalPoint, MilitaryFlight } from '@/types';
 
 export class InsightsPanel extends Panel {
@@ -20,6 +21,7 @@ export class InsightsPanel extends Panel {
   private lastFocalPoints: FocalPoint[] = [];
   private lastMilitaryFlights: MilitaryFlight[] = [];
   private static readonly BRIEF_COOLDOWN_MS = 120000; // 2 min cooldown (API has limits)
+  private static readonly BRIEF_CACHE_KEY = 'summary:world-brief';
 
   constructor() {
     super({
@@ -73,6 +75,14 @@ export class InsightsPanel extends Panel {
     return `\n\nCRITICAL MILITARY POSTURE:\n${lines.join('\n')}`;
   }
 
+
+  private async loadBriefFromCache(): Promise<void> {
+    if (this.cachedBrief) return;
+    const entry = await getPersistentCache<{ summary: string }>(InsightsPanel.BRIEF_CACHE_KEY);
+    if (!entry?.data?.summary) return;
+    this.cachedBrief = entry.data.summary;
+    this.lastBriefUpdate = entry.updatedAt;
+  }
   // High-priority military/conflict keywords (huge boost)
   private static readonly MILITARY_KEYWORDS = [
     'war', 'armada', 'invasion', 'airstrike', 'strike', 'missile', 'troops',
@@ -241,6 +251,7 @@ export class InsightsPanel extends Panel {
     if (this.isHidden) return;
 
     if (clusters.length === 0) {
+      this.setDataBadge('unavailable');
       this.setContent('<div class="insights-empty">Waiting for news data...</div>');
       return;
     }
@@ -325,9 +336,11 @@ export class InsightsPanel extends Panel {
       }
 
       // Step 3: Generate World Brief (with cooldown)
+      await this.loadBriefFromCache();
       let worldBrief = this.cachedBrief;
       const now = Date.now();
 
+      let usedCachedBrief = false;
       if (!worldBrief || now - this.lastBriefUpdate > InsightsPanel.BRIEF_COOLDOWN_MS) {
         this.setProgress(3, totalSteps, 'Generating world brief...');
 
@@ -346,11 +359,15 @@ export class InsightsPanel extends Panel {
           worldBrief = result.summary;
           this.cachedBrief = worldBrief;
           this.lastBriefUpdate = now;
+          void setPersistentCache(InsightsPanel.BRIEF_CACHE_KEY, { summary: worldBrief });
           console.log(`[InsightsPanel] Brief generated${result.cached ? ' (cached)' : ''}${geoContext ? ' (with geo context)' : ''}`);
         }
       } else {
+        usedCachedBrief = true;
         this.setProgress(3, totalSteps, 'Using cached brief...');
       }
+
+      this.setDataBadge(worldBrief ? (usedCachedBrief ? 'cached' : 'live') : 'unavailable');
 
       // Step 4: Wait for parallel analysis to complete
       this.setProgress(4, totalSteps, 'Multi-perspective analysis...');

@@ -6,6 +6,7 @@
 
 import type { CountryScore, ComponentScores } from './country-instability';
 import { setHasCachedScores } from './country-instability';
+import { getPersistentCache, setPersistentCache } from './persistent-cache';
 
 export interface CachedCIIScore {
   code: string;
@@ -39,20 +40,24 @@ export interface CachedRiskScores {
   cached: boolean;
 }
 
+const RISK_CACHE_KEY = 'risk-scores:latest';
 let cachedScores: CachedRiskScores | null = null;
 let fetchPromise: Promise<CachedRiskScores | null> | null = null;
 let lastFetchTime = 0;
 const REFETCH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+async function loadPersistentRiskScores(): Promise<CachedRiskScores | null> {
+  const entry = await getPersistentCache<CachedRiskScores>(RISK_CACHE_KEY);
+  return entry?.data ?? null;
+}
+
 export async function fetchCachedRiskScores(): Promise<CachedRiskScores | null> {
   const now = Date.now();
 
-  // Return cached if fresh
   if (cachedScores && now - lastFetchTime < REFETCH_INTERVAL_MS) {
     return cachedScores;
   }
 
-  // Deduplicate concurrent fetches
   if (fetchPromise) {
     return fetchPromise;
   }
@@ -62,18 +67,19 @@ export async function fetchCachedRiskScores(): Promise<CachedRiskScores | null> 
       const response = await fetch('/api/risk-scores');
       if (!response.ok) {
         console.warn('[CachedRiskScores] API error:', response.status);
-        return cachedScores; // Return stale cache on error
+        return cachedScores ?? await loadPersistentRiskScores();
       }
 
       const data = await response.json();
       cachedScores = data;
       lastFetchTime = now;
-      setHasCachedScores(true); // Bypass 15-min learning mode
+      setHasCachedScores(true);
+      void setPersistentCache(RISK_CACHE_KEY, data);
       console.log('[CachedRiskScores] Loaded', data.cached ? '(from Redis)' : '(computed)');
       return cachedScores;
     } catch (error) {
       console.error('[CachedRiskScores] Fetch error:', error);
-      return cachedScores; // Return stale cache on error
+      return cachedScores ?? await loadPersistentRiskScores();
     } finally {
       fetchPromise = null;
     }
@@ -90,9 +96,6 @@ export function hasCachedScores(): boolean {
   return cachedScores !== null;
 }
 
-/**
- * Convert cached CII score to CountryScore format
- */
 export function toCountryScore(cached: CachedCIIScore): CountryScore {
   return {
     code: cached.code,

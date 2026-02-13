@@ -47,6 +47,7 @@ export class Panel {
   protected content: HTMLElement;
   protected header: HTMLElement;
   protected countEl: HTMLElement | null = null;
+  protected statusBadgeEl: HTMLElement | null = null;
   protected newBadgeEl: HTMLElement | null = null;
   protected panelId: string;
   private tooltipCloseHandler: (() => void) | null = null;
@@ -109,6 +110,11 @@ export class Panel {
     }
 
     this.header.appendChild(headerLeft);
+
+    this.statusBadgeEl = document.createElement('span');
+    this.statusBadgeEl.className = 'panel-data-badge';
+    this.statusBadgeEl.style.display = 'none';
+    this.header.appendChild(this.statusBadgeEl);
 
     if (options.showCount) {
       this.countEl = document.createElement('span');
@@ -253,6 +259,19 @@ export class Panel {
     document.addEventListener('mouseup', this.onDocMouseUp);
   }
 
+
+  protected setDataBadge(state: 'live' | 'cached' | 'unavailable', detail?: string): void {
+    if (!this.statusBadgeEl) return;
+    const labels = { live: 'LIVE', cached: 'CACHED', unavailable: 'UNAVAILABLE' } as const;
+    this.statusBadgeEl.textContent = detail ? `${labels[state]} · ${detail}` : labels[state];
+    this.statusBadgeEl.className = `panel-data-badge ${state}`;
+    this.statusBadgeEl.style.display = 'inline-flex';
+  }
+
+  protected clearDataBadge(): void {
+    if (!this.statusBadgeEl) return;
+    this.statusBadgeEl.style.display = 'none';
+  }
   public getElement(): HTMLElement {
     return this.element;
   }

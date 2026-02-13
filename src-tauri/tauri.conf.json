@@ -35,7 +35,9 @@
     "icon": [],
     "resources": [
       "../api",
-      "sidecar/local-api-server.mjs"
+      "sidecar/local-api-server.mjs",
+      "../data",
+      "../src/config"
     ]
   }
 }

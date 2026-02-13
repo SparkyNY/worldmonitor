@@ -229,9 +229,12 @@ export class NewsPanel extends Panel {
 
   public renderNews(items: NewsItem[]): void {
     if (items.length === 0) {
+      this.setDataBadge('unavailable');
       this.showError('No news available');
       return;
     }
+
+    this.setDataBadge('live');
 
     if (this.clusteredMode) {
       void this.renderClustersAsync(items);
