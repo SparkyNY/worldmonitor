@@ -18,6 +18,22 @@ interface StoredHeadline {
   ingestedAt: number;
 }
 
+interface TermCandidate {
+  display: string;
+  isEntity: boolean;
+}
+
+interface PendingMLEnrichmentHeadline {
+  headline: TrendingHeadlineInput;
+  baseTermKeys: Set<string>;
+}
+
+interface MLEntity {
+  text: string;
+  type: string;
+  confidence: number;
+}
+
 interface TermRecord {
   timestamps: number[];
   baseline7d: number;
@@ -55,6 +71,9 @@ const MAX_AUTO_SUMMARIES_PER_HOUR = 5;
 const MIN_TOKEN_LENGTH = 3;
 const MIN_SPIKE_SOURCE_COUNT = 2;
 const CONFIG_KEY = 'worldmonitor-trending-config-v1';
+const ML_ENTITY_MIN_CONFIDENCE = 0.75;
+const ML_ENTITY_BATCH_SIZE = 20;
+const ML_ENTITY_TYPES = new Set(['PER', 'ORG', 'LOC', 'MISC']);
 
 const DEFAULT_CONFIG: TrendingConfig = {
   blockedTerms: [],
@@ -70,6 +89,7 @@ const FIN_PATTERN = /FIN\d+/gi;
 const LEADER_NAMES = [
   'putin', 'zelensky', 'xi jinping', 'biden', 'trump', 'netanyahu',
   'khamenei', 'erdogan', 'modi', 'macron', 'scholz', 'starmer',
+  'orban', 'milei', 'kim jong un', 'al-sisi',
 ];
 const LEADER_PATTERNS = LEADER_NAMES.map(name => ({
   name,
@@ -176,6 +196,76 @@ export function extractEntities(text: string): string[] {
   return entities;
 }
 
+function normalizeEntityType(type: string): string {
+  return type.replace(/^[BI]-/, '').trim().toUpperCase();
+}
+
+function normalizeMLEntityText(text: string): string {
+  return text
+    .replace(/^##/, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
+    .trim();
+}
+
+function collectMLEntities(rawEntities: MLEntity[] | undefined): string[] {
+  if (!rawEntities || rawEntities.length === 0) return [];
+
+  const entities: string[] = [];
+  for (const entity of rawEntities) {
+    const type = normalizeEntityType(entity.type);
+    if (!ML_ENTITY_TYPES.has(type)) continue;
+    if (!Number.isFinite(entity.confidence) || entity.confidence < ML_ENTITY_MIN_CONFIDENCE) continue;
+
+    const normalized = normalizeMLEntityText(entity.text);
+    if (normalized.length < 2 || /^\d+$/.test(normalized)) continue;
+    entities.push(normalized);
+  }
+  return entities;
+}
+
+function dedupeEntityTerms(entities: string[]): string[] {
+  const deduped = new Map<string, string>();
+  for (const entity of entities) {
+    const key = toTermKey(entity);
+    if (!key || deduped.has(key)) continue;
+    deduped.set(key, entity);
+  }
+  return Array.from(deduped.values());
+}
+
+async function extractMLEntitiesForTexts(texts: string[]): Promise<string[][]> {
+  if (!mlWorker.isAvailable || texts.length === 0) {
+    return texts.map(() => []);
+  }
+
+  const entitiesByText: string[][] = [];
+  for (let i = 0; i < texts.length; i += ML_ENTITY_BATCH_SIZE) {
+    const batch = texts.slice(i, i + ML_ENTITY_BATCH_SIZE);
+    const batchResults = await mlWorker.extractEntities(batch);
+    for (const entities of batchResults) {
+      entitiesByText.push(collectMLEntities(entities));
+    }
+  }
+  return entitiesByText;
+}
+
+export async function extractEntitiesWithML(text: string): Promise<string[]> {
+  const regexEntities = extractEntities(text);
+  if (!mlWorker.isAvailable) return dedupeEntityTerms(regexEntities);
+
+  try {
+    const mlEntitiesByText = await extractMLEntitiesForTexts([text]);
+    return dedupeEntityTerms([
+      ...regexEntities,
+      ...(mlEntitiesByText[0] ?? []),
+    ]);
+  } catch (error) {
+    console.debug('[TrendingKeywords] ML entity extraction failed, using regex entities only:', error);
+    return dedupeEntityTerms(regexEntities);
+  }
+}
+
 function headlineKey(headline: TrendingHeadlineInput): string {
   const publishedAt = Number.isFinite(headline.pubDate.getTime()) ? headline.pubDate.getTime() : 0;
   return [
@@ -236,6 +326,62 @@ function dedupeHeadlines(headlines: StoredHeadline[]): StoredHeadline[] {
     unique.push(headline);
   }
   return unique;
+}
+
+function buildBaseTermCandidates(title: string): Map<string, TermCandidate> {
+  const termCandidates = new Map<string, TermCandidate>();
+
+  for (const token of tokenize(title)) {
+    const termKey = toTermKey(token);
+    termCandidates.set(termKey, { display: token, isEntity: false });
+  }
+
+  for (const entity of extractEntities(title)) {
+    const termKey = toTermKey(entity);
+    termCandidates.set(termKey, { display: entity, isEntity: true });
+  }
+
+  return termCandidates;
+}
+
+function recordTermCandidates(
+  termCandidates: Map<string, TermCandidate>,
+  headline: TrendingHeadlineInput,
+  now: number,
+  blockedTerms: Set<string>
+): boolean {
+  let addedAny = false;
+
+  for (const [term, meta] of termCandidates) {
+    if (blockedTerms.has(term)) continue;
+    if (!meta.isEntity && term.length < MIN_TOKEN_LENGTH) continue;
+
+    let record = termFrequency.get(term);
+    if (!record) {
+      record = {
+        timestamps: [],
+        baseline7d: 0,
+        lastSpikeAlertMs: 0,
+        displayTerm: asDisplayTerm(meta.display),
+        headlines: [],
+      };
+      termFrequency.set(term, record);
+    } else if (/^(CVE-\d{4}-\d{4,}|APT\d+|FIN\d+)$/i.test(meta.display)) {
+      record.displayTerm = asDisplayTerm(meta.display);
+    }
+
+    record.timestamps.push(now);
+    record.headlines.push({
+      title: headline.title,
+      source: headline.source,
+      link: headline.link ?? '',
+      publishedAt: Number.isFinite(headline.pubDate.getTime()) ? headline.pubDate.getTime() : now,
+      ingestedAt: now,
+    });
+    addedAny = true;
+  }
+
+  return addedAny;
 }
 
 function checkForSpikes(now: number, config: TrendingConfig, blockedTerms: Set<string>): TrendingSpike[] {
@@ -379,12 +525,54 @@ async function handleSpike(spike: TrendingSpike, config: TrendingConfig): Promis
   }
 }
 
+async function enrichWithMLEntities(headlines: PendingMLEnrichmentHeadline[], ingestedAt: number): Promise<void> {
+  if (headlines.length === 0 || !mlWorker.isAvailable) return;
+
+  try {
+    const texts = headlines.map(entry => entry.headline.title);
+    const mlEntitiesByText = await extractMLEntitiesForTexts(texts);
+    const config = readConfig();
+    const blockedTerms = getBlockedTermSet(config);
+
+    let addedAny = false;
+    for (let i = 0; i < headlines.length; i += 1) {
+      const pending = headlines[i]!;
+      const mlEntities = mlEntitiesByText[i] ?? [];
+      if (mlEntities.length === 0) continue;
+
+      const termCandidates = new Map<string, TermCandidate>();
+      for (const entity of mlEntities) {
+        const termKey = toTermKey(entity);
+        if (!termKey || pending.baseTermKeys.has(termKey)) continue;
+        termCandidates.set(termKey, { display: entity, isEntity: true });
+      }
+
+      if (termCandidates.size === 0) continue;
+      addedAny = recordTermCandidates(termCandidates, pending.headline, ingestedAt, blockedTerms) || addedAny;
+    }
+
+    if (!addedAny) return;
+
+    const now = Date.now();
+    pruneOldState(now);
+    maybeRefreshBaselines(now);
+
+    const spikes = checkForSpikes(now, config, blockedTerms);
+    for (const spike of spikes) {
+      void handleSpike(spike, config).catch(() => {});
+    }
+  } catch (error) {
+    console.debug('[TrendingKeywords] ML entity enrichment skipped:', error);
+  }
+}
+
 export function ingestHeadlines(headlines: TrendingHeadlineInput[]): void {
   if (headlines.length === 0) return;
 
   const now = Date.now();
   const config = readConfig();
   const blockedTerms = getBlockedTermSet(config);
+  const pendingMLEnrichment: PendingMLEnrichmentHeadline[] = [];
 
   for (const headline of headlines) {
     if (!headline.title?.trim()) continue;
@@ -396,45 +584,12 @@ export function ingestHeadlines(headlines: TrendingHeadlineInput[]): void {
     }
     seenHeadlines.set(key, now);
 
-    const termCandidates = new Map<string, { display: string; isEntity: boolean }>();
-
-    for (const token of tokenize(headline.title)) {
-      const termKey = toTermKey(token);
-      termCandidates.set(termKey, { display: token, isEntity: false });
-    }
-
-    for (const entity of extractEntities(headline.title)) {
-      const termKey = toTermKey(entity);
-      termCandidates.set(termKey, { display: entity, isEntity: true });
-    }
-
-    for (const [term, meta] of termCandidates) {
-      if (blockedTerms.has(term)) continue;
-      if (!meta.isEntity && term.length < MIN_TOKEN_LENGTH) continue;
-
-      let record = termFrequency.get(term);
-      if (!record) {
-        record = {
-          timestamps: [],
-          baseline7d: 0,
-          lastSpikeAlertMs: 0,
-          displayTerm: asDisplayTerm(meta.display),
-          headlines: [],
-        };
-        termFrequency.set(term, record);
-      } else if (/^(CVE-\d{4}-\d{4,}|APT\d+|FIN\d+)$/i.test(meta.display)) {
-        record.displayTerm = asDisplayTerm(meta.display);
-      }
-
-      record.timestamps.push(now);
-      record.headlines.push({
-        title: headline.title,
-        source: headline.source,
-        link: headline.link ?? '',
-        publishedAt: Number.isFinite(headline.pubDate.getTime()) ? headline.pubDate.getTime() : now,
-        ingestedAt: now,
-      });
-    }
+    const termCandidates = buildBaseTermCandidates(headline.title);
+    recordTermCandidates(termCandidates, headline, now, blockedTerms);
+    pendingMLEnrichment.push({
+      headline,
+      baseTermKeys: new Set(termCandidates.keys()),
+    });
   }
 
   pruneOldState(now);
@@ -444,6 +599,8 @@ export function ingestHeadlines(headlines: TrendingHeadlineInput[]): void {
   for (const spike of spikes) {
     void handleSpike(spike, config).catch(() => {});
   }
+
+  void enrichWithMLEntities(pendingMLEnrichment, now);
 }
 
 export function drainTrendingSignals(): CorrelationSignal[] {
