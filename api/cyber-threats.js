@@ -494,33 +494,42 @@ async function setGeoCache(ip, geo) {
 }
 
 async function fetchGeoIp(ip) {
-  const primary = await fetchJsonWithTimeout(`https://ipwho.is/${encodeURIComponent(ip)}`);
-  if (primary.ok) {
-    const data = await primary.json();
+  // Primary: ipinfo.io (HTTPS, works from Edge runtime & Node.js, 50K/mo free)
+  try {
+    const primary = await fetchJsonWithTimeout(`https://ipinfo.io/${encodeURIComponent(ip)}/json`);
+    if (primary.ok) {
+      const data = await primary.json();
+      const locParts = (data?.loc || '').split(',');
+      const lat = toFiniteNumber(locParts[0]);
+      const lon = toFiniteNumber(locParts[1]);
+      if (hasValidCoordinates(lat, lon)) {
+        return {
+          lat,
+          lon,
+          country: normalizeCountry(data?.country),
+        };
+      }
+    }
+  } catch { /* fall through to backup */ }
+
+  // Fallback: freeipapi.com (HTTPS, works from Edge runtime, 60/min)
+  try {
+    const fallback = await fetchJsonWithTimeout(`https://freeipapi.com/api/json/${encodeURIComponent(ip)}`);
+    if (!fallback.ok) return null;
+
+    const data = await fallback.json();
     const lat = toFiniteNumber(data?.latitude);
     const lon = toFiniteNumber(data?.longitude);
-    if (hasValidCoordinates(lat, lon)) {
-      return {
-        lat,
-        lon,
-        country: normalizeCountry(data?.country_code || data?.country),
-      };
-    }
+    if (!hasValidCoordinates(lat, lon)) return null;
+
+    return {
+      lat,
+      lon,
+      country: normalizeCountry(data?.countryCode || data?.countryName),
+    };
+  } catch {
+    return null;
   }
-
-  const fallback = await fetchJsonWithTimeout(`https://ipapi.co/${encodeURIComponent(ip)}/json/`);
-  if (!fallback.ok) return null;
-
-  const data = await fallback.json();
-  const lat = toFiniteNumber(data?.latitude);
-  const lon = toFiniteNumber(data?.longitude);
-  if (!hasValidCoordinates(lat, lon)) return null;
-
-  return {
-    lat,
-    lon,
-    country: normalizeCountry(data?.country_code || data?.country_name),
-  };
 }
 
 async function geolocateIp(ip) {
