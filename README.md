@@ -1022,6 +1022,7 @@ If you find World Monitor useful:
 - **Share** with colleagues interested in OSINT
 - **Contribute** code, data sources, or documentation
 - **Report issues** to help improve the platform
+- **Follow the developer** on [X/Twitter](https://x.com/eliehabib)
 
 ---
 
