@@ -190,6 +190,10 @@
   color: rgba(255, 255, 255, 0.25);
 }
 
+.settings-runtime-panel .runtime-secret-meta {
+  color: rgba(255, 255, 255, 0.56);
+}
+
 .settings-runtime-panel .runtime-secret-status.ok {
   color: var(--settings-green);
 }

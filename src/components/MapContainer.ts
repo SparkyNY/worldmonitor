@@ -27,6 +27,7 @@ import type {
   UcdpGeoEvent,
   DisplacementFlow,
   ClimateAnomaly,
+  CyberThreat,
 } from '@/types';
 import type { WeatherAlert } from '@/services/weather';
 
@@ -286,6 +287,14 @@ export class MapContainer {
   public setClimateAnomalies(anomalies: ClimateAnomaly[]): void {
     if (this.useDeckGL) {
       this.deckGLMap?.setClimateAnomalies(anomalies);
+    }
+  }
+
+  public setCyberThreats(threats: CyberThreat[]): void {
+    if (this.useDeckGL) {
+      this.deckGLMap?.setCyberThreats(threats);
+    } else {
+      this.svgMap?.setCyberThreats(threats);
     }
   }
 

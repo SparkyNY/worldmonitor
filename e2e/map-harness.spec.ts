@@ -41,6 +41,7 @@ type HarnessWindow = Window & {
     isVisualScenarioReady: (scenarioId: string) => boolean;
     getDeckLayerSnapshot: () => LayerSnapshot[];
     getOverlaySnapshot: () => OverlaySnapshot;
+    getCyberTooltipHtml: (indicator: string) => string;
     getClusterStateSize: () => number;
   };
 };
@@ -60,6 +61,7 @@ const EXPECTED_FULL_DECK_LAYERS = [
   'fires-layer',
   'weather-layer',
   'outages-layer',
+  'cyber-threats-layer',
   'ais-density-layer',
   'ais-disruptions-layer',
   'ports-layer',
@@ -92,6 +94,7 @@ const EXPECTED_TECH_DECK_LAYERS = [
   'fires-layer',
   'weather-layer',
   'outages-layer',
+  'cyber-threats-layer',
   'ais-density-layer',
   'ais-disruptions-layer',
   'ports-layer',
@@ -241,7 +244,8 @@ test.describe('DeckGL map harness', () => {
       .poll(async () => {
         return await page.evaluate(() => {
           const w = window as HarnessWindow;
-          return w.__mapHarness?.getOverlaySnapshot().protestMarkers ?? 0;
+          const layers = w.__mapHarness?.getDeckLayerSnapshot() ?? [];
+          return layers.find((layer) => layer.id === 'protest-clusters-layer')?.dataCount ?? 0;
         });
       }, { timeout: 20000 })
       .toBeGreaterThan(0);
@@ -255,17 +259,24 @@ test.describe('DeckGL map harness', () => {
       .poll(async () => {
         return await page.evaluate(() => {
           const w = window as HarnessWindow;
-          return w.__mapHarness?.getOverlaySnapshot().datacenterMarkers ?? 0;
+          const layers = w.__mapHarness?.getDeckLayerSnapshot() ?? [];
+          return layers.find((layer) => layer.id === 'datacenter-clusters-layer')?.dataCount ?? 0;
         });
       }, { timeout: 20000 })
       .toBeGreaterThan(0);
 
     if (variant === 'tech') {
+      await page.evaluate(() => {
+        const w = window as HarnessWindow;
+        w.__mapHarness?.setCamera({ lon: -122.42, lat: 37.77, zoom: 5.2 });
+      });
+
       await expect
         .poll(async () => {
           return await page.evaluate(() => {
             const w = window as HarnessWindow;
-            return w.__mapHarness?.getOverlaySnapshot().techHQMarkers ?? 0;
+            const layers = w.__mapHarness?.getDeckLayerSnapshot() ?? [];
+            return layers.find((layer) => layer.id === 'tech-hq-clusters-layer')?.dataCount ?? 0;
           });
         }, { timeout: 20000 })
         .toBeGreaterThan(0);
@@ -274,11 +285,24 @@ test.describe('DeckGL map harness', () => {
         .poll(async () => {
           return await page.evaluate(() => {
             const w = window as HarnessWindow;
-            return w.__mapHarness?.getOverlaySnapshot().techEventMarkers ?? 0;
+            const layers = w.__mapHarness?.getDeckLayerSnapshot() ?? [];
+            return layers.find((layer) => layer.id === 'tech-event-clusters-layer')?.dataCount ?? 0;
           });
         }, { timeout: 20000 })
         .toBeGreaterThan(0);
     }
+  });
+
+  test('sanitizes cyber threat tooltip content', async ({ page }) => {
+    await waitForHarnessReady(page);
+
+    const html = await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      return w.__mapHarness?.getCyberTooltipHtml('<script>alert(1)</script>') ?? '';
+    });
+
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>');
   });
 
   test('suppresses pulse animation during startup cooldown even with recent signals', async ({

@@ -196,6 +196,27 @@ export interface APTGroup {
   lon: number;
 }
 
+export type CyberThreatType = 'c2_server' | 'malware_host' | 'phishing' | 'malicious_url';
+export type CyberThreatSource = 'feodo' | 'urlhaus';
+export type CyberThreatSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type CyberThreatIndicatorType = 'ip' | 'domain' | 'url';
+
+export interface CyberThreat {
+  id: string;
+  type: CyberThreatType;
+  source: CyberThreatSource;
+  indicator: string;
+  indicatorType: CyberThreatIndicatorType;
+  lat: number;
+  lon: number;
+  country?: string;
+  severity: CyberThreatSeverity;
+  malwareFamily?: string;
+  tags: string[];
+  firstSeen?: string;
+  lastSeen?: string;
+}
+
 export interface ConflictZone {
   id: string;
   name: string;
@@ -504,6 +525,7 @@ export interface MapLayers {
   economic: boolean;
   waterways: boolean;
   outages: boolean;
+  cyberThreats: boolean;
   datacenters: boolean;
   protests: boolean;
   flights: boolean;

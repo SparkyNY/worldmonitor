@@ -35,6 +35,7 @@ import type {
   MapTechHQCluster,
   MapTechEventCluster,
   MapDatacenterCluster,
+  CyberThreat,
 } from '@/types';
 import { ArcLayer } from '@deck.gl/layers';
 import { HeatmapLayer } from '@deck.gl/aggregation-layers';
@@ -197,6 +198,7 @@ export class DeckGLMap {
   private earthquakes: Earthquake[] = [];
   private weatherAlerts: WeatherAlert[] = [];
   private outages: InternetOutage[] = [];
+  private cyberThreats: CyberThreat[] = [];
   private aisDisruptions: AisDisruptionEvent[] = [];
   private aisDensity: AisDensityZone[] = [];
   private cableAdvisories: CableAdvisory[] = [];
@@ -880,6 +882,12 @@ export class DeckGLMap {
       layers.push(this.createGhostLayer('outages-layer', this.outages, d => [d.lon, d.lat], { radiusMinPixels: 12 }));
     }
 
+    // Cyber threat IOC layer
+    if (mapLayers.cyberThreats && this.cyberThreats.length > 0) {
+      layers.push(this.createCyberThreatsLayer());
+      layers.push(this.createGhostLayer('cyber-threats-layer', this.cyberThreats, d => [d.lon, d.lat], { radiusMinPixels: 12 }));
+    }
+
     // AIS density layer
     if (mapLayers.ais && this.aisDensity.length > 0) {
       layers.push(this.createAisDensityLayer());
@@ -1357,6 +1365,36 @@ export class DeckGLMap {
       radiusMinPixels: 6,
       radiusMaxPixels: 18,
       pickable: true,
+    });
+  }
+
+  private createCyberThreatsLayer(): ScatterplotLayer<CyberThreat> {
+    return new ScatterplotLayer<CyberThreat>({
+      id: 'cyber-threats-layer',
+      data: this.cyberThreats,
+      getPosition: (d) => [d.lon, d.lat],
+      getRadius: (d) => {
+        switch (d.severity) {
+          case 'critical': return 22000;
+          case 'high': return 17000;
+          case 'medium': return 13000;
+          default: return 9000;
+        }
+      },
+      getFillColor: (d) => {
+        switch (d.severity) {
+          case 'critical': return [255, 61, 0, 225] as [number, number, number, number];
+          case 'high': return [255, 102, 0, 205] as [number, number, number, number];
+          case 'medium': return [255, 176, 0, 185] as [number, number, number, number];
+          default: return [255, 235, 59, 170] as [number, number, number, number];
+        }
+      },
+      radiusMinPixels: 4,
+      radiusMaxPixels: 16,
+      pickable: true,
+      stroked: true,
+      getLineColor: [255, 255, 255, 140] as [number, number, number, number],
+      lineWidthMinPixels: 1,
     });
   }
 
@@ -2133,6 +2171,8 @@ export class DeckGLMap {
       }
       case 'outages-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.asn || 'Internet Outage')}</strong><br/>${text(obj.country)}</div>` };
+      case 'cyber-threats-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.indicator || 'Threat IOC')}</strong><br/>${text(obj.severity || 'medium')} · ${text(obj.source || 'unknown')}</div>` };
       case 'news-locations-layer':
         return { html: `<div class="deckgl-tooltip"><strong>📰 News</strong><br/>${text(obj.title?.slice(0, 80) || '')}</div>` };
       default:
@@ -2279,6 +2319,7 @@ export class DeckGLMap {
       'earthquakes-layer': 'earthquake',
       'weather-layer': 'weather',
       'outages-layer': 'outage',
+      'cyber-threats-layer': 'cyberThreat',
       'protests-layer': 'protest',
       'military-flights-layer': 'militaryFlight',
       'military-vessels-layer': 'militaryVessel',
@@ -2420,6 +2461,7 @@ export class DeckGLMap {
           { key: 'datacenters', label: 'AI Data Centers', icon: '&#128421;' },
           { key: 'cables', label: 'Undersea Cables', icon: '&#128268;' },
           { key: 'outages', label: 'Internet Outages', icon: '&#128225;' },
+          { key: 'cyberThreats', label: 'Cyber Threats', icon: '&#128737;' },
           { key: 'techEvents', label: 'Tech Events', icon: '&#128197;' },
           { key: 'natural', label: 'Natural Events', icon: '&#127755;' },
           { key: 'fires', label: 'Fires', icon: '&#128293;' },
@@ -2443,6 +2485,7 @@ export class DeckGLMap {
           { key: 'climate', label: 'Climate Anomalies', icon: '&#127787;' },
           { key: 'weather', label: 'Weather Alerts', icon: '&#9928;' },
           { key: 'outages', label: 'Internet Outages', icon: '&#128225;' },
+          { key: 'cyberThreats', label: 'Cyber Threats', icon: '&#128737;' },
           { key: 'natural', label: 'Natural Events', icon: '&#127755;' },
           { key: 'fires', label: 'Fires', icon: '&#128293;' },
           { key: 'waterways', label: 'Strategic Waterways', icon: '&#9875;' },
@@ -2879,6 +2922,11 @@ export class DeckGLMap {
 
   public setOutages(outages: InternetOutage[]): void {
     this.outages = outages;
+    this.render();
+  }
+
+  public setCyberThreats(threats: CyberThreat[]): void {
+    this.cyberThreats = threats;
     this.render();
   }
 

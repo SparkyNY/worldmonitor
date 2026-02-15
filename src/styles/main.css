@@ -11606,6 +11606,7 @@ body.has-critical-banner .panels-grid {
   grid-template-columns: 1fr auto;
   grid-template-areas:
     'key status'
+    'meta status'
     'input input';
   gap: 4px 8px;
   align-items: center;
@@ -11618,6 +11619,12 @@ body.has-critical-banner .panels-grid {
 .runtime-secret-status {
   grid-area: status;
   font-size: 10px;
+}
+
+.runtime-secret-meta {
+  grid-area: meta;
+  font-size: 10px;
+  color: rgba(255,255,255,0.62);
 }
 
 .runtime-secret-row input {

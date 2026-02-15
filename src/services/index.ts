@@ -10,6 +10,7 @@ export * from './correlation';
 export * from './weather';
 export * from './fred';
 export * from './outages';
+export * from './cyber-threats';
 export * from './ais';
 export * from './cable-activity';
 export * from './protests';

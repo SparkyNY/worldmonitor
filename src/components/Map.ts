@@ -3,7 +3,7 @@ import * as topojson from 'topojson-client';
 import { escapeHtml } from '@/utils/sanitize';
 import type { Topology, GeometryCollection } from 'topojson-specification';
 import type { Feature, Geometry } from 'geojson';
-import type { MapLayers, Hotspot, NewsItem, Earthquake, InternetOutage, RelatedAsset, AssetType, AisDisruptionEvent, AisDensityZone, CableAdvisory, RepairShip, SocialUnrestEvent, AirportDelayAlert, MilitaryFlight, MilitaryVessel, MilitaryFlightCluster, MilitaryVesselCluster, NaturalEvent } from '@/types';
+import type { MapLayers, Hotspot, NewsItem, Earthquake, InternetOutage, RelatedAsset, AssetType, AisDisruptionEvent, AisDensityZone, CableAdvisory, RepairShip, SocialUnrestEvent, AirportDelayAlert, MilitaryFlight, MilitaryVessel, MilitaryFlightCluster, MilitaryVesselCluster, NaturalEvent, CyberThreat } from '@/types';
 import type { TechHubActivity } from '@/services/tech-activity';
 import type { GeoHubActivity } from '@/services/geo-activity';
 import { getNaturalEventIcon } from '@/services/eonet';
@@ -332,6 +332,7 @@ export class MapComponent {
       'bases', 'nuclear', 'irradiators',                 // military/strategic
       'military',                                         // military tracking (flights + vessels)
       'cables', 'pipelines', 'outages', 'datacenters',   // infrastructure
+      // cyberThreats is intentionally hidden on SVG/mobile fallback (DeckGL desktop only)
       'ais', 'flights',                                   // transport
       'natural', 'weather',                               // natural
       'economic',                                         // economic
@@ -3226,6 +3227,10 @@ export class MapComponent {
   public setTechEvents(events: TechEventMarker[]): void {
     this.techEvents = events;
     this.render();
+  }
+
+  public setCyberThreats(_threats: CyberThreat[]): void {
+    // SVG/mobile fallback intentionally does not render this layer to stay lightweight.
   }
 
   public setNewsLocations(_data: Array<{ lat: number; lon: number; title: string; threatLevel: string }>): void {

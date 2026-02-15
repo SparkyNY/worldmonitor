@@ -71,8 +71,9 @@ Both variants run from a single codebase — switch between them with one click.
 - **World Brief** — LLM-synthesized summary of top global developments (Groq Llama 3.1, Redis-cached)
 - **Hybrid Threat Classification** — instant keyword classifier with async LLM override for higher-confidence results
 - **Focal Point Detection** — correlates entities across news, military activity, protests, outages, and markets to identify convergence
-- **Country Instability Index** — real-time stability scores for 20 monitored nations using weighted multi-signal blend
+- **Country Instability Index** — real-time stability scores for 22 monitored nations using weighted multi-signal blend
 - **Strategic Posture Assessment** — composite risk score combining all intelligence modules with trend detection
+- **Country Brief Pages** — click any country for a full-page intelligence dossier with CII score ring, AI-generated analysis, top news with citation anchoring, prediction markets, 7-day event timeline, active signal chips, infrastructure exposure, and stock market index — exportable as JSON, CSV, or image
 
 ### Real-Time Data Layers
 
@@ -106,6 +107,7 @@ Both variants run from a single codebase — switch between them with one click.
 - Undersea cables with landing points
 - Oil & gas pipelines
 - AI datacenters (111 major clusters)
+- 84 strategic ports across 6 types (container, oil, LNG, naval, mixed, bulk) with throughput rankings
 - Internet outages (Cloudflare Radar)
 - Critical mineral deposits
 - NASA FIRMS satellite fire detection (VIIRS thermal hotspots)
@@ -186,8 +188,14 @@ Both variants run from a single codebase — switch between them with one click.
 - **Historical playback** — dashboard snapshots are stored in IndexedDB. A time slider allows rewinding to any saved state, with live updates paused during playback
 - **Mobile detection** — screens below 768px receive a warning modal since the dashboard is designed for multi-panel desktop use
 - **UCDP conflict classification** — countries with active wars (1,000+ battle deaths/year) receive automatic CII floor scores, preventing optimistic drift
-- **HAPI humanitarian data** — UN OCHA humanitarian access metrics feed into country-level instability scoring
+- **HAPI humanitarian data** — UN OCHA humanitarian access metrics and displacement flows feed into country-level instability scoring with dual-perspective (origins vs. hosts) panel
 - **Idle-aware resource management** — animations pause after 2 minutes of inactivity and when the tab is hidden, preventing battery drain. Video streams are destroyed from the DOM and recreated on return
+- **Country-specific stock indices** — country briefs display the primary stock market index with 1-week change (S&P 500 for US, Shanghai Composite for China, etc.) via the `/api/stock-index` endpoint
+- **Climate anomaly panel** — 15 conflict-prone zones monitored for temperature/precipitation deviations against 30-day ERA5 baselines, with severity classification feeding into CII
+- **Country brief export** — every brief is downloadable as structured JSON, flattened CSV, or rendered PNG image, enabling offline analysis and reporting workflows
+- **Print/PDF support** — country briefs include a print button that triggers the browser's native print dialog, producing clean PDF output
+- **Download API** — `/api/download?platform={windows-exe|windows-msi|macos-arm64|macos-x64}` redirects to the matching GitHub Release asset, with fallback to the releases page
+- **Non-tier country support** — clicking countries outside the 22 tier-1 list opens a brief with available data (news, markets, infrastructure) and a "Limited coverage" badge; country names for non-tier countries resolve via `Intl.DisplayNames`
 
 ---
 
@@ -206,6 +214,35 @@ Map overlay behavior is validated in Playwright using the map harness (`/map-har
 
 ## How It Works
 
+### Country Brief Pages
+
+Clicking any country on the map opens a full-page intelligence dossier — a single-screen synthesis of all intelligence modules for that country. The brief is organized into a two-column layout:
+
+**Left column**:
+- **Instability Index** — animated SVG score ring (0–100) with four component breakdown bars (Unrest, Conflict, Security, Information), severity badge, and trend indicator
+- **Intelligence Brief** — AI-generated analysis (Groq Llama 3.1) with inline citation anchors `[1]`–`[8]` that scroll to the corresponding news source when clicked
+- **Top News** — 8 most relevant headlines for the country, threat-level color-coded, with source and time-ago metadata
+
+**Right column**:
+- **Active Signals** — real-time chip indicators for protests, military aircraft, naval vessels, internet outages, earthquakes, displacement flows, climate stress, conflict events, and the country's stock market index (1-week change)
+- **7-Day Timeline** — D3.js-rendered event chart with 4 severity-coded lanes (protest, conflict, natural, military), interactive tooltips, and responsive resizing
+- **Prediction Markets** — top 3 Polymarket contracts by volume with probability bars and external links
+- **Infrastructure Exposure** — pipelines, undersea cables, datacenters, military bases, nuclear facilities, and ports within a 600km radius of the country centroid, ranked by distance
+
+**Headline relevance filtering**: each country has an alias map (e.g., `US → ["united states", "american", "washington", "pentagon", "biden", "trump"]`). Headlines are filtered using a negative-match algorithm — if another country's alias appears earlier in the headline title than the target country's alias, the headline is excluded. This prevents cross-contamination (e.g., a headline about Venezuela mentioning "Washington sanctions" appearing in the US brief).
+
+**Export options**: briefs are exportable as JSON (structured data with all scores, signals, and headlines), CSV (flattened tabular format), or PNG image. A print button triggers the browser's native print dialog for PDF export.
+
+### Local-First Country Detection
+
+Map clicks resolve to countries using a local geometry service rather than relying on network reverse-geocoding (Nominatim). The system loads a GeoJSON file containing polygon boundaries for ~200 countries and builds an indexed spatial lookup:
+
+1. **Bounding box pre-filter** — each country's polygon(s) are wrapped in a bounding box (`[minLon, minLat, maxLon, maxLat]`). Points outside the bbox are rejected without polygon intersection testing.
+2. **Ray-casting algorithm** — for points inside the bbox, a ray is cast from the point along the positive x-axis. The number of polygon edge intersections determines inside/outside status (odd = inside). Edge cases are handled: points on segment boundaries return `true`, and polygon holes are subtracted (a point inside an outer ring but also inside a hole is excluded).
+3. **MultiPolygon support** — countries with non-contiguous territories (e.g., the US with Alaska and Hawaii, Indonesia with thousands of islands) use MultiPolygon geometries where each polygon is tested independently.
+
+This approach provides sub-millisecond country detection entirely in the browser, with no network latency. The geometry data is preloaded at app startup and cached for the session. For countries not in the GeoJSON (rare), the system falls back to hardcoded rectangular bounding boxes, and finally to network reverse-geocoding as a last resort.
+
 ### Threat Classification Pipeline
 
 Every news item passes through a two-stage classification pipeline:
@@ -217,7 +254,7 @@ This hybrid approach means the UI is never blocked waiting for AI — users see 
 
 ### Country Instability Index (CII)
 
-Each monitored country receives a real-time instability score (0–100) computed from:
+22 tier-1 countries receive continuous monitoring: US, Russia, China, Ukraine, Iran, Israel, Taiwan, North Korea, Saudi Arabia, Turkey, Poland, Germany, France, UK, India, Pakistan, Syria, Yemen, Myanmar, Venezuela, Brazil, and UAE. Each receives a real-time instability score (0–100) computed from:
 
 | Component | Weight | Details |
 |-----------|--------|---------|
@@ -349,6 +386,42 @@ Events from both sources are **Haversine-deduplicated** on a 0.5° grid (~50km) 
 
 Protest scoring is regime-aware: democratic countries use logarithmic scaling (routine protests don't trigger instability), while authoritarian states use linear scoring (every protest is significant). Fatalities and concurrent internet outages apply severity boosts.
 
+### Climate Anomaly Detection
+
+15 conflict-prone and disaster-prone zones are continuously monitored for temperature and precipitation anomalies using Open-Meteo ERA5 reanalysis data. A 30-day baseline is computed, and current conditions are compared against it to determine severity:
+
+| Severity | Temperature Deviation | Precipitation Deviation |
+|----------|----------------------|------------------------|
+| **Extreme** | > 5°C above baseline | > 80mm/day above baseline |
+| **Moderate** | > 3°C above baseline | > 40mm/day above baseline |
+| **Normal** | Within expected range | Within expected range |
+
+Anomalies feed into the signal aggregator, where they amplify CII scores for affected countries (climate stress is a recognized conflict accelerant). The Climate Anomaly panel surfaces these deviations in a severity-sorted list.
+
+### Displacement Tracking
+
+Refugee and displacement data is sourced from the UN OCHA Humanitarian API (HAPI), providing population-level counts for refugees, asylum seekers, and internally displaced persons (IDPs). The Displacement panel offers two perspectives:
+
+- **Origins** — countries people are fleeing from, ranked by outflow volume
+- **Hosts** — countries absorbing displaced populations, ranked by intake
+
+Crisis badges flag countries with extreme displacement: > 1 million displaced (red), > 500,000 (orange). Displacement outflow feeds into the CII as a component signal — high displacement is a lagging indicator of instability that persists even when headlines move on.
+
+### Strategic Port Infrastructure
+
+84 strategic ports are cataloged across six types, reflecting their role in global trade and military posture:
+
+| Type | Count | Examples |
+|------|-------|---------|
+| **Container** | 21 | Shanghai (#1, 47M+ TEU), Singapore, Ningbo, Shenzhen |
+| **Oil/LNG** | 8 | Ras Tanura (Saudi), Sabine Pass (US), Fujairah (UAE) |
+| **Chokepoint** | 8 | Suez Canal, Panama Canal, Strait of Malacca |
+| **Naval** | 6 | Zhanjiang, Yulin (China), Vladivostok (Russia) |
+| **Mixed** | 15+ | Ports serving multiple roles (trade + military) |
+| **Bulk** | 20+ | Regional commodity ports |
+
+Ports are ranked by throughput and weighted by strategic importance in the infrastructure cascade model: oil/LNG terminals carry 0.9 criticality, container ports 0.7, and naval bases 0.4. Port proximity appears in the Country Brief infrastructure exposure section.
+
 ### Browser-Side ML Pipeline
 
 The dashboard runs a full ML pipeline in the browser via Transformers.js, with no server dependency for core intelligence. This is automatically disabled on mobile devices to conserve memory.
@@ -448,6 +521,7 @@ This is an approximation, not a substitute for official flow data, but it captur
 | **Assume failure** | Per-feed circuit breakers with 5-minute cooldowns. AI fallback chain: Groq → OpenRouter → browser-side T5. Redis cache failures degrade gracefully. Every edge function returns stale cached data when upstream APIs are down. |
 | **Show what you can't see** | Intelligence gap tracker explicitly reports data source outages rather than silently hiding them. |
 | **Browser-first compute** | Analysis (clustering, instability scoring, surge detection) runs client-side — no backend compute dependency for core intelligence. |
+| **Local-first geolocation** | Country detection uses browser-side ray-casting against GeoJSON polygons rather than network reverse-geocoding. Sub-millisecond response, zero API dependency, works offline. Network geocoding is a fallback, not the primary path. |
 | **Multi-signal correlation** | No single data source is trusted alone. Focal points require convergence across news + military + markets + protests before escalating to critical. |
 | **Geopolitical grounding** | Hard-coded conflict zones, baseline country risk, and strategic chokepoints prevent statistical noise from generating false alerts in low-data regions. |
 | **Defense in depth** | CORS origin allowlist, domain-allowlisted RSS proxy, server-side API key isolation, token-authenticated desktop sidecar, input sanitization with output encoding, IP rate limiting on AI endpoints. |
@@ -842,6 +916,11 @@ Desktop release details, signing hooks, variant outputs, and clean-machine valid
 - [x] Natural disaster monitoring (USGS + GDACS + NASA EONET)
 - [x] Historical playback via IndexedDB snapshots
 - [x] Live YouTube stream detection with desktop embed bridge
+- [x] Country brief pages with AI-generated intelligence dossiers
+- [x] Local-first country detection (browser-side ray-casting, no network dependency)
+- [x] Climate anomaly monitoring (15 conflict-prone zones)
+- [x] Displacement tracking (UNHCR/HAPI origins & hosts)
+- [x] Country brief export (JSON, CSV, PNG, PDF)
 - [ ] Mobile-optimized views
 - [ ] Push notifications for critical alerts
 - [ ] Self-hosted Docker image

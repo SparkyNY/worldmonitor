@@ -22,10 +22,19 @@ const SIGNUP_URLS: Partial<Record<RuntimeSecretKey, string>> = {
   EIA_API_KEY: 'https://www.eia.gov/opendata/register.php',
   CLOUDFLARE_API_TOKEN: 'https://dash.cloudflare.com/profile/api-tokens',
   ACLED_ACCESS_TOKEN: 'https://developer.acleddata.com/',
+  URLHAUS_AUTH_KEY: 'https://auth.abuse.ch/',
+  OTX_API_KEY: 'https://otx.alienvault.com/',
+  ABUSEIPDB_API_KEY: 'https://www.abuseipdb.com/login',
   WINGBITS_API_KEY: 'https://wingbits.com/register',
   AISSTREAM_API_KEY: 'https://aisstream.io/authenticate',
   OPENSKY_CLIENT_ID: 'https://opensky-network.org/login?view=registration',
   OPENSKY_CLIENT_SECRET: 'https://opensky-network.org/login?view=registration',
+};
+
+const SECRET_HELP_TEXT: Partial<Record<RuntimeSecretKey, string>> = {
+  URLHAUS_AUTH_KEY: 'Used for both URLhaus and ThreatFox APIs.',
+  OTX_API_KEY: 'Optional enrichment source for the cyber threat layer.',
+  ABUSEIPDB_API_KEY: 'Optional enrichment source for malicious IP reputation.',
 };
 
 interface RuntimeConfigPanelOptions {
@@ -130,6 +139,7 @@ export class RuntimeConfigPanel extends Panel {
     const state = getSecretState(key);
     const status = !state.present ? 'Missing' : state.valid ? `Valid (${state.source})` : 'Looks invalid';
     const signupUrl = SIGNUP_URLS[key];
+    const helpText = SECRET_HELP_TEXT[key];
     const linkHtml = signupUrl
       ? ` <a href="#" data-signup-url="${signupUrl}" class="runtime-secret-link" title="Get API key">&#x2197;</a>`
       : '';
@@ -137,6 +147,7 @@ export class RuntimeConfigPanel extends Panel {
       <div class="runtime-secret-row">
         <div class="runtime-secret-key"><code>${escapeHtml(key)}</code>${linkHtml}</div>
         <span class="runtime-secret-status ${state.valid ? 'ok' : 'warn'}">${escapeHtml(status)}</span>
+        ${helpText ? `<div class="runtime-secret-meta">${escapeHtml(helpText)}</div>` : ''}
         <input type="password" data-secret="${key}" placeholder="Set secret" autocomplete="off" ${isDesktopRuntime() ? '' : 'disabled'}>
       </div>
     `;
