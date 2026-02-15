@@ -1,4 +1,5 @@
 import type { CorrelationSignal } from './correlation';
+import { mlWorker } from './ml-worker';
 import { generateSummary } from './summarization';
 import { SUPPRESSED_TRENDING_TERMS, escapeRegex, generateSignalId, tokenize } from '@/utils/analysis-constants';
 
@@ -290,9 +291,43 @@ function pushSignal(signal: CorrelationSignal): void {
   }
 }
 
+async function isSignificantTerm(term: string, headlines: StoredHeadline[]): Promise<boolean> {
+  const lower = term.toLowerCase();
+
+  if (/^(cve-\d{4}-\d{4,}|apt\d+|fin\d+)$/i.test(term)) return true;
+  for (const { pattern } of LEADER_PATTERNS) {
+    if (pattern.test(term)) return true;
+  }
+
+  if (!mlWorker.isAvailable) return true;
+
+  try {
+    const titles = headlines.slice(0, 6).map(h => h.title);
+    const entitiesPerTitle = await mlWorker.extractEntities(titles);
+
+    for (const entities of entitiesPerTitle) {
+      for (const entity of entities) {
+        if (entity.text.toLowerCase().includes(lower) || lower.includes(entity.text.toLowerCase())) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 async function handleSpike(spike: TrendingSpike, config: TrendingConfig): Promise<void> {
   const termKey = toTermKey(spike.term);
   if (activeSpikeTerms.has(termKey)) return;
+
+  const significant = await isSignificantTerm(spike.term, spike.headlines);
+  if (!significant) {
+    console.log(`[TrendingKeywords] Suppressed non-entity term: "${spike.term}"`);
+    return;
+  }
 
   activeSpikeTerms.add(termKey);
   try {

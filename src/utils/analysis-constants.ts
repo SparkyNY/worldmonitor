@@ -107,6 +107,18 @@ export const SUPPRESSED_TRENDING_TERMS = new Set<string>([
   'south', 'north', 'east', 'west', 'eastern', 'western',
   'southern', 'northern', 'central', 'middle',
   'united', 'national', 'international', 'federal',
+  // Base verb forms (fallback when NER model unavailable)
+  'say', 'get', 'give', 'go', 'come', 'put', 'take', 'make',
+  'know', 'think', 'see', 'want', 'look', 'find', 'tell', 'ask',
+  'use', 'try', 'leave', 'call', 'keep', 'let', 'begin', 'show',
+  'hear', 'play', 'run', 'move', 'help', 'turn', 'start', 'hold',
+  'bring', 'write', 'provide', 'sit', 'stand', 'lose', 'pay',
+  'meet', 'include', 'continue', 'learn', 'lead', 'believe',
+  'feel', 'follow', 'stop', 'speak', 'allow', 'add', 'grow',
+  'open', 'walk', 'win', 'offer', 'appear', 'buy', 'wait',
+  'serve', 'die', 'send', 'build', 'stay', 'fall', 'reach',
+  'remain', 'suggest', 'raise', 'sell', 'require', 'decide',
+  'develop', 'break', 'happen', 'create', 'live',
   // Numbers and misc
   '000', '100', '200', '500', 'per', 'than',
 ]);
