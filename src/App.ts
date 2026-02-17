@@ -77,6 +77,7 @@ import {
   DisplacementPanel,
   ClimateAnomalyPanel,
   PopulationExposurePanel,
+  InvestmentsPanel,
 } from '@/components';
 import type { SearchResult } from '@/components/SearchModal';
 import { collectStoryData } from '@/services/story-data';
@@ -2143,6 +2144,14 @@ export class App {
 
       const populationExposurePanel = new PopulationExposurePanel();
       this.panels['population-exposure'] = populationExposurePanel;
+    }
+
+    // GCC Investments Panel (finance variant)
+    if (SITE_VARIANT === 'finance') {
+      const investmentsPanel = new InvestmentsPanel((inv) => {
+        this.map?.setCenter(inv.lat, inv.lon, 6);
+      });
+      this.panels['gcc-investments'] = investmentsPanel;
     }
 
     const liveNewsPanel = new LiveNewsPanel();

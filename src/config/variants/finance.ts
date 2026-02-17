@@ -119,6 +119,16 @@ export const FEEDS: Record<string, Feed[]> = {
     { name: 'Sovereign Wealth', url: rss('https://news.google.com/rss/search?q=("sovereign+wealth+fund"+OR+"pension+fund"+OR+"institutional+investor")+when:7d&hl=en-US&gl=US&ceid=US:en') },
   ],
 
+  // GCC Business & Investment News
+  gccNews: [
+    { name: 'Arabian Business', url: rss('https://www.arabianbusiness.com/rss') },
+    { name: 'The National', url: rss('https://www.thenationalnews.com/rss/') },
+    { name: 'Arab News', url: rss('https://www.arabnews.com/rss.xml') },
+    { name: 'Gulf FDI', url: rss('https://news.google.com/rss/search?q=(PIF+OR+"DP+World"+OR+Mubadala+OR+ADNOC+OR+Masdar+OR+"ACWA+Power")+infrastructure+when:7d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Gulf Investments', url: rss('https://news.google.com/rss/search?q=("Saudi+Arabia"+OR+"UAE"+OR+"Abu+Dhabi")+investment+infrastructure+when:7d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Vision 2030', url: rss('https://news.google.com/rss/search?q="Vision+2030"+(project+OR+investment+OR+announced)+when:14d&hl=en-US&gl=US&ceid=US:en') },
+  ],
+
   // Market Analysis & Outlook
   analysis: [
     { name: 'Market Outlook', url: rss('https://news.google.com/rss/search?q=("market+outlook"+OR+"stock+market+forecast"+OR+"bull+market"+OR+"bear+market")+when:3d&hl=en-US&gl=US&ceid=US:en') },
@@ -153,6 +163,8 @@ export const DEFAULT_PANELS: Record<string, PanelConfig> = {
   analysis: { name: 'Market Analysis', enabled: true, priority: 2 },
   'etf-flows': { name: 'BTC ETF Tracker', enabled: true, priority: 2 },
   stablecoins: { name: 'Stablecoins', enabled: true, priority: 2 },
+  'gcc-investments': { name: 'GCC Investments', enabled: true, priority: 2 },
+  gccNews: { name: 'GCC Business News', enabled: true, priority: 2 },
   polymarket: { name: 'Predictions', enabled: true, priority: 2 },
   monitors: { name: 'My Monitors', enabled: true, priority: 2 },
 };
@@ -195,6 +207,7 @@ export const DEFAULT_MAP_LAYERS: MapLayers = {
   financialCenters: true,
   centralBanks: true,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 // Mobile defaults for finance variant
@@ -235,6 +248,7 @@ export const MOBILE_DEFAULT_MAP_LAYERS: MapLayers = {
   financialCenters: false,
   centralBanks: true,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 export const VARIANT_CONFIG: VariantConfig = {

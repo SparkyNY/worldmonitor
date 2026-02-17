@@ -166,6 +166,9 @@ const ALLOWED_DOMAINS = [
   'seekingalpha.com',
   'www.coindesk.com',
   'cointelegraph.com',
+  // Gulf / GCC news domains
+  'www.arabianbusiness.com',
+  'www.thenationalnews.com',
 ];
 
 export default async function handler(req) {

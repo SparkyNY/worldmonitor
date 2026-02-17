@@ -83,6 +83,7 @@ const FULL_MAP_LAYERS: MapLayers = {
   financialCenters: false,
   centralBanks: false,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 const FULL_MOBILE_MAP_LAYERS: MapLayers = {
@@ -123,6 +124,7 @@ const FULL_MOBILE_MAP_LAYERS: MapLayers = {
   financialCenters: false,
   centralBanks: false,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 // ============================================
@@ -202,6 +204,7 @@ const TECH_MAP_LAYERS: MapLayers = {
   financialCenters: false,
   centralBanks: false,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 const TECH_MOBILE_MAP_LAYERS: MapLayers = {
@@ -242,6 +245,7 @@ const TECH_MOBILE_MAP_LAYERS: MapLayers = {
   financialCenters: false,
   centralBanks: false,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 // ============================================
@@ -272,6 +276,8 @@ const FINANCE_PANELS: Record<string, PanelConfig> = {
   analysis: { name: 'Market Analysis', enabled: true, priority: 2 },
   'etf-flows': { name: 'BTC ETF Tracker', enabled: true, priority: 2 },
   stablecoins: { name: 'Stablecoins', enabled: true, priority: 2 },
+  'gcc-investments': { name: 'GCC Investments', enabled: true, priority: 2 },
+  gccNews: { name: 'GCC Business News', enabled: true, priority: 2 },
   polymarket: { name: 'Predictions', enabled: true, priority: 2 },
   monitors: { name: 'My Monitors', enabled: true, priority: 2 },
 };
@@ -314,6 +320,7 @@ const FINANCE_MAP_LAYERS: MapLayers = {
   financialCenters: true,
   centralBanks: true,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 const FINANCE_MOBILE_MAP_LAYERS: MapLayers = {
@@ -354,6 +361,7 @@ const FINANCE_MOBILE_MAP_LAYERS: MapLayers = {
   financialCenters: false,
   centralBanks: true,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 // ============================================

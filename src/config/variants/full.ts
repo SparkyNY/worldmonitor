@@ -86,6 +86,7 @@ export const DEFAULT_MAP_LAYERS: MapLayers = {
   financialCenters: false,
   centralBanks: false,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 // Mobile-specific defaults for geopolitical
@@ -126,6 +127,7 @@ export const MOBILE_DEFAULT_MAP_LAYERS: MapLayers = {
   financialCenters: false,
   centralBanks: false,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 export const VARIANT_CONFIG: VariantConfig = {

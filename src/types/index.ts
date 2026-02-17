@@ -549,6 +549,8 @@ export interface MapLayers {
   financialCenters: boolean;
   centralBanks: boolean;
   commodityHubs: boolean;
+  // Gulf FDI layers
+  gulfInvestments: boolean;
 }
 
 export interface AIDataCenter {
@@ -1162,6 +1164,71 @@ export interface FocalPointSummary {
   aiContext: string;
   topCountries: FocalPoint[];
   topCompanies: FocalPoint[];
+}
+
+// ============================================
+// GULF FDI TYPES
+// ============================================
+
+export type GulfInvestorCountry = 'SA' | 'UAE';
+
+export type GulfInvestmentSector =
+  | 'ports'
+  | 'pipelines'
+  | 'energy'
+  | 'datacenters'
+  | 'airports'
+  | 'railways'
+  | 'telecoms'
+  | 'water'
+  | 'logistics'
+  | 'mining'
+  | 'real-estate'
+  | 'manufacturing';
+
+export type GulfInvestmentStatus =
+  | 'operational'
+  | 'under-construction'
+  | 'announced'
+  | 'rumoured'
+  | 'cancelled'
+  | 'divested';
+
+export type GulfInvestingEntity =
+  | 'DP World'
+  | 'AD Ports'
+  | 'Mubadala'
+  | 'ADIA'
+  | 'ADNOC'
+  | 'Masdar'
+  | 'PIF'
+  | 'Saudi Aramco'
+  | 'ACWA Power'
+  | 'STC'
+  | 'Mawani'
+  | 'NEOM'
+  | 'Emirates Global Aluminium'
+  | 'Other';
+
+export interface GulfInvestment {
+  id: string;
+  investingEntity: GulfInvestingEntity;
+  investingCountry: GulfInvestorCountry;
+  targetCountry: string;
+  targetCountryIso: string;
+  sector: GulfInvestmentSector;
+  assetType: string;
+  assetName: string;
+  lat: number;
+  lon: number;
+  investmentUSD?: number;
+  stakePercent?: number;
+  status: GulfInvestmentStatus;
+  yearAnnounced?: number;
+  yearOperational?: number;
+  description: string;
+  sourceUrl?: string;
+  tags?: string[];
 }
 
 export interface MapProtestCluster {

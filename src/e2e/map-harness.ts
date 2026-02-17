@@ -170,6 +170,7 @@ const allLayersEnabled: MapLayers = {
   financialCenters: true,
   centralBanks: true,
   commodityHubs: true,
+  gulfInvestments: true,
 };
 
 const allLayersDisabled: MapLayers = {
@@ -207,6 +208,7 @@ const allLayersDisabled: MapLayers = {
   financialCenters: false,
   centralBanks: false,
   commodityHubs: false,
+  gulfInvestments: false,
 };
 
 const SEEDED_NEWS_LOCATIONS: Array<{

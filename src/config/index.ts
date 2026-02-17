@@ -112,3 +112,6 @@ export {
   type CentralBank,
   type CommodityHub,
 } from './finance-geo';
+
+// Gulf FDI investment database
+export { GULF_INVESTMENTS } from './gulf-fdi';
