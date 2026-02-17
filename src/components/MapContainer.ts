@@ -298,7 +298,7 @@ export class MapContainer {
     }
   }
 
-  public setNewsLocations(data: Array<{ lat: number; lon: number; title: string; threatLevel: string }>): void {
+  public setNewsLocations(data: Array<{ lat: number; lon: number; title: string; threatLevel: string; timestamp?: Date }>): void {
     if (this.useDeckGL) {
       this.deckGLMap?.setNewsLocations(data);
     } else {

@@ -1,15 +1,16 @@
-import { t } from '@/services/i18n';
-import { type SignalType } from '@/utils/analysis-constants';
-import { escapeHtml } from '@/utils/sanitize';
-import type { UnifiedAlert } from '@/services/cross-module-integration';
 import type { CorrelationSignal } from '@/services/correlation';
+import type { UnifiedAlert } from '@/services/cross-module-integration';
 import { suppressTrendingTerm } from '@/services/trending-keywords';
+import { escapeHtml } from '@/utils/sanitize';
+import { getCSSColor } from '@/utils';
+import { getSignalContext, type SignalType } from '@/utils/analysis-constants';
 
 export class SignalModal {
   private element: HTMLElement;
-  private audio?: HTMLAudioElement;
-  private audioEnabled: boolean = true;
-  private locationClickHandler?: (lat: number, lon: number) => void;
+  private currentSignals: CorrelationSignal[] = [];
+  private audioEnabled = true;
+  private audio: HTMLAudioElement | null = null;
+  private onLocationClick?: (lat: number, lon: number) => void;
 
   constructor() {
     this.element = document.createElement('div');
@@ -17,16 +18,16 @@ export class SignalModal {
     this.element.innerHTML = `
       <div class="signal-modal">
         <div class="signal-modal-header">
-          <span class="signal-modal-title">🎯 ${t('modals.signal.title')}</span>
+          <span class="signal-modal-title">🎯 INTELLIGENCE FINDING</span>
           <button class="signal-modal-close">×</button>
         </div>
         <div class="signal-modal-content"></div>
         <div class="signal-modal-footer">
           <label class="signal-audio-toggle">
             <input type="checkbox" checked>
-            <span>${t('modals.signal.soundAlerts')}</span>
+            <span>Sound alerts</span>
           </label>
-          <button class="signal-dismiss-btn">${t('modals.signal.dismiss')}</button>
+          <button class="signal-dismiss-btn">Dismiss</button>
         </div>
       </div>
     `;
@@ -36,161 +37,288 @@ export class SignalModal {
     this.initAudio();
   }
 
-  public setLocationClickHandler(handler: (lat: number, lon: number) => void): void {
-    this.locationClickHandler = handler;
+  private initAudio(): void {
+    this.audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQYjfKapmWswEjCJvuPQfSoXZZ+3qqBJESSP0unGaxMJVYiytrFeLhR6p8znrFUXRW+bs7V3Qx1hn8Xjp1cYPnegprhkMCFmoLi1k0sZTYGlqqlUIA==');
+    this.audio.volume = 0.3;
   }
 
   private setupEventListeners(): void {
-    this.element.querySelector('.signal-modal-close')?.addEventListener('click', () => this.hide());
-    this.element.querySelector('.signal-dismiss-btn')?.addEventListener('click', () => this.hide());
+    this.element.querySelector('.signal-modal-close')?.addEventListener('click', () => {
+      this.hide();
+    });
 
-    const toggle = this.element.querySelector('.signal-audio-toggle input') as HTMLInputElement;
-    if (toggle) {
-      toggle.addEventListener('change', (e) => {
-        this.audioEnabled = (e.target as HTMLInputElement).checked;
-      });
-    }
+    this.element.querySelector('.signal-dismiss-btn')?.addEventListener('click', () => {
+      this.hide();
+    });
 
     this.element.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.classList.contains('signal-modal-overlay')) {
+      if ((e.target as HTMLElement).classList.contains('signal-modal-overlay')) {
         this.hide();
-      } else if (target.classList.contains('suppress-keyword-btn')) {
-        const term = target.getAttribute('data-term');
-        if (term) {
-          suppressTrendingTerm(term);
-          target.textContent = t('modals.signal.suppressed') || 'Suppressed';
-          target.setAttribute('disabled', 'true');
-        }
-      } else if (target.closest('.signal-location-btn')) {
-        const btn = target.closest('.signal-location-btn') as HTMLElement;
-        const lat = parseFloat(btn.dataset.lat || '0');
-        const lon = parseFloat(btn.dataset.lon || '0');
-        if (this.locationClickHandler) {
-          this.locationClickHandler(lat, lon);
+      }
+    });
+
+    const checkbox = this.element.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    checkbox?.addEventListener('change', () => {
+      this.audioEnabled = checkbox.checked;
+    });
+
+    // Delegate click handler for location links
+    this.element.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('location-link')) {
+        const lat = parseFloat(target.dataset.lat || '0');
+        const lon = parseFloat(target.dataset.lon || '0');
+        if (this.onLocationClick && !isNaN(lat) && !isNaN(lon)) {
+          this.onLocationClick(lat, lon);
           this.hide();
         }
+        return;
+      }
+
+      if (target.classList.contains('suppress-keyword-btn')) {
+        const term = (target.dataset.term || '').trim();
+        if (!term) return;
+        suppressTrendingTerm(term);
+        this.currentSignals = this.currentSignals.filter(signal => {
+          const signalTerm = (signal.data as Record<string, unknown>).term;
+          return typeof signalTerm !== 'string' || signalTerm.toLowerCase() !== term.toLowerCase();
+        });
+        this.renderSignals();
       }
     });
   }
 
-  private initAudio(): void {
-    // Assuming audio file exists, otherwise this will fail silently
-    this.audio = new Audio('/assets/sounds/alert.mp3');
+  public setLocationClickHandler(handler: (lat: number, lon: number) => void): void {
+    this.onLocationClick = handler;
+  }
+
+  public show(signals: CorrelationSignal[]): void {
+    if (signals.length === 0) return;
+    if (document.fullscreenElement) return;
+
+    this.currentSignals = [...signals, ...this.currentSignals].slice(0, 50);
+    this.renderSignals();
+    this.element.classList.add('active');
+    this.playSound();
+  }
+
+  public showSignal(signal: CorrelationSignal): void {
+    this.currentSignals = [signal];
+    this.renderSignals();
+    this.element.classList.add('active');
+  }
+
+  public showAlert(alert: UnifiedAlert): void {
+    if (document.fullscreenElement) return;
+    const content = this.element.querySelector('.signal-modal-content')!;
+    const priorityColors: Record<string, string> = {
+      critical: getCSSColor('--semantic-critical'),
+      high: getCSSColor('--semantic-high'),
+      medium: getCSSColor('--semantic-low'),
+      low: getCSSColor('--text-dim'),
+    };
+    const typeIcons: Record<string, string> = {
+      cii_spike: '📊',
+      convergence: '🌍',
+      cascade: '⚡',
+      composite: '🔗',
+    };
+
+    const icon = typeIcons[alert.type] || '⚠️';
+    const color = priorityColors[alert.priority] || '#ff9944';
+
+    let detailsHtml = '';
+
+    // CII Change details
+    if (alert.components.ciiChange) {
+      const cii = alert.components.ciiChange;
+      const changeSign = cii.change > 0 ? '+' : '';
+      detailsHtml += `
+        <div class="signal-context-item">
+          <span class="context-label">Country:</span>
+          <span class="context-value">${escapeHtml(cii.countryName)}</span>
+        </div>
+        <div class="signal-context-item">
+          <span class="context-label">Score Change:</span>
+          <span class="context-value">${cii.previousScore} → ${cii.currentScore} (${changeSign}${cii.change})</span>
+        </div>
+        <div class="signal-context-item">
+          <span class="context-label">Instability Level:</span>
+          <span class="context-value" style="text-transform: uppercase; color: ${color}">${cii.level}</span>
+        </div>
+        <div class="signal-context-item">
+          <span class="context-label">Primary Driver:</span>
+          <span class="context-value">${escapeHtml(cii.driver)}</span>
+        </div>
+      `;
+    }
+
+    // Convergence details
+    if (alert.components.convergence) {
+      const conv = alert.components.convergence;
+      detailsHtml += `
+        <div class="signal-context-item">
+          <span class="context-label">Location:</span>
+          <button class="location-link" data-lat="${conv.lat}" data-lon="${conv.lon}">${conv.lat.toFixed(2)}°, ${conv.lon.toFixed(2)}° ↗</button>
+        </div>
+        <div class="signal-context-item">
+          <span class="context-label">Event Types:</span>
+          <span class="context-value">${conv.types.join(', ')}</span>
+        </div>
+        <div class="signal-context-item">
+          <span class="context-label">Event Count:</span>
+          <span class="context-value">${conv.totalEvents} events in 24h</span>
+        </div>
+      `;
+    }
+
+    // Cascade details
+    if (alert.components.cascade) {
+      const cascade = alert.components.cascade;
+      detailsHtml += `
+        <div class="signal-context-item">
+          <span class="context-label">Source:</span>
+          <span class="context-value">${escapeHtml(cascade.sourceName)} (${cascade.sourceType})</span>
+        </div>
+        <div class="signal-context-item">
+          <span class="context-label">Countries Affected:</span>
+          <span class="context-value">${cascade.countriesAffected}</span>
+        </div>
+        <div class="signal-context-item">
+          <span class="context-label">Impact Level:</span>
+          <span class="context-value">${escapeHtml(cascade.highestImpact)}</span>
+        </div>
+      `;
+    }
+
+    content.innerHTML = `
+      <div class="signal-item" style="border-left-color: ${color}">
+        <div class="signal-type">${icon} ${alert.type.toUpperCase().replace('_', ' ')}</div>
+        <div class="signal-title">${escapeHtml(alert.title)}</div>
+        <div class="signal-description">${escapeHtml(alert.summary)}</div>
+        <div class="signal-meta">
+          <span class="signal-confidence" style="background: ${color}22; color: ${color}">${alert.priority.toUpperCase()}</span>
+          <span class="signal-time">${this.formatTime(alert.timestamp)}</span>
+        </div>
+        <div class="signal-context">
+          ${detailsHtml}
+        </div>
+        ${alert.countries.length > 0 ? `
+          <div class="signal-topics">
+            ${alert.countries.map(c => `<span class="signal-topic">${escapeHtml(c)}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    this.element.classList.add('active');
+  }
+
+  public playSound(): void {
+    if (this.audioEnabled && this.audio) {
+      this.audio.currentTime = 0;
+      this.audio.play().catch(() => {});
+    }
   }
 
   public hide(): void {
     this.element.classList.remove('active');
-    if (this.audio) {
-      this.audio.pause();
-      this.audio.currentTime = 0;
-    }
   }
 
-  public show(signals?: CorrelationSignal[]): void {
-    this.element.classList.add('active');
-    if (signals) {
-      this.showSignals(signals);
-    }
-  }
+  private renderSignals(): void {
+    const content = this.element.querySelector('.signal-modal-content')!;
 
-  public showAlert(alert: UnifiedAlert): void {
-    this.show();
-    const content = this.element.querySelector('.signal-modal-content');
-    if (!content) return;
+    const signalTypeLabels: Record<string, string> = {
+      'prediction_leads_news': '🔮 Prediction Leading',
+      'news_leads_markets': '📰 News Leading',
+      'silent_divergence': '🔇 Silent Divergence',
+      'velocity_spike': '🔥 Velocity Spike',
+      'keyword_spike': '📊 Keyword Spike',
+      'convergence': '◉ Convergence',
+      'triangulation': '△ Triangulation',
+      'flow_drop': '🛢️ Flow Drop',
+      'flow_price_divergence': '📈 Flow/Price Divergence',
+      'geo_convergence': '🌐 Geographic Convergence',
+      'explained_market_move': '✓ Market Move Explained',
+      'sector_cascade': '📊 Sector Cascade',
+      'military_surge': '🛩️ Military Surge',
+    };
 
-    const levelStr = (alert.priority || 'info').toUpperCase();
+    const html = this.currentSignals.map(signal => {
+      const context = getSignalContext(signal.type as SignalType);
+      // Military surge signals have additional properties in data
+      const data = signal.data as Record<string, unknown>;
+      const newsCorrelation = data?.newsCorrelation as string | null;
+      const focalPoints = data?.focalPointContext as string[] | null;
+      const locationData = { lat: data?.lat as number | undefined, lon: data?.lon as number | undefined, regionName: data?.regionName as string | undefined };
 
-    content.innerHTML = `
-      <div class="signal-alert-full ${alert.priority}">
-        <div class="signal-alert-header">
-          <span class="signal-alert-level">${levelStr}</span>
-          <span class="signal-alert-time">${new Date(alert.timestamp).toLocaleTimeString()}</span>
-        </div>
-        <h2 class="signal-alert-title">${escapeHtml(alert.title)}</h2>
-        <div class="signal-alert-body">${escapeHtml(alert.summary)}</div>
-        
-        <div class="signal-actions">
-          ${alert.location ? `
-            <button class="signal-location-btn" data-lat="${alert.location.lat}" data-lon="${alert.location.lon}">
-              📍 ${t('modals.signal.location') || 'Location'}
-            </button>
+      return `
+        <div class="signal-item ${escapeHtml(signal.type)}">
+          <div class="signal-type">${signalTypeLabels[signal.type] || escapeHtml(signal.type)}</div>
+          <div class="signal-title">${escapeHtml(signal.title)}</div>
+          <div class="signal-description">${escapeHtml(signal.description)}</div>
+          <div class="signal-meta">
+            <span class="signal-confidence">Confidence: ${Math.round(signal.confidence * 100)}%</span>
+            <span class="signal-time">${this.formatTime(signal.timestamp)}</span>
+          </div>
+          ${signal.data.explanation ? `
+            <div class="signal-explanation">${escapeHtml(signal.data.explanation)}</div>
           ` : ''}
-        </div>
-      </div>
-    `;
-
-    if (this.audioEnabled && this.audio && alert.priority === 'critical') {
-      this.audio.play().catch(() => { });
-    }
-  }
-
-  public showSignal(signal: CorrelationSignal): void {
-    this.showSignals([signal]);
-  }
-
-  public showSignals(signals: CorrelationSignal[]): void {
-    this.show();
-    const content = this.element.querySelector('.signal-modal-content');
-    if (!content) return;
-
-    if (signals.length === 0) {
-      content.innerHTML = `<div class="no-signals">${t('modals.signal.noSignals') || 'No active signals found.'}</div>`;
-      return;
-    }
-
-    content.innerHTML = signals.map(signal => `
-      <div class="signal-item">
-        <div class="signal-header">
-          <span class="signal-tag">${this.getSignalLabel(signal.type)}</span>
-          <span class="signal-confidence">${(signal.confidence * 100).toFixed(0)}% ${t('modals.signal.confidence')}</span>
-          <span class="signal-time">${new Date(signal.timestamp).toLocaleTimeString()}</span>
-        </div>
-        <div class="signal-body">
-          <h3>${escapeHtml(signal.title)}</h3>
-          <p>${escapeHtml(signal.description)}</p>
-        </div>
-        <div class="signal-meta">
-          ${signal.data.relatedTopics && signal.data.relatedTopics.length > 0 ? `
-            <div class="signal-topics">
-              <strong>${t('modals.signal.related') || 'Related'}:</strong> 
-              ${signal.data.relatedTopics.map(tag => `<span class="topic-tag">${escapeHtml(tag)}</span>`).join('')}
+          ${focalPoints && focalPoints.length > 0 ? `
+            <div class="signal-focal-points">
+              <div class="focal-points-header">📡 CORRELATED FOCAL POINTS</div>
+              ${focalPoints.map(fp => `<div class="focal-point-item">${escapeHtml(fp)}</div>`).join('')}
             </div>
           ` : ''}
-          ${signal.data.term ? `
-             <button class="suppress-keyword-btn" data-term="${escapeHtml(signal.data.term)}">${t('modals.signal.suppress')}</button>
+          ${newsCorrelation ? `
+            <div class="signal-news-correlation">
+              <div class="news-correlation-header">📰 NEWS CORRELATION</div>
+              <pre class="news-correlation-text">${escapeHtml(newsCorrelation)}</pre>
+            </div>
           ` : ''}
-          ${signal.data.correlatedEntities && signal.data.correlatedEntities.length > 0 ? `
-             <div class="signal-entities">
-                <strong>${t('modals.signal.entities') || 'Entities'}:</strong>
-                ${signal.data.correlatedEntities.join(', ')}
-             </div>
+          ${locationData.lat && locationData.lon ? `
+            <div class="signal-location">
+              <button class="location-link" data-lat="${locationData.lat}" data-lon="${locationData.lon}">
+                📍 View on map: ${locationData.regionName || `${locationData.lat.toFixed(2)}°, ${locationData.lon.toFixed(2)}°`}
+              </button>
+            </div>
+          ` : ''}
+          <div class="signal-context">
+            <div class="signal-context-item why-matters">
+              <span class="context-label">Why it matters:</span>
+              <span class="context-value">${escapeHtml(context.whyItMatters)}</span>
+            </div>
+            <div class="signal-context-item actionable">
+              <span class="context-label">Action:</span>
+              <span class="context-value">${escapeHtml(context.actionableInsight)}</span>
+            </div>
+            <div class="signal-context-item confidence-note">
+              <span class="context-label">Note:</span>
+              <span class="context-value">${escapeHtml(context.confidenceNote)}</span>
+            </div>
+          </div>
+          ${signal.data.relatedTopics?.length ? `
+            <div class="signal-topics">
+              ${signal.data.relatedTopics.map(t => `<span class="signal-topic">${escapeHtml(t)}</span>`).join('')}
+            </div>
+          ` : ''}
+          ${signal.type === 'keyword_spike' && typeof data?.term === 'string' ? `
+            <div class="signal-actions">
+              <button class="suppress-keyword-btn" data-term="${escapeHtml(data.term)}">Suppress this term</button>
+            </div>
           ` : ''}
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
-    if (this.audioEnabled && this.audio && signals.some(s => s.confidence > 0.8)) {
-      this.audio.play().catch(() => { });
-    }
+    content.innerHTML = html;
   }
 
-  private getSignalLabel(type: SignalType): string {
-    const signalTypeLabels: Record<string, string> = {
-      'prediction_leads_news': `🔮 ${t('modals.signal.predictionLeading')}`,
-      'news_leads_markets': `📰 ${t('modals.signal.newsLeading')}`,
-      'silent_divergence': `🔇 ${t('modals.signal.silentDivergence')}`,
-      'velocity_spike': `🔥 ${t('modals.signal.velocitySpike')}`,
-      'keyword_spike': `📊 ${t('modals.signal.keywordSpike')}`,
-      'convergence': `◉ ${t('modals.signal.convergence')}`,
-      'triangulation': `△ ${t('modals.signal.triangulation')}`,
-      'flow_drop': `🛢️ ${t('modals.signal.flowDrop')}`,
-      'flow_price_divergence': `📈 ${t('modals.signal.flowPriceDivergence')}`,
-      'geo_convergence': `🌐 ${t('modals.signal.geoConvergence')}`,
-      'explained_market_move': `✓ ${t('modals.signal.marketMove')}`,
-      'sector_cascade': `📊 ${t('modals.signal.sectorCascade')}`,
-      'military_surge': `🛩️ ${t('modals.signal.militarySurge')}`,
-    };
-    return signalTypeLabels[type] || type;
+  private formatTime(date: Date): string {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  public getElement(): HTMLElement {
+    return this.element;
   }
 }

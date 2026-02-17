@@ -151,4 +151,281 @@ test.describe('desktop runtime routing guardrails', () => {
     expect(result.calls.some((url) => url.includes('127.0.0.1:46123/api/stablecoin-markets'))).toBe(true);
     expect(result.calls.some((url) => url.includes('worldmonitor.app/api/stablecoin-markets'))).toBe(true);
   });
+
+  test('chunk preload reload guard is one-shot until app boot clears it', async ({ page }) => {
+    await page.goto('/tests/runtime-harness.html');
+
+    const result = await page.evaluate(async () => {
+      const {
+        buildChunkReloadStorageKey,
+        installChunkReloadGuard,
+        clearChunkReloadGuard,
+      } = await import('/src/bootstrap/chunk-reload.ts');
+
+      const listeners = new Map<string, Array<() => void>>();
+      const eventTarget = {
+        addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
+          const list = listeners.get(type) ?? [];
+          list.push(() => {
+            if (typeof listener === 'function') {
+              listener(new Event(type));
+            } else {
+              listener.handleEvent(new Event(type));
+            }
+          });
+          listeners.set(type, list);
+        },
+      };
+
+      const storageMap = new Map<string, string>();
+      const storage = {
+        getItem: (key: string) => storageMap.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          storageMap.set(key, value);
+        },
+        removeItem: (key: string) => {
+          storageMap.delete(key);
+        },
+      };
+
+      const emit = (eventName: string) => {
+        const handlers = listeners.get(eventName) ?? [];
+        handlers.forEach((handler) => handler());
+      };
+
+      let reloadCount = 0;
+      const storageKey = installChunkReloadGuard('9.9.9', {
+        eventTarget,
+        storage,
+        eventName: 'preload-error',
+        reload: () => {
+          reloadCount += 1;
+        },
+      });
+
+      emit('preload-error');
+      emit('preload-error');
+      const reloadCountBeforeClear = reloadCount;
+
+      clearChunkReloadGuard(storageKey, storage);
+      emit('preload-error');
+
+      return {
+        storageKey,
+        expectedKey: buildChunkReloadStorageKey('9.9.9'),
+        reloadCountBeforeClear,
+        reloadCountAfterClear: reloadCount,
+        storedValue: storageMap.get(storageKey) ?? null,
+      };
+    });
+
+    expect(result.storageKey).toBe(result.expectedKey);
+    expect(result.reloadCountBeforeClear).toBe(1);
+    expect(result.reloadCountAfterClear).toBe(2);
+    expect(result.storedValue).toBe('1');
+  });
+
+  test('update badge picks architecture-correct desktop download url', async ({ page }) => {
+    await page.goto('/tests/runtime-harness.html');
+
+    const result = await page.evaluate(async () => {
+      const { App } = await import('/src/App.ts');
+      const globalWindow = window as unknown as {
+        __TAURI__?: { core?: { invoke?: (command: string) => Promise<unknown> } };
+      };
+      const previousTauri = globalWindow.__TAURI__;
+      const releaseUrl = 'https://github.com/koala73/worldmonitor/releases/latest';
+
+      const appProto = App.prototype as unknown as {
+        resolveUpdateDownloadUrl: (releaseUrl: string) => Promise<string>;
+        mapDesktopDownloadPlatform: (os: string, arch: string) => string | null;
+      };
+      const fakeApp = {
+        mapDesktopDownloadPlatform: appProto.mapDesktopDownloadPlatform,
+      };
+
+      try {
+        globalWindow.__TAURI__ = {
+          core: {
+            invoke: async (command: string) => {
+              if (command !== 'get_desktop_runtime_info') throw new Error(`Unexpected command: ${command}`);
+              return { os: 'macos', arch: 'aarch64' };
+            },
+          },
+        };
+        const macArm = await appProto.resolveUpdateDownloadUrl.call(fakeApp, releaseUrl);
+
+        globalWindow.__TAURI__ = {
+          core: {
+            invoke: async () => ({ os: 'windows', arch: 'amd64' }),
+          },
+        };
+        const windowsX64 = await appProto.resolveUpdateDownloadUrl.call(fakeApp, releaseUrl);
+
+        globalWindow.__TAURI__ = {
+          core: {
+            invoke: async () => ({ os: 'linux', arch: 'x86_64' }),
+          },
+        };
+        const linuxFallback = await appProto.resolveUpdateDownloadUrl.call(fakeApp, releaseUrl);
+
+        return { macArm, windowsX64, linuxFallback };
+      } finally {
+        if (previousTauri === undefined) {
+          delete globalWindow.__TAURI__;
+        } else {
+          globalWindow.__TAURI__ = previousTauri;
+        }
+      }
+    });
+
+    expect(result.macArm).toBe('https://worldmonitor.app/api/download?platform=macos-arm64');
+    expect(result.windowsX64).toBe('https://worldmonitor.app/api/download?platform=windows-exe');
+    expect(result.linuxFallback).toBe('https://github.com/koala73/worldmonitor/releases/latest');
+  });
+
+  test('loadMarkets keeps Yahoo-backed data when Finnhub is skipped', async ({ page }) => {
+    await page.goto('/tests/runtime-harness.html');
+
+    const result = await page.evaluate(async () => {
+      const { App } = await import('/src/App.ts');
+      const originalFetch = window.fetch.bind(window);
+
+      const calls: string[] = [];
+      const toUrl = (input: RequestInfo | URL): string => {
+        if (typeof input === 'string') return new URL(input, window.location.origin).toString();
+        if (input instanceof URL) return input.toString();
+        return new URL(input.url, window.location.origin).toString();
+      };
+      const responseJson = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
+
+      const yahooChart = (symbol: string) => {
+        const base = symbol.length * 100;
+        return {
+          chart: {
+            result: [{
+              meta: {
+                regularMarketPrice: base + 1,
+                previousClose: base,
+              },
+              indicators: {
+                quote: [{ close: [base - 2, base - 1, base, base + 1] }],
+              },
+            }],
+          },
+        };
+      };
+
+      const marketRenders: number[] = [];
+      const marketConfigErrors: string[] = [];
+      const heatmapRenders: number[] = [];
+      const heatmapConfigErrors: string[] = [];
+      const commoditiesRenders: number[] = [];
+      const commoditiesConfigErrors: string[] = [];
+      const cryptoRenders: number[] = [];
+      const apiStatuses: Array<{ name: string; status: string }> = [];
+
+      window.fetch = (async (input: RequestInfo | URL) => {
+        const url = toUrl(input);
+        calls.push(url);
+        const parsed = new URL(url);
+
+        if (parsed.pathname === '/api/finnhub') {
+          return responseJson({
+            quotes: [],
+            skipped: true,
+            reason: 'FINNHUB_API_KEY not configured',
+          });
+        }
+
+        if (parsed.pathname === '/api/yahoo-finance') {
+          const symbol = parsed.searchParams.get('symbol') ?? 'UNKNOWN';
+          return responseJson(yahooChart(symbol));
+        }
+
+        if (parsed.pathname === '/api/coingecko') {
+          return responseJson([
+            { id: 'bitcoin', current_price: 50000, price_change_percentage_24h: 1.2, sparkline_in_7d: { price: [1, 2, 3] } },
+            { id: 'ethereum', current_price: 3000, price_change_percentage_24h: -0.5, sparkline_in_7d: { price: [1, 2, 3] } },
+            { id: 'solana', current_price: 120, price_change_percentage_24h: 2.1, sparkline_in_7d: { price: [1, 2, 3] } },
+          ]);
+        }
+
+        return responseJson({});
+      }) as typeof window.fetch;
+
+      const fakeApp = {
+        latestMarkets: [] as Array<unknown>,
+        panels: {
+          markets: {
+            renderMarkets: (data: Array<unknown>) => marketRenders.push(data.length),
+            showConfigError: (message: string) => marketConfigErrors.push(message),
+          },
+          heatmap: {
+            renderHeatmap: (data: Array<unknown>) => heatmapRenders.push(data.length),
+            showConfigError: (message: string) => heatmapConfigErrors.push(message),
+          },
+          commodities: {
+            renderCommodities: (data: Array<unknown>) => commoditiesRenders.push(data.length),
+            showConfigError: (message: string) => commoditiesConfigErrors.push(message),
+          },
+          crypto: {
+            renderCrypto: (data: Array<unknown>) => cryptoRenders.push(data.length),
+          },
+        },
+        statusPanel: {
+          updateApi: (name: string, payload: { status?: string }) => {
+            apiStatuses.push({ name, status: payload.status ?? '' });
+          },
+        },
+      };
+
+      try {
+        await (App.prototype as unknown as { loadMarkets: (thisArg: unknown) => Promise<void> })
+          .loadMarkets.call(fakeApp);
+
+        const commoditySymbols = ['^VIX', 'GC=F', 'CL=F', 'NG=F', 'SI=F', 'HG=F'];
+        const commodityYahooCalls = commoditySymbols.map((symbol) =>
+          calls.some((url) => {
+            const parsed = new URL(url);
+            return parsed.pathname === '/api/yahoo-finance' && parsed.searchParams.get('symbol') === symbol;
+          })
+        );
+
+        return {
+          marketRenders,
+          marketConfigErrors,
+          heatmapRenders,
+          heatmapConfigErrors,
+          commoditiesRenders,
+          commoditiesConfigErrors,
+          cryptoRenders,
+          apiStatuses,
+          latestMarketsCount: fakeApp.latestMarkets.length,
+          commodityYahooCalls,
+        };
+      } finally {
+        window.fetch = originalFetch;
+      }
+    });
+
+    expect(result.marketRenders.some((count) => count > 0)).toBe(true);
+    expect(result.latestMarketsCount).toBeGreaterThan(0);
+    expect(result.marketConfigErrors.length).toBe(0);
+
+    expect(result.heatmapRenders.length).toBe(0);
+    expect(result.heatmapConfigErrors).toEqual(['FINNHUB_API_KEY not configured — add in Settings']);
+
+    expect(result.commoditiesRenders.some((count) => count > 0)).toBe(true);
+    expect(result.commoditiesConfigErrors.length).toBe(0);
+    expect(result.commodityYahooCalls.every(Boolean)).toBe(true);
+
+    expect(result.cryptoRenders.some((count) => count > 0)).toBe(true);
+    expect(result.apiStatuses.some((entry) => entry.name === 'Finnhub' && entry.status === 'error')).toBe(true);
+    expect(result.apiStatuses.some((entry) => entry.name === 'CoinGecko' && entry.status === 'ok')).toBe(true);
+  });
 });

@@ -1,6 +1,7 @@
 import { Panel } from './Panel';
 import { escapeHtml } from '@/utils/sanitize';
 import { t } from '@/services/i18n';
+import { getCSSColor } from '@/utils';
 import {
   buildDependencyGraph,
   calculateCascade,
@@ -53,10 +54,10 @@ export class CascadePanel extends Panel {
 
   private getImpactColor(level: CascadeImpactLevel): string {
     switch (level) {
-      case 'critical': return '#ff4444';
-      case 'high': return '#ff8800';
-      case 'medium': return '#ffaa00';
-      case 'low': return '#88aa44';
+      case 'critical': return getCSSColor('--semantic-critical');
+      case 'high': return getCSSColor('--semantic-high');
+      case 'medium': return getCSSColor('--semantic-elevated');
+      case 'low': return getCSSColor('--semantic-normal');
     }
   }
 

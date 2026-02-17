@@ -328,15 +328,26 @@ function dedupeHeadlines(headlines: StoredHeadline[]): StoredHeadline[] {
   return unique;
 }
 
+function stripSourceAttribution(title: string): string {
+  const idx = title.lastIndexOf(' - ');
+  if (idx === -1) return title;
+  const after = title.slice(idx + 3).trim();
+  if (after.length > 0 && after.length <= 60 && !/[.!?]/.test(after)) {
+    return title.slice(0, idx).trim();
+  }
+  return title;
+}
+
 function buildBaseTermCandidates(title: string): Map<string, TermCandidate> {
   const termCandidates = new Map<string, TermCandidate>();
+  const cleanTitle = stripSourceAttribution(title);
 
-  for (const token of tokenize(title)) {
+  for (const token of tokenize(cleanTitle)) {
     const termKey = toTermKey(token);
     termCandidates.set(termKey, { display: token, isEntity: false });
   }
 
-  for (const entity of extractEntities(title)) {
+  for (const entity of extractEntities(cleanTitle)) {
     const termKey = toTermKey(entity);
     termCandidates.set(termKey, { display: entity, isEntity: true });
   }

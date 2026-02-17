@@ -39,9 +39,17 @@ export default async function handler(req) {
 
   const apiKey = process.env.FRED_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'FRED_API_KEY not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    return new Response(JSON.stringify({
+      observations: [],
+      skipped: true,
+      reason: 'FRED_API_KEY not configured',
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=300, s-maxage=300, stale-while-revalidate=60',
+        ...corsHeaders,
+      },
     });
   }
 

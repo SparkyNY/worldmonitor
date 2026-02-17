@@ -25,6 +25,7 @@ import { analyzeFlightsForSurge, surgeAlertToSignal, detectForeignMilitaryPresen
 import { fetchCachedTheaterPosture } from '@/services/cached-theater-posture';
 import { ingestProtestsForCII, ingestMilitaryForCII, ingestNewsForCII, ingestOutagesForCII, ingestConflictsForCII, ingestUcdpForCII, ingestHapiForCII, ingestDisplacementForCII, ingestClimateForCII, startLearning, isInLearningMode, calculateCII, getCountryData, TIER1_COUNTRIES } from '@/services/country-instability';
 import { dataFreshness, type DataSourceId } from '@/services/data-freshness';
+import { focusInvestmentOnMap } from '@/services/investments-focus';
 import { fetchConflictEvents } from '@/services/conflicts';
 import { fetchUcdpClassifications } from '@/services/ucdp';
 import { fetchHapiSummary } from '@/services/hapi';
@@ -32,7 +33,7 @@ import { fetchUcdpEvents, deduplicateAgainstAcled } from '@/services/ucdp-events
 import { fetchUnhcrPopulation } from '@/services/unhcr';
 import { fetchClimateAnomalies } from '@/services/climate';
 import { enrichEventsWithExposure } from '@/services/population-exposure';
-import { buildMapUrl, debounce, loadFromStorage, parseMapUrlState, saveToStorage, ExportPanel, getCircuitBreakerCooldownInfo, isMobileDevice } from '@/utils';
+import { buildMapUrl, debounce, loadFromStorage, parseMapUrlState, saveToStorage, ExportPanel, getCircuitBreakerCooldownInfo, isMobileDevice, setTheme, getCurrentTheme } from '@/utils';
 import { reverseGeocode } from '@/utils/reverse-geocode';
 import { CountryBriefPage } from '@/components/CountryBriefPage';
 import { maybeShowDownloadBanner } from '@/components/DownloadBanner';
@@ -42,6 +43,7 @@ import type { ParsedMapUrlState } from '@/utils';
 import {
   MapContainer,
   type MapView,
+  type TimeRange,
   NewsPanel,
   MarketPanel,
   HeatmapPanel,
@@ -76,6 +78,7 @@ import {
   DisplacementPanel,
   ClimateAnomalyPanel,
   PopulationExposurePanel,
+  InvestmentsPanel,
 } from '@/components';
 import type { SearchResult } from '@/components/SearchModal';
 import { collectStoryData } from '@/services/story-data';
@@ -89,7 +92,10 @@ import { TECH_COMPANIES } from '@/config/tech-companies';
 import { AI_RESEARCH_LABS } from '@/config/ai-research-labs';
 import { STARTUP_ECOSYSTEMS } from '@/config/startup-ecosystems';
 import { TECH_HQS, ACCELERATORS } from '@/config/tech-geo';
+import { STOCK_EXCHANGES, FINANCIAL_CENTERS, CENTRAL_BANKS, COMMODITY_HUBS } from '@/config/finance-geo';
 import { isDesktopRuntime } from '@/services/runtime';
+import { isFeatureAvailable } from '@/services/runtime-config';
+import { invokeTauri } from '@/services/tauri-bridge';
 import { getCountryAtCoordinates, hasCountryGeometry, isCoordinateInCountry, preloadCountryGeometry } from '@/services/country-geometry';
 import { initI18n, t, changeLanguage, getCurrentLanguage, LANGUAGES } from '@/services/i18n';
 
@@ -99,6 +105,11 @@ type IntlDisplayNamesCtor = new (
   locales: string | string[],
   options: { type: 'region' }
 ) => { of: (code: string) => string | undefined };
+
+interface DesktopRuntimeInfo {
+  os: string;
+  arch: string;
+}
 
 const CYBER_LAYER_ENABLED = import.meta.env.VITE_ENABLE_CYBER_LAYER === 'true';
 
@@ -121,6 +132,8 @@ export class App {
   private panels: Record<string, Panel> = {};
   private newsPanels: Record<string, NewsPanel> = {};
   private allNews: NewsItem[] = [];
+  private newsByCategory: Record<string, NewsItem[]> = {};
+  private currentTimeRange: TimeRange = '7d';
   private monitors: Monitor[];
   private panelSettings: Record<string, PanelConfig>;
   private mapLayers: MapLayers;
@@ -134,12 +147,14 @@ export class App {
   private latestPredictions: PredictionMarket[] = [];
   private latestMarkets: MarketData[] = [];
   private latestClusters: ClusteredEvent[] = [];
+  private readonly applyTimeRangeFilterToNewsPanelsDebounced = debounce(() => {
+    this.applyTimeRangeFilterToNewsPanels();
+  }, 120);
   private isPlaybackMode = false;
   private initialUrlState: ParsedMapUrlState | null = null;
   private inFlight: Set<string> = new Set();
   private isMobile: boolean;
   private seenGeoAlerts: Set<string> = new Set();
-  private timeIntervalId: ReturnType<typeof setInterval> | null = null;
   private snapshotIntervalId: ReturnType<typeof setInterval> | null = null;
   private refreshTimeoutIds: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private isDestroyed = false;
@@ -292,6 +307,7 @@ export class App {
     }
 
     this.renderLayout();
+    this.startHeaderClock();
     this.signalModal = new SignalModal();
     this.signalModal.setLocationClickHandler((lat, lon) => {
       this.map?.setCenter(lat, lon, 4);
@@ -342,6 +358,10 @@ export class App {
 
     // Handle deep links for story sharing
     this.handleDeepLinks();
+
+    if (this.isDesktopApp) {
+      setTimeout(() => this.checkForUpdate(), 5000);
+    }
   }
 
   private handleDeepLinks(): void {
@@ -392,6 +412,108 @@ export class App {
     }
   }
 
+  private async checkForUpdate(): Promise<void> {
+    try {
+      const res = await fetch('https://worldmonitor.app/api/version');
+      if (!res.ok) return;
+      const data = await res.json();
+      const remote = data.version as string;
+      if (!remote) return;
+
+      const current = __APP_VERSION__;
+      if (!this.isNewerVersion(remote, current)) return;
+
+      const dismissKey = `wm-update-dismissed-${remote}`;
+      if (localStorage.getItem(dismissKey)) return;
+
+      const releaseUrl = typeof data.url === 'string' && data.url
+        ? data.url
+        : 'https://github.com/koala73/worldmonitor/releases/latest';
+      await this.showUpdateBadge(remote, releaseUrl);
+    } catch { /* silent */ }
+  }
+
+  private isNewerVersion(remote: string, current: string): boolean {
+    const r = remote.split('.').map(Number);
+    const c = current.split('.').map(Number);
+    for (let i = 0; i < Math.max(r.length, c.length); i++) {
+      const rv = r[i] ?? 0;
+      const cv = c[i] ?? 0;
+      if (rv > cv) return true;
+      if (rv < cv) return false;
+    }
+    return false;
+  }
+
+  private mapDesktopDownloadPlatform(os: string, arch: string): string | null {
+    const normalizedOs = os.toLowerCase();
+    const normalizedArch = arch.toLowerCase()
+      .replace('amd64', 'x86_64')
+      .replace('x64', 'x86_64')
+      .replace('arm64', 'aarch64');
+
+    if (normalizedOs === 'windows') {
+      return normalizedArch === 'x86_64' ? 'windows-exe' : null;
+    }
+
+    if (normalizedOs === 'macos' || normalizedOs === 'darwin') {
+      if (normalizedArch === 'aarch64') return 'macos-arm64';
+      if (normalizedArch === 'x86_64') return 'macos-x64';
+      return null;
+    }
+
+    return null;
+  }
+
+  private async resolveUpdateDownloadUrl(releaseUrl: string): Promise<string> {
+    try {
+      const runtimeInfo = await invokeTauri<DesktopRuntimeInfo>('get_desktop_runtime_info');
+      const platform = this.mapDesktopDownloadPlatform(runtimeInfo.os, runtimeInfo.arch);
+      if (platform) {
+        return `https://worldmonitor.app/api/download?platform=${platform}`;
+      }
+    } catch {
+      // Silent fallback to release page when desktop runtime info is unavailable.
+    }
+    return releaseUrl;
+  }
+
+  private async showUpdateBadge(version: string, releaseUrl: string): Promise<void> {
+    const versionSpan = this.container.querySelector('.version');
+    if (!versionSpan) return;
+    const href = await this.resolveUpdateDownloadUrl(releaseUrl);
+
+    const badge = document.createElement('a');
+    badge.className = 'update-badge';
+    badge.href = href;
+    badge.target = '_blank';
+    badge.rel = 'noopener';
+    badge.textContent = `UPDATE v${version}`;
+
+    const dismiss = document.createElement('span');
+    dismiss.className = 'update-badge-dismiss';
+    dismiss.textContent = '\u00d7';
+    dismiss.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      localStorage.setItem(`wm-update-dismissed-${version}`, '1');
+      badge.remove();
+    });
+
+    badge.appendChild(dismiss);
+    versionSpan.insertAdjacentElement('afterend', badge);
+  }
+
+  private startHeaderClock(): void {
+    const el = document.getElementById('headerClock');
+    if (!el) return;
+    const tick = () => {
+      el.textContent = new Date().toUTCString().replace('GMT', 'UTC');
+    };
+    tick();
+    setInterval(tick, 1000);
+  }
+
   private setupMobileWarning(): void {
     if (MobileWarningModal.shouldShow()) {
       this.mobileWarningModal = new MobileWarningModal();
@@ -408,8 +530,8 @@ export class App {
   }
 
   private setupPizzIntIndicator(): void {
-    // Skip DEFCON indicator for tech/startup variant
-    if (SITE_VARIANT === 'tech') return;
+    // Skip DEFCON indicator for tech/startup and finance variants
+    if (SITE_VARIANT === 'tech' || SITE_VARIANT === 'finance') return;
 
     this.pizzintIndicator = new PizzIntIndicator();
     const headerLeft = this.container.querySelector('.header-left');
@@ -1019,6 +1141,11 @@ export class App {
         placeholder: 'Search companies, AI labs, startups, events...',
         hint: 'HQs • Companies • AI Labs • Startups • Accelerators • Events',
       }
+      : SITE_VARIANT === 'finance'
+      ? {
+          placeholder: 'Search exchanges, markets, central banks...',
+          hint: 'Exchanges • Financial Centers • Central Banks • Commodities',
+        }
       : {
         placeholder: 'Search news, pipelines, bases, markets...',
         hint: 'News • Countries • Hotspots • Conflicts • Bases • Pipelines • Cables • Datacenters',
@@ -1136,7 +1263,38 @@ export class App {
       })));
     }
 
-    // Register countries for both variants
+    if (SITE_VARIANT === 'finance') {
+      // Finance variant: market-specific sources
+      this.searchModal.registerSource('exchange', STOCK_EXCHANGES.map(e => ({
+        id: e.id,
+        title: `${e.shortName} - ${e.name}`,
+        subtitle: `${e.tier} • ${e.city}, ${e.country}${e.marketCap ? ` • $${e.marketCap}T` : ''}`,
+        data: e,
+      })));
+
+      this.searchModal.registerSource('financialcenter', FINANCIAL_CENTERS.map(f => ({
+        id: f.id,
+        title: f.name,
+        subtitle: `${f.type} financial center${f.gfciRank ? ` • GFCI #${f.gfciRank}` : ''}${f.specialties ? ` • ${f.specialties.slice(0, 3).join(', ')}` : ''}`,
+        data: f,
+      })));
+
+      this.searchModal.registerSource('centralbank', CENTRAL_BANKS.map(b => ({
+        id: b.id,
+        title: `${b.shortName} - ${b.name}`,
+        subtitle: `${b.type}${b.currency ? ` • ${b.currency}` : ''} • ${b.city}, ${b.country}`,
+        data: b,
+      })));
+
+      this.searchModal.registerSource('commodityhub', COMMODITY_HUBS.map(h => ({
+        id: h.id,
+        title: h.name,
+        subtitle: `${h.type} • ${h.city}, ${h.country}${h.commodities ? ` • ${h.commodities.slice(0, 3).join(', ')}` : ''}`,
+        data: h,
+      })));
+    }
+
+    // Register countries for all variants
     this.searchModal.registerSource('country', this.buildCountrySearchItems());
 
     // Handle result selection
@@ -1308,6 +1466,46 @@ export class App {
         }, 300);
         break;
       }
+      case 'exchange': {
+        const exchange = result.data as typeof STOCK_EXCHANGES[0];
+        this.map?.setView('global');
+        this.map?.enableLayer('stockExchanges');
+        this.mapLayers.stockExchanges = true;
+        setTimeout(() => {
+          this.map?.setCenter(exchange.lat, exchange.lon, 4);
+        }, 300);
+        break;
+      }
+      case 'financialcenter': {
+        const fc = result.data as typeof FINANCIAL_CENTERS[0];
+        this.map?.setView('global');
+        this.map?.enableLayer('financialCenters');
+        this.mapLayers.financialCenters = true;
+        setTimeout(() => {
+          this.map?.setCenter(fc.lat, fc.lon, 4);
+        }, 300);
+        break;
+      }
+      case 'centralbank': {
+        const bank = result.data as typeof CENTRAL_BANKS[0];
+        this.map?.setView('global');
+        this.map?.enableLayer('centralBanks');
+        this.mapLayers.centralBanks = true;
+        setTimeout(() => {
+          this.map?.setCenter(bank.lat, bank.lon, 4);
+        }, 300);
+        break;
+      }
+      case 'commodityhub': {
+        const hub = result.data as typeof COMMODITY_HUBS[0];
+        this.map?.setView('global');
+        this.map?.enableLayer('commodityHubs');
+        this.mapLayers.commodityHubs = true;
+        setTimeout(() => {
+          this.map?.setCenter(hub.lat, hub.lon, 4);
+        }, 300);
+        break;
+      }
       case 'country': {
         const { code, name } = result.data as { code: string; name: string };
         this.openCountryBriefByCode(code, name);
@@ -1469,85 +1667,100 @@ export class App {
     ).join('');
 
     this.container.innerHTML = `
-    <div class="header">
-      <div class="header-left">
-        <div class="variant-switcher">
-          <a href="${this.isDesktopApp ? '#' : (SITE_VARIANT === 'tech' ? 'https://worldmonitor.app' : '#')}"
-             class="variant-option ${SITE_VARIANT !== 'tech' ? 'active' : ''}"
-             data-variant="full"
-             ${!this.isDesktopApp && SITE_VARIANT === 'tech' ? 'target="_blank" rel="noopener"' : ''}
-             title="${t('header.world')}${SITE_VARIANT !== 'tech' ? ' (current)' : ''}">
-            <span class="variant-icon">🌍</span>
-            <span class="variant-label">${t('header.world')}</span>
-          </a>
-          <span class="variant-divider"></span>
-          <a href="${this.isDesktopApp ? '#' : (SITE_VARIANT === 'tech' ? '#' : 'https://tech.worldmonitor.app')}"
-             class="variant-option ${SITE_VARIANT === 'tech' ? 'active' : ''}"
-             data-variant="tech"
-             ${!this.isDesktopApp && SITE_VARIANT !== 'tech' ? 'target="_blank" rel="noopener"' : ''}
-             title="${t('header.tech')}${SITE_VARIANT === 'tech' ? ' (current)' : ''}">
-            <span class="variant-icon">💻</span>
-            <span class="variant-label">${t('header.tech')}</span>
-          </a>
-        </div>
-        <span class="logo">MONITOR</span><span class="version">v${__APP_VERSION__}</span>
-        <a href="https://x.com/eliehabib" target="_blank" rel="noopener" class="credit-link">
-          <svg class="x-logo" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-          <span class="credit-text">@eliehabib</span>
-        </a>
-        <a href="https://github.com/koala73/worldmonitor" target="_blank" rel="noopener" class="github-link" title="${t('header.viewOnGitHub')}">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        </a>
-        <div class="status-indicator">
-          <span class="status-dot"></span>
-          <span>${t('header.live')}</span>
-        </div>
-        <div class="region-selector">
-          <select id="regionSelect" class="region-select">
-            <option value="global">Global</option>
-            <option value="america">Americas</option>
-            <option value="mena">MENA</option>
-            <option value="eu">Europe</option>
-            <option value="asia">Asia</option>
-            <option value="latam">Latin America</option>
-            <option value="africa">Africa</option>
-            <option value="oceania">Oceania</option>
-          </select>
-        </div>
-      </div>
-      <div class="header-right">
-        <select id="langSelect" class="lang-select">
-          ${langOptions}
-        </select>
-        <button class="search-btn" id="searchBtn"><kbd>⌘K</kbd> ${t('header.search')}</button>
-        ${this.isDesktopApp ? '' : `<button class="copy-link-btn" id="copyLinkBtn">${t('header.copyLink')}</button>`}
-        <span class="time-display" id="timeDisplay">--:--:-- UTC</span>
-        ${this.isDesktopApp ? '' : `<button class="fullscreen-btn" id="fullscreenBtn" title="${t('header.fullscreen')}">⛶</button>`}
-        <button class="settings-btn" id="settingsBtn">⚙ ${t('header.settings')}</button>
-        <button class="sources-btn" id="sourcesBtn">📡 ${t('header.sources')}</button>
-      </div>
-    </div>
-    <div class="main-content">
-      <div class="map-section" id="mapSection">
-        <div class="panel-header">
-          <div class="panel-header-left">
-            <span class="panel-title">${SITE_VARIANT === 'tech' ? t('panels.techMap') : t('panels.map')}</span>
+      <div class="header">
+        <div class="header-left">
+          <div class="variant-switcher">
+            <a href="${this.isDesktopApp ? '#' : (SITE_VARIANT === 'full' ? '#' : 'https://worldmonitor.app')}"
+               class="variant-option ${SITE_VARIANT === 'full' ? 'active' : ''}"
+               data-variant="full"
+               ${!this.isDesktopApp && SITE_VARIANT !== 'full' ? 'target="_blank" rel="noopener"' : ''}
+               title="${t('header.world')}${SITE_VARIANT === 'full' ? ' (current)' : ''}">
+              <span class="variant-icon">🌍</span>
+              <span class="variant-label">${t('header.world')}</span>
+            </a>
+            <span class="variant-divider"></span>
+            <a href="${this.isDesktopApp ? '#' : (SITE_VARIANT === 'tech' ? '#' : 'https://tech.worldmonitor.app')}"
+               class="variant-option ${SITE_VARIANT === 'tech' ? 'active' : ''}"
+               data-variant="tech"
+               ${!this.isDesktopApp && SITE_VARIANT !== 'tech' ? 'target="_blank" rel="noopener"' : ''}
+               title="${t('header.tech')}${SITE_VARIANT === 'tech' ? ' (current)' : ''}">
+              <span class="variant-icon">💻</span>
+              <span class="variant-label">${t('header.tech')}</span>
+            </a>
+            <span class="variant-divider"></span>
+            <a href="${this.isDesktopApp ? '#' : (SITE_VARIANT === 'finance' ? '#' : 'https://finance.worldmonitor.app')}"
+               class="variant-option ${SITE_VARIANT === 'finance' ? 'active' : ''}"
+               data-variant="finance"
+               ${!this.isDesktopApp && SITE_VARIANT !== 'finance' ? 'target="_blank" rel="noopener"' : ''}
+               title="Finance & Trading${SITE_VARIANT === 'finance' ? ' (current)' : ''}">
+              <span class="variant-icon">📈</span>
+              <span class="variant-label">FINANCE</span>
+            </a>
           </div>
-          <button class="map-pin-btn" id="mapPinBtn" title="${t('header.pinMap')}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 17v5M9 10.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V16a1 1 0 001 1h12a1 1 0 001-1v-.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V7a1 1 0 011-1 1 1 0 001-1V4a1 1 0 00-1-1H8a1 1 0 00-1 1v1a1 1 0 001 1 1 1 0 011 1v3.76z"/>
-            </svg>
-          </button>
+          <span class="logo">MONITOR</span><span class="version">v${__APP_VERSION__}</span>
+          <a href="https://x.com/eliehabib" target="_blank" rel="noopener" class="credit-link">
+            <svg class="x-logo" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            <span class="credit-text">@eliehabib</span>
+          </a>
+          <a href="https://github.com/koala73/worldmonitor" target="_blank" rel="noopener" class="github-link" title="${t('header.viewOnGitHub')}">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          </a>
+          <div class="status-indicator">
+            <span class="status-dot"></span>
+            <span>${t('header.live')}</span>
+          </div>
+          <div class="region-selector">
+            <select id="regionSelect" class="region-select">
+              <option value="global">Global</option>
+              <option value="america">Americas</option>
+              <option value="mena">MENA</option>
+              <option value="eu">Europe</option>
+              <option value="asia">Asia</option>
+              <option value="latam">Latin America</option>
+              <option value="africa">Africa</option>
+              <option value="oceania">Oceania</option>
+            </select>
+          </div>
         </div>
-        <div class="map-container" id="mapContainer"></div>
-        <div class="map-resize-handle" id="mapResizeHandle"></div>
+        <div class="header-right">
+          <select id="langSelect" class="lang-select">
+            ${langOptions}
+          </select>
+          <button class="search-btn" id="searchBtn"><kbd>⌘K</kbd> ${t('header.search')}</button>
+          ${this.isDesktopApp ? '' : `<button class="copy-link-btn" id="copyLinkBtn">${t('header.copyLink')}</button>`}
+          <button class="theme-toggle-btn" id="headerThemeToggle" title="Toggle dark/light mode">
+            ${getCurrentTheme() === 'dark'
+              ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
+              : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>'}
+          </button>
+          <span class="time-display" id="timeDisplay">--:--:-- UTC</span>
+          ${this.isDesktopApp ? '' : `<button class="fullscreen-btn" id="fullscreenBtn" title="${t('header.fullscreen')}">⛶</button>`}
+          <button class="settings-btn" id="settingsBtn">⚙ ${t('header.settings')}</button>
+          <button class="sources-btn" id="sourcesBtn">📡 ${t('header.sources')}</button>
+        </div>
       </div>
-      <div class="panels-grid" id="panelsGrid"></div>
-    </div>
+      <div class="main-content">
+        <div class="map-section" id="mapSection">
+          <div class="panel-header">
+            <div class="panel-header-left">
+              <span class="panel-title">${SITE_VARIANT === 'tech' ? t('panels.techMap') : t('panels.map')}</span>
+            </div>
+            <span class="header-clock" id="headerClock"></span>
+            <button class="map-pin-btn" id="mapPinBtn" title="${t('header.pinMap')}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 17v5M9 10.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V16a1 1 0 001 1h12a1 1 0 001-1v-.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V7a1 1 0 011-1 1 1 0 001-1V4a1 1 0 00-1-1H8a1 1 0 00-1 1v1a1 1 0 001 1 1 1 0 011 1v3.76z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="map-container" id="mapContainer"></div>
+          <div class="map-resize-handle" id="mapResizeHandle"></div>
+        </div>
+        <div class="panels-grid" id="panelsGrid"></div>
+      </div>
       <div class="modal-overlay" id="settingsModal">
         <div class="modal">
           <div class="modal-header">
-            <span class="modal-title">Panel Settings</span>
+            <span class="modal-title">Panels</span>
             <button class="modal-close" id="modalClose">×</button>
           </div>
           <div class="panel-toggle-grid" id="panelToggles"></div>
@@ -1574,8 +1787,6 @@ export class App {
 
     this.createPanels();
     this.renderPanelToggles();
-    this.updateTime();
-    this.timeIntervalId = setInterval(() => this.updateTime(), 1000);
   }
 
   /**
@@ -1649,12 +1860,6 @@ export class App {
   public destroy(): void {
     this.isDestroyed = true;
 
-    // Clear time display interval
-    if (this.timeIntervalId) {
-      clearInterval(this.timeIntervalId);
-      this.timeIntervalId = null;
-    }
-
     // Clear snapshot saving interval
     if (this.snapshotIntervalId) {
       clearInterval(this.snapshotIntervalId);
@@ -1719,6 +1924,7 @@ export class App {
 
     // Initialize escalation service with data getters
     this.map.initEscalationGetters();
+    this.currentTimeRange = this.map.getTimeRange();
 
     // Create all panels
     const politicsPanel = new NewsPanel('politics', t('panels.politics'));
@@ -1884,6 +2090,22 @@ export class App {
     this.newsPanels['energy'] = energyPanel;
     this.panels['energy'] = energyPanel;
 
+    // Dynamically create NewsPanel instances for any FEEDS category.
+    // If a category key collides with an existing data panel key (e.g. markets),
+    // create a separate `${key}-news` panel to avoid clobbering the data panel.
+    for (const key of Object.keys(FEEDS)) {
+      if (this.newsPanels[key]) continue;
+      if (!Array.isArray((FEEDS as Record<string, unknown>)[key])) continue;
+      const panelKey = this.panels[key] && !this.newsPanels[key] ? `${key}-news` : key;
+      if (this.panels[panelKey]) continue;
+      const panelConfig = DEFAULT_PANELS[panelKey] ?? DEFAULT_PANELS[key];
+      const label = panelConfig?.name ?? key.charAt(0).toUpperCase() + key.slice(1);
+      const panel = new NewsPanel(panelKey, label);
+      this.attachRelatedAssetHandlers(panel);
+      this.newsPanels[key] = panel;
+      this.panels[panelKey] = panel;
+    }
+
     // Geopolitical-only panels (not needed for tech variant)
     if (SITE_VARIANT === 'full') {
       const gdeltIntelPanel = new GdeltIntelPanel();
@@ -1934,6 +2156,14 @@ export class App {
 
       const populationExposurePanel = new PopulationExposurePanel();
       this.panels['population-exposure'] = populationExposurePanel;
+    }
+
+    // GCC Investments Panel (finance variant)
+    if (SITE_VARIANT === 'finance') {
+      const investmentsPanel = new InvestmentsPanel((inv) => {
+        focusInvestmentOnMap(this.map, this.mapLayers, inv.lat, inv.lon);
+      });
+      this.panels['gcc-investments'] = investmentsPanel;
     }
 
     const liveNewsPanel = new LiveNewsPanel();
@@ -2011,6 +2241,11 @@ export class App {
         this.makeDraggable(el, key);
         panelsGrid.appendChild(el);
       }
+    });
+
+    this.map.onTimeRangeChanged((range) => {
+      this.currentTimeRange = range;
+      this.applyTimeRangeFilterToNewsPanelsDebounced();
     });
 
     this.applyPanelSettings();
@@ -2205,6 +2440,14 @@ export class App {
       }
     });
 
+
+    // Header theme toggle button
+    document.getElementById('headerThemeToggle')?.addEventListener('click', () => {
+      const next = getCurrentTheme() === 'dark' ? 'light' : 'dark';
+      setTheme(next);
+      this.updateHeaderThemeIcon();
+    });
+
     // Sources modal
     this.setupSourcesModal();
 
@@ -2271,6 +2514,12 @@ export class App {
     // Refresh CII when focal points are ready (ensures focal point urgency is factored in)
     window.addEventListener('focal-points-ready', () => {
       (this.panels['cii'] as CIIPanel)?.refresh(true); // forceLocal to use focal point data
+    });
+
+    // Re-render components with baked getCSSColor() values on theme change
+    window.addEventListener('theme-changed', () => {
+      this.map?.render();
+      this.updateHeaderThemeIcon();
     });
 
     // Idle detection - pause animations after 2 minutes of inactivity
@@ -2576,12 +2825,13 @@ export class App {
     });
   }
 
-  private updateTime(): void {
-    const now = new Date();
-    const el = document.getElementById('timeDisplay');
-    if (el) {
-      el.textContent = now.toUTCString().split(' ')[4] + ' UTC';
-    }
+  private updateHeaderThemeIcon(): void {
+    const btn = document.getElementById('headerThemeToggle');
+    if (!btn) return;
+    const isDark = getCurrentTheme() === 'dark';
+    btn.innerHTML = isDark
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>';
   }
 
   private async loadAllData(): Promise<void> {
@@ -2753,6 +3003,57 @@ export class App {
     }
   }
 
+  private getTimeRangeWindowMs(range: TimeRange): number {
+    const ranges: Record<TimeRange, number> = {
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+      '48h': 48 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+      'all': Infinity,
+    };
+    return ranges[range];
+  }
+
+  private filterItemsByTimeRange(items: NewsItem[], range: TimeRange = this.currentTimeRange): NewsItem[] {
+    if (range === 'all') return items;
+    const cutoff = Date.now() - this.getTimeRangeWindowMs(range);
+    return items.filter((item) => {
+      const ts = item.pubDate instanceof Date ? item.pubDate.getTime() : new Date(item.pubDate).getTime();
+      return Number.isFinite(ts) ? ts >= cutoff : true;
+    });
+  }
+
+  private getTimeRangeLabel(range: TimeRange = this.currentTimeRange): string {
+    const labels: Record<TimeRange, string> = {
+      '1h': 'the last hour',
+      '6h': 'the last 6 hours',
+      '24h': 'the last 24 hours',
+      '48h': 'the last 48 hours',
+      '7d': 'the last 7 days',
+      'all': 'all time',
+    };
+    return labels[range];
+  }
+
+  private renderNewsForCategory(category: string, items: NewsItem[]): void {
+    this.newsByCategory[category] = items;
+    const panel = this.newsPanels[category];
+    if (!panel) return;
+    const filteredItems = this.filterItemsByTimeRange(items);
+    if (filteredItems.length === 0 && items.length > 0) {
+      panel.renderFilteredEmpty(`No items in ${this.getTimeRangeLabel()}`);
+      return;
+    }
+    panel.renderNews(filteredItems);
+  }
+
+  private applyTimeRangeFilterToNewsPanels(): void {
+    Object.entries(this.newsByCategory).forEach(([category, items]) => {
+      this.renderNewsForCategory(category, items);
+    });
+  }
+
   private async loadNewsCategory(category: string, feeds: typeof FEEDS.politics): Promise<NewsItem[]> {
     try {
       const panel = this.newsPanels[category];
@@ -2764,6 +3065,7 @@ export class App {
       // Filter out disabled sources
       const enabledFeeds = (feeds ?? []).filter(f => !this.disabledSources.has(f.name));
       if (enabledFeeds.length === 0) {
+        delete this.newsByCategory[category];
         if (panel) panel.showError(t('common.allSourcesDisabled'));
         this.statusPanel?.updateFeed(category.charAt(0).toUpperCase() + category.slice(1), {
           status: 'ok',
@@ -2773,8 +3075,8 @@ export class App {
       }
 
       const flushPendingRender = () => {
-        if (!panel || !pendingItems) return;
-        panel.renderNews(pendingItems);
+        if (!pendingItems) return;
+        this.renderNewsForCategory(category, pendingItems);
         pendingItems = null;
         lastRenderTime = Date.now();
       };
@@ -2807,13 +3109,13 @@ export class App {
         },
       });
 
+      this.renderNewsForCategory(category, items);
       if (panel) {
         if (renderTimeout) {
           clearTimeout(renderTimeout);
           renderTimeout = null;
           pendingItems = null;
         }
-        panel.renderNews(items);
 
         const baseline = await updateBaseline(`news:${category}`, items.length);
         const deviation = calculateDeviation(items.length, baseline);
@@ -2833,48 +3135,28 @@ export class App {
         errorMessage: String(error),
       });
       this.statusPanel?.updateApi('RSS2JSON', { status: 'error' });
+      delete this.newsByCategory[category];
       return [];
     }
   }
 
   private async loadNews(): Promise<void> {
-    // Build categories dynamically based on what feeds exist
-    const allCategories = [
-      { key: 'politics', feeds: FEEDS.politics },
-      { key: 'tech', feeds: FEEDS.tech },
-      { key: 'finance', feeds: FEEDS.finance },
-      { key: 'gov', feeds: FEEDS.gov },
-      { key: 'middleeast', feeds: FEEDS.middleeast },
-      { key: 'africa', feeds: FEEDS.africa },
-      { key: 'latam', feeds: FEEDS.latam },
-      { key: 'asia', feeds: FEEDS.asia },
-      { key: 'energy', feeds: FEEDS.energy },
-      { key: 'layoffs', feeds: FEEDS.layoffs },
-      { key: 'ai', feeds: FEEDS.ai },
-      { key: 'thinktanks', feeds: FEEDS.thinktanks },
-      // Tech variant categories
-      { key: 'startups', feeds: FEEDS.startups },
-      { key: 'vcblogs', feeds: FEEDS.vcblogs },
-      { key: 'regionalStartups', feeds: FEEDS.regionalStartups },
-      { key: 'unicorns', feeds: FEEDS.unicorns },
-      { key: 'accelerators', feeds: FEEDS.accelerators },
-      { key: 'funding', feeds: FEEDS.funding },
-      { key: 'producthunt', feeds: FEEDS.producthunt },
-      { key: 'security', feeds: FEEDS.security },
-      { key: 'policy', feeds: FEEDS.policy },
-      { key: 'hardware', feeds: FEEDS.hardware },
-      { key: 'cloud', feeds: FEEDS.cloud },
-      { key: 'dev', feeds: FEEDS.dev },
-      { key: 'github', feeds: FEEDS.github },
-      { key: 'ipo', feeds: FEEDS.ipo },
-    ];
-    // Filter to only categories that have feeds defined
-    const categories = allCategories.filter(c => c.feeds && c.feeds.length > 0);
+    // Build categories dynamically from whatever feeds the current variant exports
+    const categories = Object.entries(FEEDS)
+      .filter((entry): entry is [string, typeof FEEDS[keyof typeof FEEDS]] => Array.isArray(entry[1]) && entry[1].length > 0)
+      .map(([key, feeds]) => ({ key, feeds }));
 
-    // Fetch all categories in parallel
-    const categoryResults = await Promise.allSettled(
-      categories.map(({ key, feeds }) => this.loadNewsCategory(key, feeds))
-    );
+    // Stage category fetches to avoid startup bursts and API pressure in all variants.
+    const maxCategoryConcurrency = SITE_VARIANT === 'finance' ? 3 : SITE_VARIANT === 'tech' ? 4 : 5;
+    const categoryConcurrency = Math.max(1, Math.min(maxCategoryConcurrency, categories.length));
+    const categoryResults: PromiseSettledResult<NewsItem[]>[] = [];
+    for (let i = 0; i < categories.length; i += categoryConcurrency) {
+      const chunk = categories.slice(i, i + categoryConcurrency);
+      const chunkResults = await Promise.allSettled(
+        chunk.map(({ key, feeds }) => this.loadNewsCategory(key, feeds))
+      );
+      categoryResults.push(...chunkResults);
+    }
 
     // Collect successful results
     const collectedNews: NewsItem[] = [];
@@ -2891,14 +3173,15 @@ export class App {
       const enabledIntelSources = INTEL_SOURCES.filter(f => !this.disabledSources.has(f.name));
       const intelPanel = this.newsPanels['intel'];
       if (enabledIntelSources.length === 0) {
+        delete this.newsByCategory['intel'];
         if (intelPanel) intelPanel.showError(t('common.allIntelSourcesDisabled'));
         this.statusPanel?.updateFeed('Intel', { status: 'ok', itemCount: 0 });
       } else {
         const intelResult = await Promise.allSettled([fetchCategoryFeeds(enabledIntelSources)]);
         if (intelResult[0]?.status === 'fulfilled') {
           const intel = intelResult[0].value;
+          this.renderNewsForCategory('intel', intel);
           if (intelPanel) {
-            intelPanel.renderNews(intel);
             const baseline = await updateBaseline('news:intel', intel.length);
             const deviation = calculateDeviation(intel.length, baseline);
             intelPanel.setDeviation(deviation.zScore, deviation.percentChange, deviation.level);
@@ -2907,6 +3190,7 @@ export class App {
           collectedNews.push(...intel);
           this.flashMapForNews(intel);
         } else {
+          delete this.newsByCategory['intel'];
           console.error('[App] Intel feed failed:', intelResult[0]?.reason);
         }
       }
@@ -2948,6 +3232,7 @@ export class App {
           lon: c.lon,
           title: c.primaryTitle,
           threatLevel: c.threat?.level ?? 'info',
+          timestamp: c.lastUpdated,
         }));
       if (geoLocated.length > 0) {
         this.map?.setNewsLocations(geoLocated);
@@ -2966,15 +3251,17 @@ export class App {
         },
       });
 
+      const finnhubConfigMsg = 'FINNHUB_API_KEY not configured — add in Settings';
+      this.latestMarkets = stocksResult.data;
+      (this.panels['markets'] as MarketPanel).renderMarkets(stocksResult.data);
+
       if (stocksResult.skipped) {
-        const msg = 'FINNHUB_API_KEY not configured — add in Settings';
-        this.panels['markets']?.showConfigError(msg);
-        this.panels['heatmap']?.showConfigError(msg);
-        this.panels['commodities']?.showConfigError(msg);
         this.statusPanel?.updateApi('Finnhub', { status: 'error' });
+        if (stocksResult.data.length === 0) {
+          this.panels['markets']?.showConfigError(finnhubConfigMsg);
+        }
+        this.panels['heatmap']?.showConfigError(finnhubConfigMsg);
       } else {
-        this.latestMarkets = stocksResult.data;
-        (this.panels['markets'] as MarketPanel).renderMarkets(stocksResult.data);
         this.statusPanel?.updateApi('Finnhub', { status: 'ok' });
 
         const sectorsResult = await fetchMultipleStocks(
@@ -2990,23 +3277,23 @@ export class App {
         (this.panels['heatmap'] as HeatmapPanel).renderHeatmap(
           sectorsResult.data.map((s) => ({ name: s.name, change: s.change }))
         );
-
-        const commoditiesResult = await fetchMultipleStocks(COMMODITIES, {
-          onBatch: (partialCommodities) => {
-            (this.panels['commodities'] as CommoditiesPanel).renderCommodities(
-              partialCommodities.map((c) => ({
-                display: c.display,
-                price: c.price,
-                change: c.change,
-                sparkline: c.sparkline,
-              }))
-            );
-          },
-        });
-        (this.panels['commodities'] as CommoditiesPanel).renderCommodities(
-          commoditiesResult.data.map((c) => ({ display: c.display, price: c.price, change: c.change, sparkline: c.sparkline }))
-        );
       }
+
+      const commoditiesResult = await fetchMultipleStocks(COMMODITIES, {
+        onBatch: (partialCommodities) => {
+          (this.panels['commodities'] as CommoditiesPanel).renderCommodities(
+            partialCommodities.map((c) => ({
+              display: c.display,
+              price: c.price,
+              change: c.change,
+              sparkline: c.sparkline,
+            }))
+          );
+        },
+      });
+      (this.panels['commodities'] as CommoditiesPanel).renderCommodities(
+        commoditiesResult.data.map((c) => ({ display: c.display, price: c.price, change: c.change, sparkline: c.sparkline }))
+      );
     } catch {
       this.statusPanel?.updateApi('Finnhub', { status: 'error' });
     }
@@ -3749,7 +4036,10 @@ export class App {
       }
 
       if (data.length === 0) {
-        economicPanel?.setErrorState(true, 'Failed to load economic data');
+        const reason = isFeatureAvailable('economicFred')
+          ? 'FRED data temporarily unavailable — will retry'
+          : 'FRED_API_KEY not configured — add in Settings';
+        economicPanel?.setErrorState(true, reason);
         this.statusPanel?.updateApi('FRED', { status: 'error' });
         return;
       }
@@ -3760,7 +4050,7 @@ export class App {
       dataFreshness.recordUpdate('economic', data.length);
     } catch {
       this.statusPanel?.updateApi('FRED', { status: 'error' });
-      economicPanel?.setErrorState(true, 'Failed to load data');
+      economicPanel?.setErrorState(true, 'FRED data temporarily unavailable — will retry');
       economicPanel?.setLoading(false);
     }
   }

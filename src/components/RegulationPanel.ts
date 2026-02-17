@@ -8,6 +8,7 @@ import {
 } from '@/config';
 import { escapeHtml, sanitizeUrl } from '@/utils/sanitize';
 import { t } from '@/services/i18n';
+import { getCSSColor } from '@/utils';
 
 export class RegulationPanel extends Panel {
   private viewMode: 'timeline' | 'deadlines' | 'regulations' | 'countries' = 'timeline';
@@ -100,9 +101,9 @@ export class RegulationPanel extends Panel {
     };
 
     const impactColors: Record<RegulatoryAction['impact'], string> = {
-      high: '#ff4444',
-      medium: '#ffaa00',
-      low: '#44ff88',
+      high: getCSSColor('--semantic-critical'),
+      medium: getCSSColor('--semantic-elevated'),
+      low: getCSSColor('--semantic-normal'),
     };
 
     return `
@@ -204,10 +205,10 @@ export class RegulationPanel extends Panel {
 
   private renderRegulationCard(regulation: AIRegulation): string {
     const typeColors: Record<AIRegulation['type'], string> = {
-      comprehensive: '#4488ff',
-      sectoral: '#ff8844',
-      voluntary: '#44ff88',
-      proposed: '#ffaa00',
+      comprehensive: getCSSColor('--semantic-low'),
+      sectoral: getCSSColor('--semantic-high'),
+      voluntary: getCSSColor('--semantic-normal'),
+      proposed: getCSSColor('--semantic-elevated'),
     };
 
     const effectiveDate = regulation.effectiveDate
@@ -274,10 +275,10 @@ export class RegulationPanel extends Panel {
 
   private renderCountryCard(profile: CountryRegulationProfile): string {
     const stanceColors: Record<CountryRegulationProfile['stance'], string> = {
-      strict: '#ff4444',
-      moderate: '#ffaa00',
-      permissive: '#44ff88',
-      undefined: '#666666',
+      strict: getCSSColor('--semantic-critical'),
+      moderate: getCSSColor('--semantic-elevated'),
+      permissive: getCSSColor('--semantic-normal'),
+      undefined: getCSSColor('--text-muted'),
     };
 
     const activeCount = profile.activeRegulations.length;

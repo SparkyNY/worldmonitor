@@ -38,24 +38,60 @@ const breaker = createCircuitBreaker<PredictionMarket[]>({ name: 'Polymarket' })
 // Track whether direct browser→Polymarket fetch works
 // Cloudflare blocks server-side TLS but browsers pass JA3 fingerprint checks
 let directFetchWorks: boolean | null = null;
+let directFetchProbe: Promise<boolean> | null = null;
+let loggedDirectFetchBlocked = false;
+
+function logDirectFetchBlockedOnce(): void {
+  if (loggedDirectFetchBlocked) return;
+  loggedDirectFetchBlocked = true;
+  console.log('[Polymarket] Direct fetch blocked by Cloudflare, using proxy');
+}
+
+async function probeDirectFetchCapability(): Promise<boolean> {
+  if (directFetchWorks !== null) return directFetchWorks;
+  if (!directFetchProbe) {
+    directFetchProbe = fetch(`${GAMMA_API}/events?closed=false&order=volume&ascending=false&limit=1`, {
+      headers: { 'Accept': 'application/json' },
+    })
+      .then(resp => {
+        directFetchWorks = resp.ok;
+        if (directFetchWorks) {
+          console.log('[Polymarket] Direct browser fetch working');
+        } else {
+          logDirectFetchBlockedOnce();
+        }
+        return directFetchWorks;
+      })
+      .catch(() => {
+        directFetchWorks = false;
+        logDirectFetchBlockedOnce();
+        return false;
+      })
+      .finally(() => {
+        directFetchProbe = null;
+      });
+  }
+  return directFetchProbe;
+}
 
 async function polyFetch(endpoint: 'events' | 'markets', params: Record<string, string>): Promise<Response> {
   const qs = new URLSearchParams(params).toString();
 
-  // Try direct browser fetch first (Cloudflare accepts browser TLS fingerprint)
-  if (directFetchWorks !== false) {
+  // Probe direct connectivity once before parallel tag fanout to avoid reset storms.
+  const canUseDirect = directFetchWorks === true || (directFetchWorks === null && await probeDirectFetchCapability());
+  if (canUseDirect) {
     try {
       const resp = await fetch(`${GAMMA_API}/${endpoint}?${qs}`, {
         headers: { 'Accept': 'application/json' },
       });
       if (resp.ok) {
-        if (!directFetchWorks) console.log('[Polymarket] Direct browser fetch working');
+        if (directFetchWorks !== true) console.log('[Polymarket] Direct browser fetch working');
         directFetchWorks = true;
         return resp;
       }
     } catch {
       directFetchWorks = false;
-      console.log('[Polymarket] Direct fetch blocked by Cloudflare, using proxy');
+      logDirectFetchBlockedOnce();
     }
   }
 

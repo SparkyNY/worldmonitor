@@ -3,12 +3,18 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { resolve } from 'path';
 import pkg from './package.json';
 
+const isE2E = process.env.VITE_E2E === '1';
+
 const VARIANT_META: Record<string, {
   title: string;
   description: string;
   keywords: string;
   url: string;
   siteName: string;
+  shortName: string;
+  subject: string;
+  classification: string;
+  categories: string[];
   features: string[];
 }> = {
   full: {
@@ -17,6 +23,10 @@ const VARIANT_META: Record<string, {
     keywords: 'global intelligence, geopolitical dashboard, world news, market data, military bases, nuclear facilities, undersea cables, conflict zones, real-time monitoring, situation awareness, OSINT, flight tracking, AIS ships, earthquake monitor, protest tracker, power outages, oil prices, government spending, polymarket predictions',
     url: 'https://worldmonitor.app/',
     siteName: 'World Monitor',
+    shortName: 'WorldMonitor',
+    subject: 'Real-Time Global Intelligence and Situation Awareness',
+    classification: 'Intelligence Dashboard, OSINT Tool, News Aggregator',
+    categories: ['news', 'productivity'],
     features: [
       'Real-time news aggregation',
       'Stock market tracking',
@@ -38,6 +48,10 @@ const VARIANT_META: Record<string, {
     keywords: 'tech dashboard, AI industry, startup ecosystem, tech companies, AI labs, venture capital, tech events, tech conferences, cloud infrastructure, datacenters, tech layoffs, funding rounds, unicorns, FAANG, tech HQ, accelerators, Y Combinator, tech news',
     url: 'https://tech.worldmonitor.app/',
     siteName: 'Tech Monitor',
+    shortName: 'TechMonitor',
+    subject: 'AI, Tech Industry, and Startup Ecosystem Intelligence',
+    classification: 'Tech Dashboard, AI Tracker, Startup Intelligence',
+    categories: ['news', 'business'],
     features: [
       'Tech news aggregation',
       'AI lab tracking',
@@ -52,34 +66,60 @@ const VARIANT_META: Record<string, {
       'Service status monitoring',
     ],
   },
+  finance: {
+    title: 'Finance Monitor - Real-Time Markets & Trading Dashboard',
+    description: 'Real-time finance and trading dashboard tracking global markets, stock exchanges, central banks, commodities, forex, crypto, and economic indicators worldwide.',
+    keywords: 'finance dashboard, trading dashboard, stock market, forex, commodities, central banks, crypto, economic indicators, market news, financial centers, stock exchanges, bonds, derivatives, fintech, hedge funds, IPO tracker, market analysis',
+    url: 'https://finance.worldmonitor.app/',
+    siteName: 'Finance Monitor',
+    shortName: 'FinanceMonitor',
+    subject: 'Global Markets, Trading, and Financial Intelligence',
+    classification: 'Finance Dashboard, Market Tracker, Trading Intelligence',
+    categories: ['finance', 'news'],
+    features: [
+      'Real-time market data',
+      'Stock exchange mapping',
+      'Central bank monitoring',
+      'Commodity price tracking',
+      'Forex & currency news',
+      'Crypto & digital assets',
+      'Economic indicator alerts',
+      'IPO & earnings tracking',
+      'Financial center mapping',
+      'Sector heatmap',
+      'Market radar signals',
+    ],
+  },
 };
 
-function htmlVariantPlugin(): Plugin {
-  const variant = process.env.VITE_VARIANT || 'full';
-  const meta = VARIANT_META[variant] || VARIANT_META.full;
+const activeVariant = process.env.VITE_VARIANT || 'full';
+const activeMeta = VARIANT_META[activeVariant] || VARIANT_META.full;
 
+function htmlVariantPlugin(): Plugin {
   return {
     name: 'html-variant',
     transformIndexHtml(html) {
       return html
-        .replace(/<title>.*?<\/title>/, `<title>${meta.title}</title>`)
-        .replace(/<meta name="title" content=".*?" \/>/, `<meta name="title" content="${meta.title}" />`)
-        .replace(/<meta name="description" content=".*?" \/>/, `<meta name="description" content="${meta.description}" />`)
-        .replace(/<meta name="keywords" content=".*?" \/>/, `<meta name="keywords" content="${meta.keywords}" />`)
-        .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${meta.url}" />`)
-        .replace(/<meta name="application-name" content=".*?" \/>/, `<meta name="application-name" content="${meta.siteName}" />`)
-        .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${meta.url}" />`)
-        .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${meta.title}" />`)
-        .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${meta.description}" />`)
-        .replace(/<meta property="og:site_name" content=".*?" \/>/, `<meta property="og:site_name" content="${meta.siteName}" />`)
-        .replace(/<meta name="twitter:url" content=".*?" \/>/, `<meta name="twitter:url" content="${meta.url}" />`)
-        .replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${meta.title}" />`)
-        .replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${meta.description}" />`)
-        .replace(/"name": "World Monitor"/, `"name": "${meta.siteName}"`)
-        .replace(/"alternateName": "WorldMonitor"/, `"alternateName": "${meta.siteName.replace(' ', '')}"`)
-        .replace(/"url": "https:\/\/worldmonitor\.app\/"/, `"url": "${meta.url}"`)
-        .replace(/"description": "Real-time global intelligence dashboard with live news, markets, military tracking, infrastructure monitoring, and geopolitical data."/, `"description": "${meta.description}"`)
-        .replace(/"featureList": \[[\s\S]*?\]/, `"featureList": ${JSON.stringify(meta.features, null, 8).replace(/\n/g, '\n      ')}`);
+        .replace(/<title>.*?<\/title>/, `<title>${activeMeta.title}</title>`)
+        .replace(/<meta name="title" content=".*?" \/>/, `<meta name="title" content="${activeMeta.title}" />`)
+        .replace(/<meta name="description" content=".*?" \/>/, `<meta name="description" content="${activeMeta.description}" />`)
+        .replace(/<meta name="keywords" content=".*?" \/>/, `<meta name="keywords" content="${activeMeta.keywords}" />`)
+        .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${activeMeta.url}" />`)
+        .replace(/<meta name="application-name" content=".*?" \/>/, `<meta name="application-name" content="${activeMeta.siteName}" />`)
+        .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${activeMeta.url}" />`)
+        .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${activeMeta.title}" />`)
+        .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${activeMeta.description}" />`)
+        .replace(/<meta property="og:site_name" content=".*?" \/>/, `<meta property="og:site_name" content="${activeMeta.siteName}" />`)
+        .replace(/<meta name="subject" content=".*?" \/>/, `<meta name="subject" content="${activeMeta.subject}" />`)
+        .replace(/<meta name="classification" content=".*?" \/>/, `<meta name="classification" content="${activeMeta.classification}" />`)
+        .replace(/<meta name="twitter:url" content=".*?" \/>/, `<meta name="twitter:url" content="${activeMeta.url}" />`)
+        .replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${activeMeta.title}" />`)
+        .replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${activeMeta.description}" />`)
+        .replace(/"name": "World Monitor"/, `"name": "${activeMeta.siteName}"`)
+        .replace(/"alternateName": "WorldMonitor"/, `"alternateName": "${activeMeta.siteName.replace(' ', '')}"`)
+        .replace(/"url": "https:\/\/worldmonitor\.app\/"/, `"url": "${activeMeta.url}"`)
+        .replace(/"description": "Real-time global intelligence dashboard with live news, markets, military tracking, infrastructure monitoring, and geopolitical data."/, `"description": "${activeMeta.description}"`)
+        .replace(/"featureList": \[[\s\S]*?\]/, `"featureList": ${JSON.stringify(activeMeta.features, null, 8).replace(/\n/g, '\n      ')}`);
     },
   };
 }
@@ -138,16 +178,16 @@ export default defineConfig({
       ],
 
       manifest: {
-        name: 'World Monitor - Real-Time Global Intelligence',
-        short_name: 'WorldMonitor',
-        description: 'AI-powered real-time global intelligence dashboard',
+        name: `${activeMeta.siteName} - ${activeMeta.subject}`,
+        short_name: activeMeta.shortName,
+        description: activeMeta.description,
         start_url: '/',
         scope: '/',
         display: 'standalone',
         orientation: 'any',
         theme_color: '#0a0f0a',
         background_color: '#0a0f0a',
-        categories: ['news', 'productivity'],
+        categories: activeMeta.categories,
         icons: [
           { src: '/favico/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: '/favico/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
@@ -156,7 +196,7 @@ export default defineConfig({
       },
 
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
         globIgnores: ['**/ml-*.js', '**/onnx*.wasm'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//, /^\/settings/],
@@ -165,6 +205,14 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
 
         runtimeCaching: [
+          {
+            urlPattern: ({ request }: { request: Request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-navigation',
+              networkTimeoutSeconds: 3,
+            },
+          },
           {
             urlPattern: /^https?:\/\/.*\/api\/.*/i,
             handler: 'NetworkOnly',
@@ -258,7 +306,15 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    open: true,
+    open: !isE2E,
+    hmr: isE2E ? false : undefined,
+    watch: {
+      ignored: [
+        '**/test-results/**',
+        '**/playwright-report/**',
+        '**/.playwright-mcp/**',
+      ],
+    },
     proxy: {
       // Yahoo Finance API
       '/api/yahoo': {

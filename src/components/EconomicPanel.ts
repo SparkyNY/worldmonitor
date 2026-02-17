@@ -116,7 +116,7 @@ export class EconomicPanel extends Panel {
 
   private renderIndicators(): string {
     if (this.fredData.length === 0) {
-      return '<div class="economic-empty">No economic data available</div>';
+      return '<div class="economic-empty">No indicator data yet — FRED may be loading</div>';
     }
 
     return `
@@ -148,7 +148,7 @@ export class EconomicPanel extends Panel {
 
   private renderOil(): string {
     if (!this.oilData) {
-      return '<div class="economic-empty">Oil data not available</div>';
+      return '<div class="economic-empty">Oil data temporarily unavailable — will retry</div>';
     }
 
     const metrics = [
@@ -159,7 +159,7 @@ export class EconomicPanel extends Panel {
     ].filter(Boolean);
 
     if (metrics.length === 0) {
-      return '<div class="economic-empty">No oil metrics available. Add EIA_API_KEY to enable.</div>';
+      return '<div class="economic-empty">EIA_API_KEY not configured — add in Settings for oil data</div>';
     }
 
     return `

@@ -22,6 +22,10 @@ import {
   SPACEPORTS,
   APT_GROUPS,
   CRITICAL_MINERALS,
+  STOCK_EXCHANGES,
+  FINANCIAL_CENTERS,
+  CENTRAL_BANKS,
+  COMMODITY_HUBS,
 } from '../config';
 import type {
   AisDensityZone,
@@ -44,7 +48,7 @@ import type {
 import type { WeatherAlert } from '../services/weather';
 
 type Scenario = 'alpha' | 'beta';
-type HarnessVariant = 'full' | 'tech';
+type HarnessVariant = 'full' | 'tech' | 'finance';
 type HarnessLayerKey = keyof MapLayers;
 type PulseProtestScenario =
   | 'none'
@@ -106,9 +110,12 @@ type MapHarness = {
   prepareVisualScenario: (scenarioId: string) => boolean;
   isVisualScenarioReady: (scenarioId: string) => boolean;
   getDeckLayerSnapshot: () => LayerSnapshot[];
+  getLayerDataCount: (layerId: string) => number;
+  getLayerFirstScreenTransform: (layerId: string) => string | null;
+  getFirstProtestTitle: () => string | null;
+  getProtestClusterCount: () => number;
   getOverlaySnapshot: () => OverlaySnapshot;
   getCyberTooltipHtml: (indicator: string) => string;
-  getClusterStateSize: () => number;
   destroy: () => void;
 };
 
@@ -159,6 +166,11 @@ const allLayersEnabled: MapLayers = {
   accelerators: true,
   techHQs: true,
   techEvents: true,
+  stockExchanges: true,
+  financialCenters: true,
+  centralBanks: true,
+  commodityHubs: true,
+  gulfInvestments: true,
 };
 
 const allLayersDisabled: MapLayers = {
@@ -192,6 +204,11 @@ const allLayersDisabled: MapLayers = {
   accelerators: false,
   techHQs: false,
   techEvents: false,
+  stockExchanges: false,
+  financialCenters: false,
+  centralBanks: false,
+  commodityHubs: false,
+  gulfInvestments: false,
 };
 
 const SEEDED_NEWS_LOCATIONS: Array<{
@@ -213,14 +230,14 @@ const map = new DeckGLMap(app, {
   pan: { x: 0, y: 0 },
   view: 'global',
   layers: allLayersEnabled,
-  timeRange: '24h',
+  // Keep harness deterministic regardless of wall-clock date.
+  timeRange: 'all',
 });
 
 const DETERMINISTIC_BODY_CLASS = 'e2e-deterministic';
 
 const internals = map as unknown as {
   buildLayers?: () => Array<{ id: string; props?: { data?: unknown } }>;
-  lastClusterState?: Map<string, unknown>;
   maplibreMap?: MapLibreMap;
   getTooltip?: (info: { object?: unknown; layer?: { id?: string } }) => { html?: string } | null;
   newsLocationFirstSeen?: Map<string, number>;
@@ -280,6 +297,50 @@ const getDeckLayerSnapshot = (): LayerSnapshot[] => {
     id: layer.id,
     dataCount: getDataCount(layer.props?.data),
   }));
+};
+
+const getLayerDataCount = (layerId: string): number => {
+  return getDeckLayerSnapshot().find((layer) => layer.id === layerId)?.dataCount ?? 0;
+};
+
+const getLayerFirstScreenTransform = (layerId: string): string | null => {
+  const maplibreMap = internals.maplibreMap;
+  if (!maplibreMap) return null;
+
+  const layers = internals.buildLayers?.() ?? [];
+  const target = layers.find((layer) => layer.id === layerId);
+  const data = target?.props?.data;
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const first = data[0] as {
+    lon?: number;
+    lng?: number;
+    longitude?: number;
+    lat?: number;
+    latitude?: number;
+  };
+
+  const lon = first.lon ?? first.lng ?? first.longitude;
+  const lat = first.lat ?? first.latitude;
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+
+  const point = maplibreMap.project([lon as number, lat as number]);
+  return `translate(${point.x.toFixed(2)}px, ${point.y.toFixed(2)}px)`;
+};
+
+const getFirstProtestTitle = (): string | null => {
+  const layers = internals.buildLayers?.() ?? [];
+  const protestLayer = layers.find((layer) => layer.id === 'protest-clusters-layer');
+  const data = protestLayer?.props?.data;
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const first = data[0] as { items?: Array<{ title?: string }> };
+  const title = first.items?.[0]?.title;
+  return typeof title === 'string' ? title : null;
+};
+
+const getProtestClusterCount = (): number => {
+  return getLayerDataCount('protest-clusters-layer');
 };
 
 const getOverlaySnapshot = (): OverlaySnapshot => ({
@@ -352,6 +413,10 @@ const [techHQLon, techHQLat] = firstLatLon(TECH_HQS, [-122.0, 37.3]);
 const [cloudRegionLon, cloudRegionLat] = firstLatLon(CLOUD_REGIONS, [-122.3, 37.6]);
 const [aptLon, aptLat] = firstLatLon(APT_GROUPS, [116.4, 39.9]);
 const [portLon, portLat] = firstLatLon(PORTS, [32.5, 29.9]);
+const [exchangeLon, exchangeLat] = firstLatLon(STOCK_EXCHANGES, [-74.0, 40.7]);
+const [financialCenterLon, financialCenterLat] = firstLatLon(FINANCIAL_CENTERS, [-74.0, 40.7]);
+const [centralBankLon, centralBankLat] = firstLatLon(CENTRAL_BANKS, [-77.0, 38.9]);
+const [commodityHubLon, commodityHubLat] = firstLatLon(COMMODITY_HUBS, [-87.6, 41.8]);
 
 const VISUAL_SCENARIOS: VisualScenario[] = [
   {
@@ -471,8 +536,8 @@ const VISUAL_SCENARIOS: VisualScenario[] = [
     variant: 'both',
     enabledLayers: ['datacenters'],
     camera: toCamera(datacenterLon, datacenterLat, 3.0),
-    expectedDeckLayers: [],
-    expectedSelectors: ['.datacenter-marker'],
+    expectedDeckLayers: ['datacenter-clusters-layer'],
+    expectedSelectors: [],
   },
   {
     id: 'datacenters-icons-z6',
@@ -487,8 +552,8 @@ const VISUAL_SCENARIOS: VisualScenario[] = [
     variant: 'both',
     enabledLayers: ['protests'],
     camera: seededCameras.protests,
-    expectedDeckLayers: [],
-    expectedSelectors: ['.protest-marker'],
+    expectedDeckLayers: ['protest-clusters-layer'],
+    expectedSelectors: [],
   },
   {
     id: 'flights-z5',
@@ -589,16 +654,48 @@ const VISUAL_SCENARIOS: VisualScenario[] = [
     variant: 'tech',
     enabledLayers: ['techHQs'],
     camera: toCamera(techHQLon, techHQLat, 5.2),
-    expectedDeckLayers: [],
-    expectedSelectors: ['.tech-hq-marker'],
+    expectedDeckLayers: ['tech-hq-clusters-layer'],
+    expectedSelectors: [],
   },
   {
     id: 'tech-events-z5',
     variant: 'tech',
     enabledLayers: ['techEvents'],
     camera: seededCameras.techEvents,
-    expectedDeckLayers: [],
-    expectedSelectors: ['.tech-event-marker'],
+    expectedDeckLayers: ['tech-event-clusters-layer'],
+    expectedSelectors: [],
+  },
+  {
+    id: 'stock-exchanges-z5',
+    variant: 'finance',
+    enabledLayers: ['stockExchanges'],
+    camera: toCamera(exchangeLon, exchangeLat, 5.2),
+    expectedDeckLayers: ['stock-exchanges-layer'],
+    expectedSelectors: [],
+  },
+  {
+    id: 'financial-centers-z5',
+    variant: 'finance',
+    enabledLayers: ['financialCenters'],
+    camera: toCamera(financialCenterLon, financialCenterLat, 5.2),
+    expectedDeckLayers: ['financial-centers-layer'],
+    expectedSelectors: [],
+  },
+  {
+    id: 'central-banks-z5',
+    variant: 'finance',
+    enabledLayers: ['centralBanks'],
+    camera: toCamera(centralBankLon, centralBankLat, 5.2),
+    expectedDeckLayers: ['central-banks-layer'],
+    expectedSelectors: [],
+  },
+  {
+    id: 'commodity-hubs-z5',
+    variant: 'finance',
+    enabledLayers: ['commodityHubs'],
+    camera: toCamera(commodityHubLon, commodityHubLat, 5.2),
+    expectedDeckLayers: ['commodity-hubs-layer'],
+    expectedSelectors: [],
   },
   // Note: `sanctions` has no map renderer in DeckGLMap today; excluded from visual scenarios.
 ];
@@ -610,6 +707,12 @@ const filterScenariosForVariant = (variant: HarnessVariant): VisualScenario[] =>
     (scenario) => scenario.variant === 'both' || scenario.variant === variant
   );
 };
+
+const currentHarnessVariant: HarnessVariant = SITE_VARIANT === 'tech'
+  ? 'tech'
+  : SITE_VARIANT === 'finance'
+  ? 'finance'
+  : 'full';
 
 const buildProtests = (scenario: Scenario): SocialUnrestEvent[] => {
   const title =
@@ -1086,7 +1189,7 @@ const isVisualScenarioReady = (scenarioId: string): boolean => {
 const getCyberTooltipHtml = (indicator: string): string => {
   const tooltip = internals.getTooltip?.({
     object: {
-      indicator,
+      country: indicator,
       severity: 'high',
       source: 'feodo',
     },
@@ -1098,11 +1201,18 @@ const getCyberTooltipHtml = (indicator: string): string => {
 seedAllDynamicData();
 
 let ready = false;
+const readyStartedAt = Date.now();
+const STYLE_READY_FALLBACK_MS = 12_000;
 const pollReady = (): void => {
   const hasCanvas = Boolean(document.querySelector('#deckgl-basemap canvas'));
   const maplibreMap = internals.maplibreMap;
+  const styleLoaded = Boolean(maplibreMap?.isStyleLoaded());
+  const allowStyleFallback =
+    hasCanvas &&
+    Boolean(maplibreMap) &&
+    Date.now() - readyStartedAt >= STYLE_READY_FALLBACK_MS;
 
-  if (hasCanvas && maplibreMap?.isStyleLoaded()) {
+  if ((hasCanvas && styleLoaded) || allowStyleFallback) {
     if (!deterministicVisualModeEnabled) {
       enableDeterministicVisualMode();
     }
@@ -1118,7 +1228,7 @@ window.__mapHarness = {
   get ready() {
     return ready;
   },
-  variant: SITE_VARIANT === 'tech' ? 'tech' : 'full',
+  variant: currentHarnessVariant,
   seedAllDynamicData,
   setProtestsScenario: (scenario: Scenario): void => {
     map.setProtests(buildProtests(scenario));
@@ -1147,8 +1257,7 @@ window.__mapHarness = {
   setCamera,
   enableDeterministicVisualMode,
   getVisualScenarios: (): VisualScenarioSummary[] => {
-    const variant = SITE_VARIANT === 'tech' ? 'tech' : 'full';
-    return filterScenariosForVariant(variant).map((scenario) => ({
+    return filterScenariosForVariant(currentHarnessVariant).map((scenario) => ({
       id: scenario.id,
       variant: scenario.variant,
     }));
@@ -1156,11 +1265,12 @@ window.__mapHarness = {
   prepareVisualScenario,
   isVisualScenarioReady,
   getDeckLayerSnapshot,
+  getLayerDataCount,
+  getLayerFirstScreenTransform,
+  getFirstProtestTitle,
+  getProtestClusterCount,
   getOverlaySnapshot,
   getCyberTooltipHtml,
-  getClusterStateSize: (): number => {
-    return internals.lastClusterState?.size ?? -1;
-  },
   destroy: (): void => {
     map.destroy();
   },

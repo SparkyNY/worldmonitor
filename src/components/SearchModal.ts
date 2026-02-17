@@ -1,7 +1,7 @@
 import { escapeHtml } from '@/utils/sanitize';
 import { t } from '@/services/i18n';
 
-export type SearchResultType = 'country' | 'news' | 'hotspot' | 'market' | 'prediction' | 'conflict' | 'base' | 'pipeline' | 'cable' | 'datacenter' | 'earthquake' | 'outage' | 'nuclear' | 'irradiator' | 'techcompany' | 'ailab' | 'startup' | 'techevent' | 'techhq' | 'accelerator';
+export type SearchResultType = 'country' | 'news' | 'hotspot' | 'market' | 'prediction' | 'conflict' | 'base' | 'pipeline' | 'cable' | 'datacenter' | 'earthquake' | 'outage' | 'nuclear' | 'irradiator' | 'techcompany' | 'ailab' | 'startup' | 'techevent' | 'techhq' | 'accelerator' | 'exchange' | 'financialcenter' | 'centralbank' | 'commodityhub';
 
 export interface SearchResult {
   type: SearchResultType;
@@ -254,6 +254,10 @@ export class SearchModal {
       techevent: '📅',
       techhq: '🦄',
       accelerator: '🚀',
+      exchange: '🏛️',
+      financialcenter: '💰',
+      centralbank: '🏦',
+      commodityhub: '📦',
     };
 
     this.resultsList.innerHTML = this.results.map((result, i) => `

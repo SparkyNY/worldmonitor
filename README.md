@@ -11,7 +11,8 @@
 
 <p align="center">
   <a href="https://worldmonitor.app"><img src="https://img.shields.io/badge/Web_App-worldmonitor.app-blue?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Web App"></a>&nbsp;
-  <a href="https://tech.worldmonitor.app"><img src="https://img.shields.io/badge/Tech_Variant-tech.worldmonitor.app-0891b2?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Tech Variant"></a>
+  <a href="https://tech.worldmonitor.app"><img src="https://img.shields.io/badge/Tech_Variant-tech.worldmonitor.app-0891b2?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Tech Variant"></a>&nbsp;
+  <a href="https://finance.worldmonitor.app"><img src="https://img.shields.io/badge/Finance_Variant-finance.worldmonitor.app-059669?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Finance Variant"></a>
 </p>
 
 <p align="center">
@@ -34,13 +35,14 @@
 | Problem | Solution |
 |---------|----------|
 | News scattered across 100+ sources | **Single unified dashboard** with 100+ curated feeds |
-| No geospatial context for events | **Interactive map** with 30+ toggleable data layers |
+| No geospatial context for events | **Interactive map** with 35+ toggleable data layers |
 | Information overload | **AI-synthesized briefs** with focal point detection |
 | Crypto/macro signal noise | **7-signal market radar** with composite BUY/CASH verdict |
 | Expensive OSINT tools ($$$) | **100% free & open source** |
 | Static news feeds | **Real-time updates** with live video streams |
 | Web-only dashboards | **Native desktop app** (Tauri) + installable PWA with offline map support |
-| Flat 2D maps | **3D WebGL globe** with deck.gl rendering and 30+ toggleable data layers |
+| Flat 2D maps | **3D WebGL globe** with deck.gl rendering and 35+ toggleable data layers |
+| Siloed financial data | **Finance variant** with 92 stock exchanges, 19 financial centers, 13 central banks, and Gulf FDI tracking |
 
 ---
 
@@ -50,8 +52,9 @@
 |---------|-----|-------|
 | **World Monitor** | [worldmonitor.app](https://worldmonitor.app) | Geopolitics, military, conflicts, infrastructure |
 | **Tech Monitor** | [tech.worldmonitor.app](https://tech.worldmonitor.app) | Startups, AI/ML, cloud, cybersecurity |
+| **Finance Monitor** | [finance.worldmonitor.app](https://finance.worldmonitor.app) | Global markets, trading, central banks, Gulf FDI |
 
-Both variants run from a single codebase — switch between them with one click.
+All three variants run from a single codebase — switch between them with one click via the header bar (🌍 WORLD | 💻 TECH | 📈 FINANCE).
 
 ---
 
@@ -60,7 +63,7 @@ Both variants run from a single codebase — switch between them with one click.
 ### Interactive 3D Globe
 
 - **WebGL-accelerated rendering** — deck.gl + MapLibre GL JS for smooth 60fps performance with thousands of concurrent markers. Switchable between **3D globe** (with pitch/rotation) and **flat map** mode via `VITE_MAP_INTERACTION_MODE`
-- **30+ data layers** — conflicts, military bases, nuclear facilities, undersea cables, pipelines, satellite fire detection, protests, natural disasters, datacenters, displacement flows, climate anomalies, cyber threat IOCs, and more
+- **35+ data layers** — conflicts, military bases, nuclear facilities, undersea cables, pipelines, satellite fire detection, protests, natural disasters, datacenters, displacement flows, climate anomalies, cyber threat IOCs, stock exchanges, financial centers, central banks, commodity hubs, Gulf investments, and more
 - **Smart clustering** — Supercluster groups markers at low zoom, expands on zoom in. Cluster thresholds adapt to zoom level
 - **Progressive disclosure** — detail layers (bases, nuclear, datacenters) appear only when zoomed in; zoom-adaptive opacity fades markers from 0.2 at world view to 1.0 at street level
 - **Label deconfliction** — overlapping labels (e.g., multiple BREAKING badges) are automatically suppressed by priority, highest-severity first
@@ -142,9 +145,20 @@ Both variants run from a single codebase — switch between them with one click.
 
 </details>
 
+<details>
+<summary><strong>Finance & Markets</strong> (Finance variant)</summary>
+
+- 92 global stock exchanges — mega (NYSE, NASDAQ, Shanghai, Euronext, Tokyo), major (Hong Kong, London, NSE/BSE, Toronto, Korea, Saudi Tadawul), and emerging markets — with market caps and trading hours
+- 19 financial centers — ranked by Global Financial Centres Index (New York #1 through offshore centers: Cayman Islands, Luxembourg, Bermuda, Channel Islands)
+- 13 central banks — Federal Reserve, ECB, BoJ, BoE, PBoC, SNB, RBA, BoC, RBI, BoK, BCB, SAMA, plus supranational institutions (BIS, IMF)
+- 10 commodity hubs — exchanges (CME Group, ICE, LME, SHFE, DCE, TOCOM, DGCX, MCX) and physical hubs (Rotterdam, Houston)
+- Gulf FDI investment layer — 64 Saudi/UAE foreign direct investments plotted globally, color-coded by status (operational, under-construction, announced), sized by investment amount
+
+</details>
+
 ### Live News & Video
 
-- **100+ RSS feeds** across geopolitics, defense, energy, tech — domain-allowlisted proxy prevents CORS issues
+- **150+ RSS feeds** across geopolitics, defense, energy, tech, and finance — domain-allowlisted proxy prevents CORS issues. Each variant loads its own curated feed set: ~25 categories for geopolitical, ~20 for tech, ~18 for finance
 - **8 live video streams** — Bloomberg, Sky News, Al Jazeera, Euronews, DW, France24, CNBC, Al Arabiya — with automatic live detection that scrapes YouTube channel pages every 5 minutes to find active streams
 - **Desktop embed bridge** — YouTube's IFrame API restricts playback in native webviews (error 153). The dashboard detects this and transparently routes through a cloud-hosted embed proxy with bidirectional message passing (play/pause/mute/unmute/loadVideo)
 - **Idle-aware playback** — video players pause and are removed from the DOM after 5 minutes of inactivity, resuming when the user returns. Tab visibility changes also suspend/resume streams
@@ -210,6 +224,10 @@ Both variants run from a single codebase — switch between them with one click.
 - **Download banner** — persistent notification for web users linking to native desktop installers for their detected platform
 - **Download API** — `/api/download?platform={windows-exe|windows-msi|macos-arm64|macos-x64}` redirects to the matching GitHub Release asset, with fallback to the releases page
 - **Non-tier country support** — clicking countries outside the 22 tier-1 list opens a brief with available data (news, markets, infrastructure) and a "Limited coverage" badge; country names for non-tier countries resolve via `Intl.DisplayNames`
+- **Feature toggles** — 14 runtime toggles (AI/Groq, AI/OpenRouter, FRED economic, EIA energy, internet outages, ACLED conflicts, threat intel feeds, AIS relay, OpenSky, Finnhub, NASA FIRMS) stored in `localStorage`, allowing administrators to enable/disable data sources without rebuilding
+- **AIS chokepoint detection** — the relay server monitors 8 strategic maritime chokepoints (Strait of Hormuz, Suez Canal, Malacca Strait, Bab el-Mandeb, Panama Canal, Taiwan Strait, South China Sea, Turkish Straits) and classifies transiting vessels by naval candidacy using MMSI prefixes, ship type codes, and name patterns
+- **AIS density grid** — vessel positions are aggregated into 2°×2° geographic cells over 30-minute windows, producing a heatmap of maritime traffic density that feeds into convergence detection
+- **Panel resizing** — drag handles on panel edges allow height adjustment (span-1 through span-4 grid rows), persisted to localStorage. Double-click resets to default height
 
 ---
 
@@ -566,6 +584,23 @@ VWAP = Σ(price × volume) / Σ(volume)    for last 30 trading days
 
 The **Mayer Multiple** (BTC price / SMA200) provides a long-term valuation context — historically, values above 2.4 indicate overheating, while values below 0.8 suggest deep undervaluation.
 
+### Gulf FDI Investment Database
+
+The Finance variant includes a curated database of 64 major foreign direct investments by Saudi Arabia and the UAE in global critical infrastructure. Investments are tracked across 12 sectors:
+
+| Sector | Examples |
+|--------|---------|
+| **Ports** | DP World's 11 global container terminals, AD Ports (Khalifa, Al-Sokhna, Karachi), Saudi Mawani ports |
+| **Energy** | ADNOC Ruwais LNG (9.6 mtpa), Aramco's Motiva Port Arthur refinery (630K bpd), ACWA Power renewables |
+| **Manufacturing** | Mubadala's GlobalFoundries (82% stake, 3rd-largest chip foundry), Borealis (75%), SABIC (70%) |
+| **Renewables** | Masdar wind/solar (UK Hornsea, Zarafshan 500MW, Gulf of Suez), NEOM Green Hydrogen (world's largest) |
+| **Megaprojects** | NEOM THE LINE ($500B), Saudi National Cloud ($6B hyperscale datacenters) |
+| **Telecoms** | STC's 9.9% stake in Telefónica, PIF's 20% of Telecom Italia NetCo |
+
+Each investment records the investing entity (DP World, Mubadala, PIF, ADNOC, Masdar, Saudi Aramco, ACWA Power, etc.), target country, geographic coordinates, investment amount (USD), ownership stake, operational status, and year. The Investments Panel provides filterable views by country (SA/UAE), sector, entity, and status — clicking any row navigates the map to the investment location.
+
+On the globe, investments appear as scaled bubbles: ≥$50B projects (NEOM) render at maximum size, while sub-$1B investments use smaller markers. Color encodes status: green for operational, amber for under-construction, blue for announced.
+
 ### Stablecoin Peg Monitoring
 
 Five major stablecoins (USDT, USDC, DAI, FDUSD, USDe) are monitored via the CoinGecko API with 2-minute caching. Each coin's deviation from the $1.00 peg determines its health status:
@@ -603,6 +638,25 @@ This is an approximation, not a substitute for official flow data, but it captur
 
 ---
 
+## Tri-Variant Architecture
+
+A single codebase produces three specialized dashboards, each with distinct feeds, panels, map layers, and branding:
+
+| Aspect | World Monitor | Tech Monitor | Finance Monitor |
+|--------|--------------|--------------|-----------------|
+| **Domain** | worldmonitor.app | tech.worldmonitor.app | finance.worldmonitor.app |
+| **Focus** | Geopolitics, military, conflicts | AI/ML, startups, cybersecurity | Markets, trading, central banks |
+| **RSS Feeds** | ~25 categories (politics, MENA, Africa, think tanks) | ~20 categories (AI, VC blogs, startups, GitHub) | ~18 categories (forex, bonds, commodities, IPOs) |
+| **Panels** | 44 (strategic posture, CII, cascade) | 31 (AI labs, unicorns, accelerators) | 30 (forex, bonds, derivatives, institutional) |
+| **Unique Map Layers** | Military bases, nuclear facilities, hotspots | Tech HQs, cloud regions, startup hubs | Stock exchanges, central banks, Gulf investments |
+| **Desktop App** | World Monitor.app / .exe | Tech Monitor.app / .exe | Finance Monitor.app / .exe |
+
+**Build-time selection** — the `VITE_VARIANT` environment variable controls which configuration is bundled. A Vite HTML plugin transforms meta tags, Open Graph data, PWA manifest, and JSON-LD structured data at build time. Each variant tree-shakes unused data files — the finance build excludes military base coordinates and APT group data, while the geopolitical build excludes stock exchange listings.
+
+**Runtime switching** — a variant selector in the header bar (🌍 WORLD | 💻 TECH | 📈 FINANCE) navigates between deployed domains on the web, or sets `localStorage['worldmonitor-variant']` in the desktop app to switch without rebuilding.
+
+---
+
 ## Architecture Principles
 
 | Principle | Implementation |
@@ -618,7 +672,7 @@ This is an approximation, not a substitute for official flow data, but it captur
 | **Cache everything, trust nothing** | Three-tier caching (in-memory → Redis → upstream) with versioned cache keys and stale-on-error fallback. Every API response includes `X-Cache` header for debugging. CDN layer (`s-maxage`) absorbs repeated requests before they reach edge functions. |
 | **Bandwidth efficiency** | Gzip compression on all relay responses (80% reduction). Content-hash static assets with 1-year immutable cache. Staggered polling intervals prevent synchronized API storms. Animations and polling pause on hidden tabs. |
 | **Baseline-aware alerting** | Trending keyword detection uses rolling 2-hour windows against 7-day baselines with per-term spike multipliers, cooldowns, and source diversity requirements — surfacing genuine surges while suppressing noise. |
-| **Run anywhere** | Same codebase deploys to Vercel (web), Railway (relay), Tauri (desktop), and PWA (installable). Desktop sidecar mirrors all cloud API handlers locally. Service worker caches map tiles for offline use while keeping intelligence data always-fresh (NetworkOnly). |
+| **Run anywhere** | Same codebase produces three specialized variants (geopolitical, tech, finance) and deploys to Vercel (web), Railway (relay), Tauri (desktop), and PWA (installable). Desktop sidecar mirrors all cloud API handlers locally. Service worker caches map tiles for offline use while keeping intelligence data always-fresh (NetworkOnly). |
 
 ---
 
@@ -647,6 +701,7 @@ World Monitor uses 60+ Vercel Edge Functions as a lightweight API layer. Each ed
 - **Market Intelligence** — macro signals, ETF flows, and stablecoin monitors compute derived analytics server-side (VWAP, SMA, peg deviation, flow estimates) and cache results in Redis
 - **Temporal Baseline** — Welford's algorithm state is persisted in Redis across requests, building statistical baselines without a traditional database
 - **Custom Scrapers** — sources without RSS feeds (FwdStart, GitHub Trending, tech events) are scraped and transformed into RSS-compatible formats
+- **Finance Geo Data** — stock exchanges (92), financial centers (19), central banks (13), and commodity hubs (10) are served as static typed datasets with market caps, GFCI rankings, trading hours, and commodity specializations
 
 All edge functions include circuit breaker logic and return cached stale data when upstream APIs are unavailable, ensuring the dashboard never shows blank panels.
 
@@ -654,7 +709,7 @@ All edge functions include circuit breaker logic and return cached stale data wh
 
 ## Multi-Platform Architecture
 
-World Monitor runs on three platforms that work together:
+All three variants run on three platforms that work together:
 
 ```
 ┌─────────────────────────────────────┐
@@ -816,7 +871,7 @@ The AI summarization pipeline adds content-based deduplication: headlines are ha
 
 | Layer | Mechanism |
 |-------|-----------|
-| **CORS origin allowlist** | Only `worldmonitor.app`, `tech.worldmonitor.app`, and `localhost:*` can call API endpoints. All others receive 403. Implemented in `api/_cors.js`. |
+| **CORS origin allowlist** | Only `worldmonitor.app`, `tech.worldmonitor.app`, `finance.worldmonitor.app`, and `localhost:*` can call API endpoints. All others receive 403. Implemented in `api/_cors.js`. |
 | **RSS domain allowlist** | The RSS proxy only fetches from explicitly listed domains (~90+). Requests for unlisted domains are rejected with 403. |
 | **Railway domain allowlist** | The Railway relay has a separate, smaller domain allowlist for feeds that need the alternate origin. |
 | **API key isolation** | All API keys live server-side in Vercel environment variables. The browser never sees Groq, OpenRouter, ACLED, Finnhub, or other credentials. |
@@ -940,7 +995,8 @@ Set `WS_RELAY_URL` (server-side, HTTPS) and `VITE_WS_RELAY_URL` (client-side, WS
 | **Threat Intel APIs** | abuse.ch (Feodo Tracker, URLhaus), AlienVault OTX, AbuseIPDB, C2IntelFeeds |
 | **Economic APIs** | FRED (Federal Reserve), EIA (Energy), Finnhub (stock quotes) |
 | **Deployment** | Vercel Edge Functions (60+ endpoints) + Railway (WebSocket relay) + Tauri (desktop) + PWA (installable) |
-| **Data** | 100+ RSS feeds, ADS-B transponders, AIS maritime data, VIIRS satellite imagery, 8 live YouTube streams |
+| **Finance Data** | 92 stock exchanges, 19 financial centers, 13 central banks, 10 commodity hubs, 64 Gulf FDI investments |
+| **Data** | 150+ RSS feeds, ADS-B transponders, AIS maritime data, VIIRS satellite imagery, 8 live YouTube streams |
 
 ---
 
@@ -954,19 +1010,23 @@ Contributions welcome! See [CONTRIBUTING](./docs/DOCUMENTATION.md#contributing) 
 # Development
 npm run dev          # Full variant (worldmonitor.app)
 npm run dev:tech     # Tech variant (tech.worldmonitor.app)
+npm run dev:finance  # Finance variant (finance.worldmonitor.app)
 
 # Production builds
-npm run build:full   # Build full variant
-npm run build:tech   # Build tech variant
+npm run build:full      # Build full variant
+npm run build:tech      # Build tech variant
+npm run build:finance   # Build finance variant
 
 # Quality
 npm run typecheck    # TypeScript type checking
 
 # Desktop packaging
-npm run desktop:package:macos:full     # .app + .dmg (World Monitor)
-npm run desktop:package:macos:tech     # .app + .dmg (Tech Monitor)
-npm run desktop:package:windows:full   # .exe + .msi (World Monitor)
-npm run desktop:package:windows:tech   # .exe + .msi (Tech Monitor)
+npm run desktop:package:macos:full      # .app + .dmg (World Monitor)
+npm run desktop:package:macos:tech      # .app + .dmg (Tech Monitor)
+npm run desktop:package:macos:finance   # .app + .dmg (Finance Monitor)
+npm run desktop:package:windows:full    # .exe + .msi (World Monitor)
+npm run desktop:package:windows:tech    # .exe + .msi (Tech Monitor)
+npm run desktop:package:windows:finance # .exe + .msi (Finance Monitor)
 
 # Generic packaging runner
 npm run desktop:package -- --os macos --variant full
@@ -985,7 +1045,7 @@ Desktop release details, signing hooks, variant outputs, and clean-machine valid
 ## Roadmap
 
 - [x] 60+ API edge functions for programmatic access
-- [x] Dual-site variant system (geopolitical + tech)
+- [x] Tri-variant system (geopolitical + tech + finance)
 - [x] Market intelligence (macro signals, ETF flows, stablecoin peg monitoring)
 - [x] Railway relay for WebSocket and blocked-domain proxying
 - [x] CORS origin allowlist and security hardening
@@ -1007,6 +1067,11 @@ Desktop release details, signing hooks, variant outputs, and clean-machine valid
 - [x] Population exposure estimation (WorldPop density data)
 - [x] Country search in Cmd+K with direct brief navigation
 - [x] Entity index with cross-source correlation and confidence scoring
+- [x] Finance variant with 92 stock exchanges, 19 financial centers, 13 central banks, and commodity hubs
+- [x] Gulf FDI investment database (64 Saudi/UAE infrastructure investments mapped globally)
+- [x] AIS maritime chokepoint detection and vessel density grid
+- [x] Runtime feature toggles for 14 data sources
+- [x] Panel height resizing with persistent layout state
 - [ ] Mobile-optimized views
 - [ ] Push notifications for critical alerts
 - [ ] Self-hosted Docker image
@@ -1040,7 +1105,8 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 <p align="center">
   <a href="https://worldmonitor.app">worldmonitor.app</a> &nbsp;·&nbsp;
-  <a href="https://tech.worldmonitor.app">tech.worldmonitor.app</a>
+  <a href="https://tech.worldmonitor.app">tech.worldmonitor.app</a> &nbsp;·&nbsp;
+  <a href="https://finance.worldmonitor.app">finance.worldmonitor.app</a>
 </p>
 
 ## Star History

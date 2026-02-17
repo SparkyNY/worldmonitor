@@ -6,6 +6,11 @@ import { debugInjectTestEvents, debugGetCells, getCellCount } from '@/services/g
 import { initMetaTags } from '@/services/meta-tags';
 import { installRuntimeFetchPatch } from '@/services/runtime';
 import { loadDesktopSecrets } from '@/services/runtime-config';
+import { applyStoredTheme } from '@/utils/theme-manager';
+import { clearChunkReloadGuard, installChunkReloadGuard } from '@/bootstrap/chunk-reload';
+
+// Auto-reload on stale chunk 404s after deployment (Vite fires this for modulepreload failures).
+const chunkReloadStorageKey = installChunkReloadGuard(__APP_VERSION__);
 
 // Initialize Vercel Analytics
 inject();
@@ -17,8 +22,22 @@ initMetaTags();
 installRuntimeFetchPatch();
 void loadDesktopSecrets();
 
+// Apply stored theme preference before app initialization (safety net for inline script)
+applyStoredTheme();
+
+// Remove no-transition class after first paint to enable smooth theme transitions
+requestAnimationFrame(() => {
+  document.documentElement.classList.remove('no-transition');
+});
+
 const app = new App('app');
-app.init().catch(console.error);
+app
+  .init()
+  .then(() => {
+    // Clear the one-shot guard after a successful boot so future stale-chunk incidents can recover.
+    clearChunkReloadGuard(chunkReloadStorageKey);
+  })
+  .catch(console.error);
 
 // Debug helpers for geo-convergence testing (remove in production)
 (window as unknown as Record<string, unknown>).geoDebug = {

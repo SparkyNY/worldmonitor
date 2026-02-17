@@ -2,6 +2,54 @@
 
 All notable changes to World Monitor are documented here.
 
+## [2.3.8] - 2026-02-17
+
+### Added
+
+- **Finance variant**: Added a dedicated market-first variant (`finance.worldmonitor.app`) with finance/trading-focused feeds, panels, and map defaults
+- **Finance desktop profile**: Added finance-specific desktop config and build profile for Tauri packaging
+
+### Changed
+
+- **Variant feed loading**: `loadNews` now enumerates categories dynamically and stages category fetches with bounded concurrency across variants
+- **Feed resilience**: Replaced direct MarketWatch RSS usage in finance/full/tech paths with Google News-backed fallback queries
+- **Classification pressure controls**: Tightened AI classification budgets for tech/full and tuned per-feed caps to reduce startup burst pressure
+- **Timeline behavior**: Wired timeline filtering consistently across map and news panels
+- **AI summarization defaults**: Switched OpenRouter summarization to auto-routed free-tier model selection
+
+### Fixed
+
+- **Finance panel parity**: Kept data-rich panels while adding news panels for finance instead of removing core data surfaces
+- **Desktop finance map parity**: Finance variant now runs first-class Deck.GL map/layer behavior on desktop runtime
+- **Polymarket fallback**: Added one-time direct connectivity probe and memoized fallback to prevent repeated `ERR_CONNECTION_RESET` storms
+- **FRED fallback behavior**: Missing `FRED_API_KEY` now returns graceful empty payloads instead of repeated hard 500s
+- **Preview CSP tooling**: Allowed `https://vercel.live` script in CSP so Vercel preview feedback injection is not blocked
+- **Trending quality**: Suppressed noisy generic finance terms in keyword spike detection
+- **Mobile UX**: Hidden desktop download prompt on mobile devices
+
+## [2.3.7] - 2026-02-16
+
+### Added
+
+- **Full light mode theme**: Complete light/dark theme system with CSS custom properties, ThemeManager module, FOUC prevention, and `getCSSColor()` utility for theme-aware inline styles
+- **Theme-aware maps and charts**: Deck.GL basemap, overlay layers, and CountryTimeline charts respond to theme changes in real time
+- **Dark/light mode header toggle**: Sun/moon icon in the header bar for quick theme switching, replacing the duplicate UTC clock
+- **Desktop update checker**: Architecture-aware download links for macOS (ARM/Intel) and Windows
+- **Node.js bundled in Tauri installer**: Sidecar no longer requires system Node.js
+- **Markdown linting**: Added markdownlint config and CI workflow
+
+### Changed
+
+- **Panels modal**: Reverted from "Settings" back to "Panels" — removed redundant Appearance section now that header has theme toggle
+- **Default panels**: Enabled UCDP Conflict Events, UNHCR Displacement, Climate Anomalies, and Population Exposure panels by default
+
+### Fixed
+
+- **CORS for Tauri desktop**: Fixed CORS issues for desktop app requests
+- **Markets panel**: Keep Yahoo-backed data visible when Finnhub API key is skipped
+- **Windows UNC paths**: Preserve extended-length path prefix when sanitizing sidecar script path
+- **Light mode readability**: Darkened neon semantic colors and overlay backgrounds for light mode contrast
+
 ## [2.3.6] - 2026-02-16
 
 ### Fixed

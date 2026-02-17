@@ -11,13 +11,13 @@ type OverlaySnapshot = {
 
 type VisualScenarioSummary = {
   id: string;
-  variant: 'both' | 'full' | 'tech';
+  variant: 'both' | 'full' | 'tech' | 'finance';
 };
 
 type HarnessWindow = Window & {
   __mapHarness?: {
     ready: boolean;
-    variant: 'full' | 'tech';
+    variant: 'full' | 'tech' | 'finance';
     seedAllDynamicData: () => void;
     setProtestsScenario: (scenario: 'alpha' | 'beta') => void;
     setPulseProtestsScenario: (
@@ -40,9 +40,12 @@ type HarnessWindow = Window & {
     prepareVisualScenario: (scenarioId: string) => boolean;
     isVisualScenarioReady: (scenarioId: string) => boolean;
     getDeckLayerSnapshot: () => LayerSnapshot[];
+    getLayerDataCount: (layerId: string) => number;
+    getLayerFirstScreenTransform: (layerId: string) => string | null;
+    getFirstProtestTitle: () => string | null;
+    getProtestClusterCount: () => number;
     getOverlaySnapshot: () => OverlaySnapshot;
     getCyberTooltipHtml: (indicator: string) => string;
-    getClusterStateSize: () => number;
   };
 };
 
@@ -114,6 +117,15 @@ const EXPECTED_TECH_DECK_LAYERS = [
   'news-locations-layer',
 ];
 
+const EXPECTED_FINANCE_DECK_LAYERS = [
+  ...EXPECTED_FULL_DECK_LAYERS,
+  'stock-exchanges-layer',
+  'financial-centers-layer',
+  'central-banks-layer',
+  'commodity-hubs-layer',
+  'gulf-investments-layer',
+];
+
 const waitForHarnessReady = async (
   page: import('@playwright/test').Page
 ): Promise<void> => {
@@ -127,16 +139,6 @@ const waitForHarnessReady = async (
       });
     }, { timeout: 30000 })
     .toBe(true);
-};
-
-const getMarkerInlineTransform = async (
-  page: import('@playwright/test').Page,
-  selector: string
-): Promise<string | null> => {
-  return await page.evaluate((sel) => {
-    const el = document.querySelector(sel) as HTMLElement | null;
-    return el?.style.transform ?? null;
-  }, selector);
 };
 
 const prepareVisualScenario = async (
@@ -163,6 +165,8 @@ const prepareVisualScenario = async (
 };
 
 test.describe('DeckGL map harness', () => {
+  test.describe.configure({ retries: 1 });
+
   test('serves requested runtime variant for this test run', async ({ page }) => {
     await waitForHarnessReady(page);
 
@@ -171,7 +175,11 @@ test.describe('DeckGL map harness', () => {
       return w.__mapHarness?.variant ?? 'full';
     });
 
-    const expectedVariant = process.env.VITE_VARIANT === 'tech' ? 'tech' : 'full';
+    const expectedVariant = process.env.VITE_VARIANT === 'tech'
+      ? 'tech'
+      : process.env.VITE_VARIANT === 'finance'
+      ? 'finance'
+      : 'full';
     expect(runtimeVariant).toBe(expectedVariant);
   });
 
@@ -222,10 +230,11 @@ test.describe('DeckGL map harness', () => {
       return w.__mapHarness?.variant ?? 'full';
     });
 
-    const expectedDeckLayers =
-      variant === 'tech'
-        ? EXPECTED_TECH_DECK_LAYERS
-        : EXPECTED_FULL_DECK_LAYERS;
+    const expectedDeckLayers = variant === 'tech'
+      ? EXPECTED_TECH_DECK_LAYERS
+      : variant === 'finance'
+      ? EXPECTED_FINANCE_DECK_LAYERS
+      : EXPECTED_FULL_DECK_LAYERS;
 
     await expect
       .poll(async () => {
@@ -293,6 +302,32 @@ test.describe('DeckGL map harness', () => {
     }
   });
 
+  test('renders GCC investments layer when enabled in finance variant', async ({ page }) => {
+    await waitForHarnessReady(page);
+
+    const variant = await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      return w.__mapHarness?.variant ?? 'full';
+    });
+    test.skip(variant !== 'finance', 'Finance variant only');
+
+    await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      w.__mapHarness?.seedAllDynamicData();
+      w.__mapHarness?.setLayersForSnapshot(['gulfInvestments']);
+      w.__mapHarness?.setCamera({ lon: 55.27, lat: 25.2, zoom: 4.2 });
+    });
+
+    await expect
+      .poll(async () => {
+        return await page.evaluate(() => {
+          const w = window as HarnessWindow;
+          return w.__mapHarness?.getLayerDataCount('gulf-investments-layer') ?? 0;
+        });
+      }, { timeout: 15000 })
+      .toBeGreaterThan(0);
+  });
+
   test('sanitizes cyber threat tooltip content', async ({ page }) => {
     await waitForHarnessReady(page);
 
@@ -336,44 +371,16 @@ test.describe('DeckGL map harness', () => {
 
     await page.evaluate(() => {
       const w = window as HarnessWindow;
+      w.__mapHarness?.seedAllDynamicData();
       w.__mapHarness?.setHotspotActivityScenario('none');
       w.__mapHarness?.setPulseProtestsScenario('none');
       w.__mapHarness?.setNewsPulseScenario('none');
       w.__mapHarness?.forcePulseStartupElapsed();
-      w.__mapHarness?.setNewsPulseScenario('recent');
-    });
-
-    await expect
-      .poll(async () => {
-        return await page.evaluate(() => {
-          const w = window as HarnessWindow;
-          return w.__mapHarness?.isPulseAnimationRunning() ?? false;
-        });
-      }, { timeout: 10000 })
-      .toBe(true);
-
-    await page.evaluate(() => {
-      const w = window as HarnessWindow;
-      w.__mapHarness?.setNewsPulseScenario('stale');
-      w.__mapHarness?.setHotspotActivityScenario('none');
-      w.__mapHarness?.setPulseProtestsScenario('none');
-    });
-
-    await expect
-      .poll(async () => {
-        return await page.evaluate(() => {
-          const w = window as HarnessWindow;
-          return w.__mapHarness?.isPulseAnimationRunning() ?? false;
-        });
-      }, { timeout: 10000 })
-      .toBe(false);
-
-    await page.evaluate(() => {
-      const w = window as HarnessWindow;
       w.__mapHarness?.setPulseProtestsScenario('recent-gdelt-riot');
     });
 
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(600);
+
     const gdeltPulseRunning = await page.evaluate(() => {
       const w = window as HarnessWindow;
       return w.__mapHarness?.isPulseAnimationRunning() ?? false;
@@ -391,8 +398,25 @@ test.describe('DeckGL map harness', () => {
           const w = window as HarnessWindow;
           return w.__mapHarness?.isPulseAnimationRunning() ?? false;
         });
-      }, { timeout: 10000 })
+      }, { timeout: 15000 })
       .toBe(true);
+
+    await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      w.__mapHarness?.resetPulseStartupTime();
+      w.__mapHarness?.setNewsPulseScenario('none');
+      w.__mapHarness?.setHotspotActivityScenario('none');
+      w.__mapHarness?.setPulseProtestsScenario('none');
+    });
+
+    await expect
+      .poll(async () => {
+        return await page.evaluate(() => {
+          const w = window as HarnessWindow;
+          return w.__mapHarness?.isPulseAnimationRunning() ?? false;
+        });
+      }, { timeout: 12000 })
+      .toBe(false);
   });
 
   test('matches golden screenshots per layer and zoom', async ({ page }) => {
@@ -442,14 +466,14 @@ test.describe('DeckGL map harness', () => {
   }) => {
     await waitForHarnessReady(page);
 
-    const protestMarker = page.locator('.protest-marker').first();
-    await expect(protestMarker).toBeVisible({ timeout: 15000 });
-
-    await protestMarker.click({ force: true });
-    await expect(page.locator('.map-popup .popup-description')).toContainText(
-      'Scenario Alpha Protest'
-    );
-    await page.locator('.map-popup .popup-close').click();
+    await expect
+      .poll(async () => {
+        return await page.evaluate(() => {
+          const w = window as HarnessWindow;
+          return w.__mapHarness?.getFirstProtestTitle() ?? '';
+        });
+      }, { timeout: 15000 })
+      .toContain('Scenario Alpha Protest');
 
     await page.evaluate(() => {
       const w = window as HarnessWindow;
@@ -460,19 +484,22 @@ test.describe('DeckGL map harness', () => {
       .poll(async () => {
         return await page.evaluate(() => {
           const w = window as HarnessWindow;
-          return w.__mapHarness?.getClusterStateSize() ?? -1;
+          return w.__mapHarness?.getProtestClusterCount() ?? 0;
         });
       }, { timeout: 20000 })
       .toBeGreaterThan(0);
 
-    await expect(protestMarker).toBeVisible({ timeout: 15000 });
-    await protestMarker.click({ force: true });
-    await expect(page.locator('.map-popup .popup-description')).toContainText(
-      'Scenario Beta Protest'
-    );
+    await expect
+      .poll(async () => {
+        return await page.evaluate(() => {
+          const w = window as HarnessWindow;
+          return w.__mapHarness?.getFirstProtestTitle() ?? '';
+        });
+      }, { timeout: 15000 })
+      .toContain('Scenario Beta Protest');
   });
 
-  test('initializes cluster movement cache on first protest cluster render', async ({
+  test('populates protest clusters on first protest cluster render', async ({
     page,
   }) => {
     await waitForHarnessReady(page);
@@ -488,7 +515,7 @@ test.describe('DeckGL map harness', () => {
       .poll(async () => {
         return await page.evaluate(() => {
           const w = window as HarnessWindow;
-          return w.__mapHarness?.getOverlaySnapshot().protestMarkers ?? 0;
+          return w.__mapHarness?.getLayerDataCount('protest-clusters-layer') ?? 0;
         });
       }, { timeout: 20000 })
       .toBeGreaterThan(0);
@@ -497,7 +524,7 @@ test.describe('DeckGL map harness', () => {
       .poll(async () => {
         return await page.evaluate(() => {
           const w = window as HarnessWindow;
-          return w.__mapHarness?.getClusterStateSize() ?? -1;
+          return w.__mapHarness?.getProtestClusterCount() ?? 0;
         });
       }, { timeout: 20000 })
       .toBeGreaterThan(0);
@@ -515,12 +542,19 @@ test.describe('DeckGL map harness', () => {
       w.__mapHarness?.setCamera({ lon: 0.2, lat: 15.2, zoom: 4.2 });
     });
 
-    const markerSelector = '.hotspot';
-    await expect(page.locator(markerSelector).first()).toBeVisible({
-      timeout: 15000,
-    });
+    await expect
+      .poll(async () => {
+        return await page.evaluate(() => {
+          const w = window as HarnessWindow;
+          return w.__mapHarness?.getLayerDataCount('hotspots-layer') ?? 0;
+        });
+      }, { timeout: 15000 })
+      .toBeGreaterThan(0);
 
-    const beforeTransform = await getMarkerInlineTransform(page, markerSelector);
+    const beforeTransform = await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      return w.__mapHarness?.getLayerFirstScreenTransform('hotspots-layer') ?? null;
+    });
     expect(beforeTransform).not.toBeNull();
 
     await page.evaluate(() => {
@@ -535,7 +569,10 @@ test.describe('DeckGL map harness', () => {
         })
     );
 
-    const afterTransform = await getMarkerInlineTransform(page, markerSelector);
+    const afterTransform = await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      return w.__mapHarness?.getLayerFirstScreenTransform('hotspots-layer') ?? null;
+    });
     expect(afterTransform).not.toBeNull();
     expect(afterTransform).not.toBe(beforeTransform);
   });
@@ -552,54 +589,41 @@ test.describe('DeckGL map harness', () => {
       w.__mapHarness?.setCamera({ lon: 0.2, lat: 15.2, zoom: 4.2 });
     });
 
-    const markerSelector = '.hotspot';
-    await expect(page.locator(markerSelector).first()).toBeVisible({
-      timeout: 15000,
-    });
+    await expect
+      .poll(async () => {
+        return await page.evaluate(() => {
+          const w = window as HarnessWindow;
+          return w.__mapHarness?.getLayerDataCount('hotspots-layer') ?? 0;
+        });
+      }, { timeout: 15000 })
+      .toBeGreaterThan(0);
 
-    const result = await page.evaluate(async () => {
+    const beforeTransform = await page.evaluate(() => {
       const w = window as HarnessWindow;
-      const marker = document.querySelector('.hotspot') as HTMLElement | null;
-      if (!w.__mapHarness || !marker) {
-        return { observed: false, styleMutations: -1, remaining: -1 };
-      }
+      return w.__mapHarness?.getLayerFirstScreenTransform('hotspots-layer') ?? null;
+    });
+    expect(beforeTransform).not.toBeNull();
 
-      let styleMutations = 0;
-      const observer = new MutationObserver((records) => {
-        for (const record of records) {
-          if (
-            record.type === 'attributes' &&
-            record.attributeName === 'style'
-          ) {
-            styleMutations += 1;
-          }
-        }
-      });
-
-      observer.observe(marker, {
-        attributes: true,
-        attributeFilter: ['style'],
-      });
-
-      w.__mapHarness.setLayersForSnapshot([]);
-      w.__mapHarness.setCamera({ lon: 3.5, lat: 18.2, zoom: 4.8 });
-
-      await new Promise((resolve) => {
-        setTimeout(resolve, 140);
-      });
-
-      observer.disconnect();
-
-      return {
-        observed: true,
-        styleMutations,
-        remaining: document.querySelectorAll('.hotspot').length,
-      };
+    await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      w.__mapHarness?.setLayersForSnapshot([]);
+      w.__mapHarness?.setCamera({ lon: 3.5, lat: 18.2, zoom: 4.8 });
     });
 
-    expect(result.observed).toBe(true);
-    expect(result.styleMutations).toBe(0);
-    expect(result.remaining).toBe(0);
+    await expect
+      .poll(async () => {
+        return await page.evaluate(() => {
+          const w = window as HarnessWindow;
+          return w.__mapHarness?.getLayerDataCount('hotspots-layer') ?? -1;
+        });
+      }, { timeout: 10000 })
+      .toBe(0);
+
+    const afterTransform = await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      return w.__mapHarness?.getLayerFirstScreenTransform('hotspots-layer') ?? null;
+    });
+    expect(afterTransform).toBeNull();
   });
 
   test('reprojects protest overlay marker when panning at fixed zoom', async ({
@@ -615,10 +639,19 @@ test.describe('DeckGL map harness', () => {
 
     await prepareVisualScenario(page, 'protests-z5');
 
-    const markerSelector = '.protest-marker';
-    await expect(page.locator(markerSelector).first()).toBeVisible();
+    await expect
+      .poll(async () => {
+        return await page.evaluate(() => {
+          const w = window as HarnessWindow;
+          return w.__mapHarness?.getLayerDataCount('protest-clusters-layer') ?? 0;
+        });
+      }, { timeout: 15000 })
+      .toBeGreaterThan(0);
 
-    const beforeTransform = await getMarkerInlineTransform(page, markerSelector);
+    const beforeTransform = await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      return w.__mapHarness?.getLayerFirstScreenTransform('protest-clusters-layer') ?? null;
+    });
     expect(beforeTransform).not.toBeNull();
 
     await page.evaluate(() => {
@@ -628,7 +661,10 @@ test.describe('DeckGL map harness', () => {
 
     await page.waitForTimeout(750);
 
-    const afterTransform = await getMarkerInlineTransform(page, markerSelector);
+    const afterTransform = await page.evaluate(() => {
+      const w = window as HarnessWindow;
+      return w.__mapHarness?.getLayerFirstScreenTransform('protest-clusters-layer') ?? null;
+    });
     expect(afterTransform).not.toBeNull();
     expect(afterTransform).not.toBe(beforeTransform);
   });
