@@ -2,6 +2,7 @@ import type { CorrelationSignal } from './correlation';
 import { mlWorker } from './ml-worker';
 import { generateSummary } from './summarization';
 import { SUPPRESSED_TRENDING_TERMS, escapeRegex, generateSignalId, tokenize } from '@/utils/analysis-constants';
+import { t } from '@/services/i18n';
 
 export interface TrendingHeadlineInput {
   title: string;
@@ -536,7 +537,7 @@ async function handleSpike(spike: TrendingSpike, config: TrendingConfig): Promis
     pushSignal({
       id: generateSignalId(),
       type: 'keyword_spike',
-      title: `"${spike.term}" Trending - ${spike.count} mentions in ${windowHours}h`,
+      title: t('alerts.trending', { term: spike.term, count: spike.count, hours: windowHours }),
       description,
       confidence,
       timestamp: new Date(),

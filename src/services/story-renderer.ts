@@ -1,5 +1,5 @@
 import type { StoryData } from './story-data';
-import { getLocale } from './i18n';
+import { getLocale, t } from './i18n';
 
 const W = 1080;
 const H = 1920;
@@ -161,10 +161,10 @@ export async function renderStoryToCanvas(data: StoryData): Promise<HTMLCanvasEl
   if (data.cii?.components) {
     y += 44;
     const comps = [
-      { label: 'UNREST', val: data.cii.components.unrest, color: '#f97316' },
-      { label: 'CONFLICT', val: data.cii.components.conflict, color: '#dc2626' },
-      { label: 'SECURITY', val: data.cii.components.security, color: '#ef4444' },
-      { label: 'INFORMATION', val: data.cii.components.information, color: '#8b5cf6' },
+      { label: t('common.unrest').toUpperCase(), val: data.cii.components.unrest, color: '#f97316' },
+      { label: t('common.conflict').toUpperCase(), val: data.cii.components.conflict, color: '#dc2626' },
+      { label: t('common.security').toUpperCase(), val: data.cii.components.security, color: '#ef4444' },
+      { label: t('common.information').toUpperCase(), val: data.cii.components.information, color: '#8b5cf6' },
     ];
     const compBarW = (barW - 24) / 3;
     for (const comp of comps) {

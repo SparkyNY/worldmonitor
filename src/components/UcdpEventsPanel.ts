@@ -36,9 +36,9 @@ export class UcdpEventsPanel extends Panel {
   private renderContent(): void {
     const filtered = this.events.filter(e => e.type_of_violence === this.activeTab);
     const tabs: { key: UcdpEventType; label: string }[] = [
-      { key: 'state-based', label: 'State-Based' },
-      { key: 'non-state', label: 'Non-State' },
-      { key: 'one-sided', label: 'One-Sided' },
+      { key: 'state-based', label: t('components.ucdpEvents.stateBased') },
+      { key: 'non-state', label: t('components.ucdpEvents.nonState') },
+      { key: 'one-sided', label: t('components.ucdpEvents.oneSided') },
     ];
 
     const tabCounts: Record<UcdpEventType, number> = {
@@ -83,10 +83,10 @@ export class UcdpEventsPanel extends Panel {
         <table class="ucdp-table">
           <thead>
             <tr>
-              <th>Country</th>
-              <th>Deaths</th>
-              <th>Date</th>
-              <th>Actors</th>
+              <th>${t('components.ucdpEvents.country')}</th>
+              <th>${t('components.ucdpEvents.deaths')}</th>
+              <th>${t('components.ucdpEvents.date')}</th>
+              <th>${t('components.ucdpEvents.actors')}</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -94,14 +94,14 @@ export class UcdpEventsPanel extends Panel {
     }
 
     const moreHtml = filtered.length > 50
-      ? `<div class="panel-more">${filtered.length - 50} more events not shown</div>`
+      ? `<div class="panel-more">${t('components.ucdpEvents.moreNotShown', { count: filtered.length - 50 })}</div>`
       : '';
 
     this.setContent(`
       <div class="ucdp-panel-content">
         <div class="ucdp-header">
           <div class="ucdp-tabs">${tabsHtml}</div>
-          ${totalDeaths > 0 ? `<span class="ucdp-total-deaths">${totalDeaths.toLocaleString()} deaths</span>` : ''}
+          ${totalDeaths > 0 ? `<span class="ucdp-total-deaths">${t('components.ucdpEvents.deathsCount', { count: totalDeaths.toLocaleString() })}</span>` : ''}
         </div>
         ${bodyHtml}
         ${moreHtml}

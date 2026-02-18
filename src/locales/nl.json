@@ -320,6 +320,24 @@
       "zoomIn": "Inzoomen",
       "zoomOut": "Uitzoomen",
       "resetView": "Weergave opnieuw instellen",
+      "legend": {
+        "title": "LEGENDA",
+        "startupHub": "Startup-hub",
+        "techHQ": "Tech-hoofdkantoor",
+        "accelerator": "Accelerator",
+        "cloudRegion": "Cloudregio",
+        "datacenter": "Datacentrum",
+        "stockExchange": "Effectenbeurs",
+        "financialCenter": "Financieel centrum",
+        "centralBank": "Centrale bank",
+        "commodityHub": "Grondstoffenhub",
+        "waterway": "Waterweg",
+        "highAlert": "Hoog alarm",
+        "elevated": "Verhoogd",
+        "monitoring": "Bewaking",
+        "base": "Basis",
+        "nuclear": "Nucleair"
+      },
       "timeAll": "Alle",
       "layers": {
         "startupHubs": "Opstarthubs",
@@ -480,6 +498,20 @@
       "exportData": "Gegevens exporteren",
       "sourceRef": "Bron [{{n}}]"
     },
+    "relatedAssets": {
+      "pipeline": "Pijpleiding",
+      "cable": "Kabel",
+      "datacenter": "Datacentrum",
+      "base": "Basis",
+      "nuclear": "Nucleair"
+    },
+    "threatLabels": {
+      "critical": "KRIT",
+      "high": "HOOG",
+      "medium": "MID",
+      "low": "LAAG",
+      "info": "INFO"
+    },
     "pizzint": {
       "title": "Pentagon Pizza-index",
       "tensionsTitle": "Geopolitieke spanningen",
@@ -503,7 +535,19 @@
         "5": "FADE OUT - LAAGSTE KLAARHEID"
       }
     },
+    "stablecoins": {
+      "pegHealth": "Peg-gezondheid",
+      "supplyVolume": "Aanbod & volume",
+      "unavailable": "Stablecoin-gegevens tijdelijk niet beschikbaar",
+      "token": "Token",
+      "mcap": "Marktk.",
+      "vol24h": "24u Vol",
+      "chg24h": "24u Wijz"
+    },
     "status": {
+      "dataFeeds": "Gegevensfeeds",
+      "apiStatus": "API-status",
+      "storage": "Opslag",
       "systemStatus": "Systeemstatus",
       "updatedJustNow": "Zojuist bijgewerkt",
       "updatedAt": "Bijgewerkt {{time}}",
@@ -682,6 +726,15 @@
       "infoTooltip": "<strong>Voorspellingsmarkten</strong> Voorspellingsmarkten voor echt geld:<ul><li>Prijzen weerspiegelen schattingen van de waarschijnlijkheid van het publiek</li><li>Hoger volume = betrouwbaarder signaal</li><li>Focus op geopolitieke en actuele gebeurtenissen</li></ul>Bron: Polymarket (polymarket.com)"
     },
     "ucdpEvents": {
+      "stateBased": "Staatsgebonden",
+      "nonState": "Niet-statelijk",
+      "oneSided": "Eenzijdig",
+      "country": "Land",
+      "deaths": "Doden",
+      "date": "Datum",
+      "actors": "Actoren",
+      "deathsCount": "{{count}} doden",
+      "moreNotShown": "{{count}} meer gebeurtenissen niet getoond",
       "infoTooltip": "<strong>UCDP-gegeorefereerde gebeurtenissen</strong> Conflictgegevens op gebeurtenisniveau van de universiteit van Uppsala.<ul><li><strong>State-based</strong>: regering versus rebellengroep</li><li><strong>Niet-statelijke </strong>: gewapende groep versus gewapende groep groep</li><li><strong>Eenzijdig</strong>: Geweld tegen burgers</li></ul>Doden weergegeven als beste schatting (laag-hoog bereik). ACLED-duplicaten worden automatisch uitgefilterd.",
       "noEvents": "Geen gebeurtenissen in deze categorie"
     },
@@ -1188,6 +1241,127 @@
       "uae_ecsr": "VAE/ECSR",
       "venezuela_crisis": "Venezuela-crisis",
       "yemen_houthis": "Jemen/Houthi's"
+    }
+  },
+  "signals": {
+    "context": {
+      "prediction_leads_news": {
+        "whyItMatters": "Voorspellingsmarkten prijzen informatie vaak in voordat het nieuws wordt -- handelaren hebben mogelijk vroege toegang tot ontwikkelingen.",
+        "actionableInsight": "Monitor op breaking news in de komende 1-6 uur die de marktbeweging kan verklaren.",
+        "confidenceNote": "Hogere betrouwbaarheid als meerdere voorspellingsmarkten in dezelfde richting bewegen."
+      },
+      "news_leads_markets": {
+        "whyItMatters": "Nieuws breekt sneller dan markten reageren -- mogelijk verkeerde prijsstelling.",
+        "actionableInsight": "Let op marktherstel naarmate algoritmen en handelaren het nieuws verwerken.",
+        "confidenceNote": "Sterker signaal als het nieuws van Tier 1-persbureaus komt."
+      },
+      "silent_divergence": {
+        "whyItMatters": "Markt beweegt significant zonder identificeerbare nieuwskatalysator -- mogelijke voorkennis, algoritmische handel of ongerapporteerde ontwikkeling.",
+        "actionableInsight": "Onderzoek alternatieve gegevensbronnen; nieuws kan later verschijnen dat de beweging verklaart.",
+        "confidenceNote": "Lagere betrouwbaarheid omdat de oorzaak onbekend is -- behandel als vroegtijdige waarschuwing, niet als bevestigde inlichtingen."
+      },
+      "velocity_spike": {
+        "whyItMatters": "Een verhaal versnelt over meerdere nieuwsbronnen -- wijst op groeiende betekenis en potentieel voor markt-/beleidsimpact.",
+        "actionableInsight": "Dit onderwerp verdient onmiddellijke aandacht; verwacht officiele verklaringen of marktreacties.",
+        "confidenceNote": "Hogere betrouwbaarheid met meer bronnen; controleer of Tier 1-bronnen erbij zijn."
+      },
+      "keyword_spike": {
+        "whyItMatters": "Een term verschijnt met significant hogere frequentie dan de basislijn over meerdere bronnen, wat wijst op een zich ontwikkelend verhaal.",
+        "actionableInsight": "Bekijk gerelateerde koppen en AI-samenvatting en correleer met landeninstabiliteit en marktbewegingen.",
+        "confidenceNote": "Betrouwbaarheid neemt toe met sterkere basislijnvermenigvuldiger en bredere brondiversiteit."
+      },
+      "convergence": {
+        "whyItMatters": "Meerdere onafhankelijke brontypes bevestigen dezelfde gebeurtenis -- kruisvalidatie verhoogt de kans op nauwkeurigheid.",
+        "actionableInsight": "Behandel dit als hoge-betrouwbaarheidsinlichtingen; triangulatie vermindert het risico op vals-positieven.",
+        "confidenceNote": "Zeer hoge betrouwbaarheid wanneer persagentschap + overheid + inlichtingenbronnen overeenstemmen."
+      },
+      "triangulation": {
+        "whyItMatters": "De \"autoriteitendriehoek\" (persbureaus, overheidsbronnen, inlichtingenspecialisten) zijn in lijn -- dit is de gouden standaard voor bevestiging van breaking news.",
+        "actionableInsight": "Dit zijn bruikbare inlichtingen; verwacht binnenkort markt-/beleidsreacties.",
+        "confidenceNote": "Hoogste betrouwbaarheidssignaal in het systeem -- meerdere gezaghebbende bronnen zijn het eens."
+      },
+      "flow_drop": {
+        "whyItMatters": "Fysieke grondstofstroomverstoring gedetecteerd -- aanbodbeperking gaat vaak vooraf aan prijspieken.",
+        "actionableInsight": "Monitor grondstofprijzen voor energie; beoordeel blootstelling aan toeleveringsketen.",
+        "confidenceNote": "Betrouwbaarheid hangt af van de duur van de verstoring en beschikbaarheid van alternatief aanbod."
+      },
+      "flow_price_divergence": {
+        "whyItMatters": "Nieuws over aanbodverstoring is nog niet weerspiegeld in grondstofprijzen -- mogelijke informatievoorsprong.",
+        "actionableInsight": "Ofwel reageren markten traag, ofwel is de verstoring minder significant dan gemeld.",
+        "confidenceNote": "Gemiddelde betrouwbaarheid -- markten hebben mogelijk betere informatie dan nieuwsberichten."
+      },
+      "geo_convergence": {
+        "whyItMatters": "Meerdere nieuwsgebeurtenissen clusteren rond dezelfde geografische locatie -- mogelijke escalatie of gecoordineerde activiteit.",
+        "actionableInsight": "Verhoog de monitoringprioriteit voor deze regio; correleer met satelliet-/AIS-gegevens indien beschikbaar.",
+        "confidenceNote": "Hogere betrouwbaarheid als gebeurtenissen meerdere brontypes en tijdsperioden bestrijken."
+      },
+      "explained_market_move": {
+        "whyItMatters": "Marktbeweging heeft duidelijke nieuwskatalysator -- geen mysterie, prijsactie weerspiegelt bekende informatie.",
+        "actionableInsight": "Begrijp het narratief achter de beweging; beoordeel of de reactie proportioneel is.",
+        "confidenceNote": "Hoge betrouwbaarheid -- nieuws en prijsactie zijn gecorreleerd."
+      },
+      "hotspot_escalation": {
+        "whyItMatters": "Geopolitieke hotspot toont significante escalatie op basis van nieuwsactiviteit, landeninstabiliteit, geografische convergentie en militaire aanwezigheid.",
+        "actionableInsight": "Verhoog de monitoringprioriteit; beoordeel downstream-effecten op infrastructuur, markten en regionale stabiliteit.",
+        "confidenceNote": "Betrouwbaarheid gewogen naar meerdere gegevensbronnen -- nieuws (35%), landeninstabiliteit (25%), geo-convergentie (25%), militaire activiteit (15%)."
+      },
+      "sector_cascade": {
+        "whyItMatters": "Marktbeweging cascadeert over gerelateerde sectoren -- wijst op systemische reactie op een katalyserende gebeurtenis.",
+        "actionableInsight": "Identificeer de primaire katalysator; beoordeel blootstelling over gecorreleerde activa.",
+        "confidenceNote": "Hogere betrouwbaarheid wanneer meerdere sectoren bewegen met vergelijkbare snelheid en richting."
+      },
+      "military_surge": {
+        "whyItMatters": "Militaire transportactiviteit significant boven de basislijn -- wijst op mogelijke inzet, humanitaire operatie of machtprojectie.",
+        "actionableInsight": "Correleer met regionaal nieuws; beoordeel nabijgelegen basisactiviteit en marinebewegingen.",
+        "confidenceNote": "Hogere betrouwbaarheid bij aanhoudende activiteit over meerdere uren en diverse vliegtuigtypes."
+      },
+      "fallback": {
+        "whyItMatters": "Signaal gedetecteerd.",
+        "actionableInsight": "Monitor op ontwikkelingen.",
+        "confidenceNote": "Standaard betrouwbaarheid."
+      }
+    }
+  },
+  "alerts": {
+    "instabilityRising": "{{country}} Instabiliteit stijgt",
+    "instabilityFalling": "{{country}} Instabiliteit daalt",
+    "indexRose": "Instabiliteitsindex steeg van {{from}} naar {{to}} ({{change}}). Oorzaak: {{driver}}",
+    "indexFell": "Instabiliteitsindex daalde van {{from}} naar {{to}} ({{change}}). Oorzaak: {{driver}}",
+    "geoAlert": "Geografisch alarm: {{location}}",
+    "cascadeAlert": "Infrastructuur-cascadealarm",
+    "infraAlert": "Infrastructuuralarm: {{name}}",
+    "countriesAffected": "{{count}} landen getroffen, hoogste impact: {{impact}}",
+    "alert": "Alarm: {{location}}",
+    "multipleRegions": "Meerdere regio's",
+    "trending": "\"{{term}}\" trending - {{count}} vermeldingen in {{hours}}u",
+    "eventsDetected": "{{count}} gebeurtenissen gedetecteerd in regio ({{lat}}°, {{lon}}°)"
+  },
+  "intel": {
+    "topics": {
+      "military": {
+        "name": "Militaire activiteit",
+        "description": "Militaire oefeningen, inzet en operaties"
+      },
+      "cyber": {
+        "name": "Cyberdreigingen",
+        "description": "Cyberaanvallen, ransomware en digitale dreigingen"
+      },
+      "nuclear": {
+        "name": "Nucleair",
+        "description": "Nucleaire programma's, IAEA-inspecties, proliferatie"
+      },
+      "sanctions": {
+        "name": "Sancties",
+        "description": "Economische sancties en handelsbeperkingen"
+      },
+      "intelligence": {
+        "name": "Inlichtingen",
+        "description": "Spionage, inlichtingenoperaties, surveillance"
+      },
+      "maritime": {
+        "name": "Maritieme veiligheid",
+        "description": "Marine-operaties, maritieme knelpunten, zeeroutes"
+      }
     }
   },
   "common": {

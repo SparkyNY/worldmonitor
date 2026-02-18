@@ -320,6 +320,24 @@
       "zoomIn": "Zooma in",
       "zoomOut": "Zooma ut",
       "resetView": "Återställ vy",
+      "legend": {
+        "title": "TECKENFÖRKLARING",
+        "startupHub": "Startup-hubb",
+        "techHQ": "Teknikhuvudkontor",
+        "accelerator": "Accelerator",
+        "cloudRegion": "Molnregion",
+        "datacenter": "Datacenter",
+        "stockExchange": "Börs",
+        "financialCenter": "Finanscentrum",
+        "centralBank": "Centralbank",
+        "commodityHub": "Råvaruhubb",
+        "waterway": "Vattenväg",
+        "highAlert": "Höglarm",
+        "elevated": "Förhöjd",
+        "monitoring": "Övervakning",
+        "base": "Bas",
+        "nuclear": "Kärnteknisk"
+      },
       "timeAll": "Alla",
       "layers": {
         "startupHubs": "Startup Hubs",
@@ -480,6 +498,20 @@
       "exportData": "Exportera data",
       "sourceRef": "Källa [{{n}}]"
     },
+    "relatedAssets": {
+      "pipeline": "Rörledning",
+      "cable": "Kabel",
+      "datacenter": "Datacenter",
+      "base": "Bas",
+      "nuclear": "Kärnteknisk"
+    },
+    "threatLabels": {
+      "critical": "KRIT",
+      "high": "HÖG",
+      "medium": "MED",
+      "low": "LÅG",
+      "info": "INFO"
+    },
     "pizzint": {
       "title": "Pentagon Pizza Index",
       "tensionsTitle": "Geopolitiska spänningar",
@@ -503,7 +535,19 @@
         "5": "FADE OUT - LÄGSTA BEREDSKAP"
       }
     },
+    "stablecoins": {
+      "pegHealth": "Peg-hälsa",
+      "supplyVolume": "Utbud & volym",
+      "unavailable": "Stablecoin-data tillfälligt otillgänglig",
+      "token": "Token",
+      "mcap": "Börsv.",
+      "vol24h": "24h Vol",
+      "chg24h": "24h Ändr"
+    },
     "status": {
+      "dataFeeds": "Dataflöden",
+      "apiStatus": "API-status",
+      "storage": "Lagring",
       "systemStatus": "Systemstatus",
       "updatedJustNow": "Uppdaterade nyss",
       "updatedAt": "Uppdaterad {{time}}",
@@ -682,6 +726,15 @@
       "infoTooltip": "<strong>Prognosmarknader</strong> Marknader för prognoser för riktiga pengar:<ul><li>Priserna återspeglar sannolikhetsuppskattningar av publiken</li><li>Högre volym = mer tillförlitlig signal</li><li>Geopolitiska och aktuella händelser fokus</li></ul>marknad:Polymarket.com)"
     },
     "ucdpEvents": {
+      "stateBased": "Statsbaserad",
+      "nonState": "Icke-statlig",
+      "oneSided": "Ensidig",
+      "country": "Land",
+      "deaths": "Dödsfall",
+      "date": "Datum",
+      "actors": "Aktörer",
+      "deathsCount": "{{count}} dödsfall",
+      "moreNotShown": "{{count}} fler händelser visas inte",
       "infoTooltip": "<strong>UCDP Georefererade händelser</strong> Konfliktdata på händelsenivå från Uppsala universitet.<ul>PH_3__<strong>Statsbaserad</strong>: Regering vs rebellgrupp</li><li><strong>Icke-statlig</strong>: Beväpnad grupp vs beväpnad group</li><li><strong>Ensidig</strong>: Våld mot civila</li></ul>Dödsfall visas som bästa uppskattning (lågt högt intervall). ACLED-dubbletter filtreras bort automatiskt.",
       "noEvents": "Inga händelser i denna kategori"
     },
@@ -1188,6 +1241,127 @@
       "uae_ecsr": "UAE/ECSR",
       "venezuela_crisis": "Venezuela kris",
       "yemen_houthis": "Jemen/houthier"
+    }
+  },
+  "signals": {
+    "context": {
+      "prediction_leads_news": {
+        "whyItMatters": "Prognosmarknader prisar ofta in information innan det blir nyheter -- handlare kan ha tidig tillgang till utvecklingen.",
+        "actionableInsight": "Bevaka breaking news de narmaste 1-6 timmarna som kan forklara marknadsrorelsen.",
+        "confidenceNote": "Hogre tillforlitlighet om flera prognosmarknader ror sig i samma riktning."
+      },
+      "news_leads_markets": {
+        "whyItMatters": "Nyheter bryter snabbare an marknaderna reagerar -- potentiell felprisattning.",
+        "actionableInsight": "Bevaka marknadens inhämtning nar algoritmer och handlare smälter nyheterna.",
+        "confidenceNote": "Starkare signal om nyheterna kommer fran Tier 1-nyhetsbyraer."
+      },
+      "silent_divergence": {
+        "whyItMatters": "Marknaden ror sig markant utan identifierbar nyhetskatalysator -- mojlig insiderkunskap, algoritmisk handel eller orapporterad utveckling.",
+        "actionableInsight": "Undersok alternativa datakallor; nyheter kan dyka upp senare som forklarar rorelsen.",
+        "confidenceNote": "Lagre tillforlitlighet eftersom orsaken ar okand -- behandla som tidig varning, inte bekraftad underrattelse."
+      },
+      "velocity_spike": {
+        "whyItMatters": "En nyhet accelererar over flera nyhetskallor -- indikerar vaxande betydelse och potential for marknads-/policypaverkan.",
+        "actionableInsight": "Detta amne kräver omedelbar uppmarksamhet; forvanta officiella uttalanden eller marknadsreaktioner.",
+        "confidenceNote": "Hogre tillforlitlighet med fler kallor; kontrollera om Tier 1-kallor finns bland dem."
+      },
+      "keyword_spike": {
+        "whyItMatters": "En term forekommmer med signifikant hogre frekvens an baslinjen over flera kallor, vilket indikerar en utvecklande nyhet.",
+        "actionableInsight": "Granska relaterade rubriker och AI-sammanfattning, korrelera sedan med landsinstabilitet och marknadsrorelser.",
+        "confidenceNote": "Tillforlitligheten okar med starkare baslinjemultiplikator och bredare kalldiversitet."
+      },
+      "convergence": {
+        "whyItMatters": "Flera oberoende kalltyper bekraftar samma handelse -- korsvalidering okar sannolikheten for korrekthet.",
+        "actionableInsight": "Behandla detta som hog-tillforlitlighetsunderrattelse; triangulering minskar risken for falskt positiva.",
+        "confidenceNote": "Mycket hog tillforlitlighet nar nyhetsbyra + myndighet + underrattelsekallor overensstammer."
+      },
+      "triangulation": {
+        "whyItMatters": "\"Auktoritetstriangeln\" (nyhetsbyraer, myndighetskallor, underrattelsespecialister) ar i linje -- detta ar guldstandarden for bekraftelse av breaking news.",
+        "actionableInsight": "Detta ar handlingsbar underrattelse; forvanta marknads-/policyreaktioner omedelbart.",
+        "confidenceNote": "Hogsta tillforlitlighetssignal i systemet -- flera auktoritativa kallor overensstammer."
+      },
+      "flow_drop": {
+        "whyItMatters": "Fysisk ravauflodesstorning detekterad -- utbudsbegransningar fegar ofta prisokningar.",
+        "actionableInsight": "Bevaka energiraavarupriser; bedöm exponering i leveranskedjan.",
+        "confidenceNote": "Tillforlitligheten beror pa storningens varaktighet och tillganglighet av alternativt utbud."
+      },
+      "flow_price_divergence": {
+        "whyItMatters": "Nyheter om utbudsstorning ar annu inte reflekterade i ravarupriser -- potentiell informationsfordel.",
+        "actionableInsight": "Antingen reagerar marknaderna saktare, eller sa ar storningen mindre betydande an rapporterat.",
+        "confidenceNote": "Medelhog tillforlitlighet -- marknaderna kan ha battre information an nyhetsrapporter."
+      },
+      "geo_convergence": {
+        "whyItMatters": "Flera nyhetshändelser clustrar kring samma geografiska plats -- potentiell upptrappning eller samordnad aktivitet.",
+        "actionableInsight": "Oka overvakningsprioriteten for denna region; korrelera med satellit-/AIS-data om tillganglig.",
+        "confidenceNote": "Hogre tillforlitlighet om handelserna spanner over flera kalltyper och tidsperioder."
+      },
+      "explained_market_move": {
+        "whyItMatters": "Marknadsrorelse har tydlig nyhetskatalysator -- inget mysterium, prisrorelsen avspeglar kand information.",
+        "actionableInsight": "Forsta narrativet bakom rorelsen; bedom om reaktionen ar proportionell.",
+        "confidenceNote": "Hog tillforlitlighet -- nyheter och prisrorelse ar korrelerade."
+      },
+      "hotspot_escalation": {
+        "whyItMatters": "Geopolitisk hotspot visar signifikant upptrappning baserat pa nyhetsaktivitet, landsinstabilitet, geografisk konvergens och militär narvaro.",
+        "actionableInsight": "Oka overvakningsprioriteten; bedom nedstroms paverkan pa infrastruktur, marknader och regional stabilitet.",
+        "confidenceNote": "Tillforlitlighet viktad efter flera datakallor -- nyheter (35%), landsinstabilitet (25%), geo-konvergens (25%), militär aktivitet (15%)."
+      },
+      "sector_cascade": {
+        "whyItMatters": "Marknadsrorelse kaskaderar over relaterade sektorer -- indikerar systemisk reaktion pa en katalyserande handelse.",
+        "actionableInsight": "Identifiera den primara katalysatorn; bedom exponering over korrelerade tillgangar.",
+        "confidenceNote": "Hogre tillforlitlighet nar flera sektorer ror sig med liknande hastighet och riktning."
+      },
+      "military_surge": {
+        "whyItMatters": "Militär transportaktivitet signifikant over baslinjen -- indikerar potentiell utplacering, humanitär operation eller maktprojektion.",
+        "actionableInsight": "Korrelera med regionala nyheter; bedom narliggande basaktivitet och marina rorelser.",
+        "confidenceNote": "Hogre tillforlitlighet vid ihallande aktivitet over flera timmar och varierade flygplanstyper."
+      },
+      "fallback": {
+        "whyItMatters": "Signal detekterad.",
+        "actionableInsight": "Bevaka utvecklingen.",
+        "confidenceNote": "Standardtillförlitlighet."
+      }
+    }
+  },
+  "alerts": {
+    "instabilityRising": "{{country}} Instabilitet ökar",
+    "instabilityFalling": "{{country}} Instabilitet minskar",
+    "indexRose": "Instabilitetsindex steg fran {{from}} till {{to}} ({{change}}). Drivkraft: {{driver}}",
+    "indexFell": "Instabilitetsindex sjönk fran {{from}} till {{to}} ({{change}}). Drivkraft: {{driver}}",
+    "geoAlert": "Geografiskt larm: {{location}}",
+    "cascadeAlert": "Infrastrukturkaskadlarm",
+    "infraAlert": "Infrastrukturlarm: {{name}}",
+    "countriesAffected": "{{count}} lander berörda, högsta paverkan: {{impact}}",
+    "alert": "Larm: {{location}}",
+    "multipleRegions": "Flera regioner",
+    "trending": "\"{{term}}\" trending - {{count}} omnamnanden pa {{hours}}h",
+    "eventsDetected": "{{count}} handelser detekterade i regionen ({{lat}}°, {{lon}}°)"
+  },
+  "intel": {
+    "topics": {
+      "military": {
+        "name": "Militär aktivitet",
+        "description": "Militärovningar, utplaceringar och operationer"
+      },
+      "cyber": {
+        "name": "Cyberhot",
+        "description": "Cyberattacker, ransomware och digitala hot"
+      },
+      "nuclear": {
+        "name": "Kärnteknisk",
+        "description": "Kärnvapenprogram, IAEA-inspektioner, spridning"
+      },
+      "sanctions": {
+        "name": "Sanktioner",
+        "description": "Ekonomiska sanktioner och handelsrestriktioner"
+      },
+      "intelligence": {
+        "name": "Underrattelse",
+        "description": "Spionage, underrattelseoperationer, overvakning"
+      },
+      "maritime": {
+        "name": "Maritim sakerhet",
+        "description": "Marinoperationer, maritima flaskhalsar, sjöfartsleder"
+      }
     }
   },
   "common": {

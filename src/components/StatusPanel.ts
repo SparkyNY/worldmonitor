@@ -76,15 +76,15 @@ export class StatusPanel extends Panel {
         </div>
         <div class="status-panel-content">
           <div class="status-section">
-            <div class="status-section-title">Data Feeds</div>
+            <div class="status-section-title">${t('components.status.dataFeeds')}</div>
             <div class="feeds-list"></div>
           </div>
           <div class="status-section">
-            <div class="status-section-title">API Status</div>
+            <div class="status-section-title">${t('components.status.apiStatus')}</div>
             <div class="apis-list"></div>
           </div>
           <div class="status-section">
-            <div class="status-section-title">Storage</div>
+            <div class="status-section-title">${t('components.status.storage')}</div>
             <div class="storage-info"></div>
           </div>
         </div>

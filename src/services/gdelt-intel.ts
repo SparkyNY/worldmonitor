@@ -1,5 +1,6 @@
 import { fetchWithProxy } from '@/utils';
 import type { Hotspot } from '@/types';
+import { t } from '@/services/i18n';
 
 export interface GdeltArticle {
   title: string;
@@ -69,6 +70,14 @@ export const INTEL_TOPICS: IntelTopic[] = [
     description: 'Naval operations, maritime chokepoints, sea lanes',
   },
 ];
+
+export function getIntelTopics(): IntelTopic[] {
+  return INTEL_TOPICS.map(topic => ({
+    ...topic,
+    name: t(`intel.topics.${topic.id}.name`),
+    description: t(`intel.topics.${topic.id}.description`),
+  }));
+}
 
 const CACHE_TTL = 5 * 60 * 1000;
 const articleCache = new Map<string, { articles: GdeltArticle[]; timestamp: number }>();

@@ -103,7 +103,7 @@ export class StablecoinPanel extends Panel {
 
     const d = this.data;
     if (!d.stablecoins.length) {
-      this.setContent('<div class="panel-loading-text">Stablecoin data temporarily unavailable</div>');
+      this.setContent(`<div class="panel-loading-text">${t('components.stablecoins.unavailable')}</div>`);
       return;
     }
 
@@ -139,13 +139,13 @@ export class StablecoinPanel extends Panel {
           <span class="health-detail">MCap: ${formatLargeNum(s.totalMarketCap)} | Vol: ${formatLargeNum(s.totalVolume24h)}</span>
         </div>
         <div class="stable-section">
-          <div class="stable-section-title">Peg Health</div>
+          <div class="stable-section-title">${t('components.stablecoins.pegHealth')}</div>
           <div class="stable-peg-list">${pegRows}</div>
         </div>
         <div class="stable-section">
-          <div class="stable-section-title">Supply & Volume</div>
+          <div class="stable-section-title">${t('components.stablecoins.supplyVolume')}</div>
           <div class="stable-supply-header">
-            <span>Token</span><span>MCap</span><span>24h Vol</span><span>24h Chg</span>
+            <span>${t('components.stablecoins.token')}</span><span>${t('components.stablecoins.mcap')}</span><span>${t('components.stablecoins.vol24h')}</span><span>${t('components.stablecoins.chg24h')}</span>
           </div>
           <div class="stable-supply-list">${supplyRows}</div>
         </div>

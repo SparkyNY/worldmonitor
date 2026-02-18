@@ -424,7 +424,19 @@
       "no": "否",
       "vol": "交易量"
     },
+    "stablecoins": {
+      "pegHealth": "锚定健康度",
+      "supplyVolume": "供应量与交易量",
+      "unavailable": "稳定币数据暂时不可用",
+      "token": "代币",
+      "mcap": "市值",
+      "vol24h": "24小时交易量",
+      "chg24h": "24小时变化"
+    },
     "status": {
+      "dataFeeds": "数据源",
+      "apiStatus": "API状态",
+      "storage": "存储",
       "systemStatus": "系统状态",
       "updatedJustNow": "刚刚更新",
       "updatedAt": "更新于{{time}}",
@@ -488,10 +500,42 @@
       "exportData": "导出数据",
       "sourceRef": "来源 [{{n}}]"
     },
+    "relatedAssets": {
+      "pipeline": "管道",
+      "cable": "电缆",
+      "datacenter": "数据中心",
+      "base": "基地",
+      "nuclear": "核设施"
+    },
+    "threatLabels": {
+      "critical": "危急",
+      "high": "高",
+      "medium": "中",
+      "low": "低",
+      "info": "信息"
+    },
     "deckgl": {
       "zoomIn": "放大",
       "zoomOut": "缩小",
       "resetView": "重置视图",
+      "legend": {
+        "title": "图例",
+        "startupHub": "创业中心",
+        "techHQ": "科技总部",
+        "accelerator": "加速器",
+        "cloudRegion": "云计算区域",
+        "datacenter": "数据中心",
+        "stockExchange": "证券交易所",
+        "financialCenter": "金融中心",
+        "centralBank": "央行",
+        "commodityHub": "大宗商品枢纽",
+        "waterway": "水道",
+        "highAlert": "高度警报",
+        "elevated": "升高",
+        "monitoring": "监控中",
+        "base": "基地",
+        "nuclear": "核设施"
+      },
       "layerGuide": "图层指南",
       "layersTitle": "图层",
       "timeAll": "全部",
@@ -714,6 +758,15 @@
       "infoTooltip": "NASA FIRMS VIIRS卫星在监控冲突区域的热异常探测。高强度 = 亮度温度>360K且置信度>80%。"
     },
     "ucdpEvents": {
+      "stateBased": "国家冲突",
+      "nonState": "非国家冲突",
+      "oneSided": "单方暴力",
+      "country": "国家",
+      "deaths": "死亡人数",
+      "date": "日期",
+      "actors": "行为方",
+      "deathsCount": "{{count}}人死亡",
+      "moreNotShown": "还有{{count}}个事件未显示",
       "noEvents": "该类别暂无事件",
       "infoTooltip": "<strong>UCDP地理参考事件</strong>来自乌普萨拉大学的事件级冲突数据。<ul><li><strong>国家冲突</strong>：政府与反政府武装</li><li><strong>非国家冲突</strong>：武装团体之间</li><li><strong>单方暴力</strong>：针对平民的暴力</li></ul>死亡人数显示为最佳估计（低-高范围）。ACLED重复数据已自动过滤。"
     },
@@ -1257,6 +1310,127 @@
       "uae_ecsr": "阿联酋/ECSR",
       "venezuela_crisis": "委内瑞拉危机",
       "yemen_houthis": "也门/胡塞武装"
+    }
+  },
+  "signals": {
+    "context": {
+      "prediction_leads_news": {
+        "whyItMatters": "预测市场通常在消息成为新闻之前就已定价——交易者可能提前获知事态发展。",
+        "actionableInsight": "关注未来1-6小时内可能出现的突发新闻，以解释市场变动。",
+        "confidenceNote": "如果多个预测市场同向变动，置信度更高。"
+      },
+      "news_leads_markets": {
+        "whyItMatters": "新闻传播速度快于市场反应——存在潜在的错误定价机会。",
+        "actionableInsight": "关注市场在算法和交易者消化新闻后的追赶反应。",
+        "confidenceNote": "如果新闻来自一级通讯社，信号更强。"
+      },
+      "silent_divergence": {
+        "whyItMatters": "市场大幅波动但无可识别的新闻催化剂——可能是内幕信息、算法交易或未报道的事态发展。",
+        "actionableInsight": "调查替代数据源；解释该波动的新闻可能稍后出现。",
+        "confidenceNote": "置信度较低，因为原因未知——视为早期预警，而非已确认的情报。"
+      },
+      "velocity_spike": {
+        "whyItMatters": "一则报道正在多个新闻来源中加速传播——表明重要性增长，可能影响市场/政策。",
+        "actionableInsight": "该话题需要立即关注；预期将出现官方声明或市场反应。",
+        "confidenceNote": "来源越多置信度越高；检查一级来源是否在其中。"
+      },
+      "keyword_spike": {
+        "whyItMatters": "某个术语在多个来源中出现频率显著高于基线，表明一个正在发展的事件。",
+        "actionableInsight": "查看相关标题和AI摘要，然后与国家不稳定性和市场变动进行关联分析。",
+        "confidenceNote": "基线倍增系数越高、来源越多样化，置信度越高。"
+      },
+      "convergence": {
+        "whyItMatters": "多个独立来源类型确认同一事件——交叉验证提高了准确性的可能。",
+        "actionableInsight": "视为高置信度情报；三角验证降低了误报风险。",
+        "confidenceNote": "当通讯社、政府和情报来源一致时，置信度极高。"
+      },
+      "triangulation": {
+        "whyItMatters": "「权威三角」（通讯社、政府来源、情报专家）已对齐——这是突发新闻确认的黄金标准。",
+        "actionableInsight": "这是可执行情报；预期市场/政策反应即将到来。",
+        "confidenceNote": "系统中最高置信度信号——多个权威来源一致。"
+      },
+      "flow_drop": {
+        "whyItMatters": "检测到实物商品流通中断——供应限制通常先于价格飙升。",
+        "actionableInsight": "关注能源大宗商品价格；评估供应链暴露风险。",
+        "confidenceNote": "置信度取决于中断持续时间和替代供应的可用性。"
+      },
+      "flow_price_divergence": {
+        "whyItMatters": "供应中断消息尚未反映在商品价格中——潜在的信息优势。",
+        "actionableInsight": "要么市场反应迟缓，要么中断不如报道中那么严重。",
+        "confidenceNote": "中等置信度——市场可能掌握比新闻报道更好的信息。"
+      },
+      "geo_convergence": {
+        "whyItMatters": "多个新闻事件聚集在同一地理位置周围——可能升级或协调活动。",
+        "actionableInsight": "提高该区域的监控优先级；如有条件，与卫星/AIS数据关联分析。",
+        "confidenceNote": "如果事件跨越多个来源类型和时间段，置信度更高。"
+      },
+      "explained_market_move": {
+        "whyItMatters": "市场变动有明确的新闻催化剂——价格行为反映已知信息。",
+        "actionableInsight": "理解驱动该变动的叙事；评估反应是否成比例。",
+        "confidenceNote": "高置信度——新闻与价格行为相关。"
+      },
+      "hotspot_escalation": {
+        "whyItMatters": "地缘政治热点基于新闻活动、国家不稳定性、地理趋同和军事存在显示出显著升级。",
+        "actionableInsight": "提高监控优先级；评估对基础设施、市场和区域稳定性的下游影响。",
+        "confidenceNote": "置信度按多个数据源加权——新闻（35%）、国家不稳定性（25%）、地理趋同（25%）、军事活动（15%）。"
+      },
+      "sector_cascade": {
+        "whyItMatters": "市场波动正在相关板块间级联传导——表明对催化事件的系统性反应。",
+        "actionableInsight": "识别主要催化剂；评估关联资产的暴露风险。",
+        "confidenceNote": "当多个板块以相似速度和方向变动时，置信度更高。"
+      },
+      "military_surge": {
+        "whyItMatters": "军事运输活动显著高于基线——表明可能的部署、人道主义行动或力量投射。",
+        "actionableInsight": "与区域新闻关联分析；评估附近基地活动和海军动向。",
+        "confidenceNote": "在持续数小时的活动和多样化机型的情况下，置信度更高。"
+      },
+      "fallback": {
+        "whyItMatters": "检测到信号。",
+        "actionableInsight": "监控事态发展。",
+        "confidenceNote": "标准置信度。"
+      }
+    }
+  },
+  "alerts": {
+    "instabilityRising": "{{country}} 不稳定性上升",
+    "instabilityFalling": "{{country}} 不稳定性下降",
+    "indexRose": "不稳定指数从{{from}}升至{{to}}（{{change}}）。驱动因素：{{driver}}",
+    "indexFell": "不稳定指数从{{from}}降至{{to}}（{{change}}）。驱动因素：{{driver}}",
+    "geoAlert": "地理警报：{{location}}",
+    "cascadeAlert": "基础设施级联警报",
+    "infraAlert": "基础设施警报：{{name}}",
+    "countriesAffected": "{{count}}个国家受影响，最大影响：{{impact}}",
+    "alert": "警报：{{location}}",
+    "multipleRegions": "多个区域",
+    "trending": "「{{term}}」趋势上升 — {{hours}}小时内{{count}}次提及",
+    "eventsDetected": "在区域（{{lat}}°, {{lon}}°）检测到{{count}}个事件"
+  },
+  "intel": {
+    "topics": {
+      "military": {
+        "name": "军事活动",
+        "description": "军事演习、部署和行动"
+      },
+      "cyber": {
+        "name": "网络威胁",
+        "description": "网络攻击、勒索软件和数字威胁"
+      },
+      "nuclear": {
+        "name": "核事务",
+        "description": "核计划、IAEA核查、防扩散"
+      },
+      "sanctions": {
+        "name": "制裁",
+        "description": "经济制裁和贸易限制"
+      },
+      "intelligence": {
+        "name": "情报",
+        "description": "间谍活动、情报行动、监控"
+      },
+      "maritime": {
+        "name": "海上安全",
+        "description": "海军行动、海上咽喉要道、航线"
+      }
     }
   },
   "common": {

@@ -324,10 +324,13 @@ export const SIGNAL_CONTEXT: Record<SignalType, SignalContext> = {
   },
 };
 
+import { t } from '@/services/i18n';
+
 export function getSignalContext(type: SignalType): SignalContext {
-  return SIGNAL_CONTEXT[type] ?? {
-    whyItMatters: 'Signal detected.',
-    actionableInsight: 'Monitor for developments.',
-    confidenceNote: 'Standard confidence.',
+  const key = SIGNAL_CONTEXT[type] ? type : 'fallback';
+  return {
+    whyItMatters: t(`signals.context.${key}.whyItMatters`),
+    actionableInsight: t(`signals.context.${key}.actionableInsight`),
+    confidenceNote: t(`signals.context.${key}.confidenceNote`),
   };
 }

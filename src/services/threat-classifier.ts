@@ -43,6 +43,12 @@ export const THREAT_PRIORITY: Record<ThreatLevel, number> = {
   info: 1,
 };
 
+import { t } from '@/services/i18n';
+
+export function getThreatLabel(level: ThreatLevel): string {
+  return t(`components.threatLabels.${level}`);
+}
+
 export const THREAT_LABELS: Record<ThreatLevel, string> = {
   critical: 'CRIT',
   high: 'HIGH',

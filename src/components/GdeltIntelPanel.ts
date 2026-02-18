@@ -2,7 +2,7 @@ import { Panel } from './Panel';
 import { escapeHtml, sanitizeUrl } from '@/utils/sanitize';
 import { t } from '@/services/i18n';
 import {
-  INTEL_TOPICS,
+  getIntelTopics,
   fetchTopicIntelligence,
   formatArticleDate,
   extractDomain,
@@ -12,7 +12,7 @@ import {
 } from '@/services/gdelt-intel';
 
 export class GdeltIntelPanel extends Panel {
-  private activeTopic: IntelTopic = INTEL_TOPICS[0]!;
+  private activeTopic: IntelTopic = getIntelTopics()[0]!;
   private topicData = new Map<string, TopicIntelligence>();
   private tabsEl: HTMLElement | null = null;
 
@@ -32,7 +32,7 @@ export class GdeltIntelPanel extends Panel {
     this.tabsEl = document.createElement('div');
     this.tabsEl.className = 'gdelt-intel-tabs';
 
-    INTEL_TOPICS.forEach(topic => {
+    getIntelTopics().forEach(topic => {
       const tab = document.createElement('button');
       tab.className = `gdelt-intel-tab ${topic.id === this.activeTopic.id ? 'active' : ''}`;
       tab.dataset.topicId = topic.id;

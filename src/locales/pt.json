@@ -320,6 +320,24 @@
       "zoomIn": "Ampliar",
       "zoomOut": "Diminuir zoom",
       "resetView": "Redefinir visualização",
+      "legend": {
+        "title": "LEGENDA",
+        "startupHub": "Hub de Startups",
+        "techHQ": "Sede Tecnológica",
+        "accelerator": "Aceleradora",
+        "cloudRegion": "Região de Nuvem",
+        "datacenter": "Datacenter",
+        "stockExchange": "Bolsa de Valores",
+        "financialCenter": "Centro Financeiro",
+        "centralBank": "Banco Central",
+        "commodityHub": "Hub de Commodities",
+        "waterway": "Hidrovia",
+        "highAlert": "Alerta Alto",
+        "elevated": "Elevado",
+        "monitoring": "Monitoramento",
+        "base": "Base",
+        "nuclear": "Nuclear"
+      },
       "timeAll": "Todos",
       "layers": {
         "startupHubs": "Centros de inicialização",
@@ -480,6 +498,20 @@
       "exportData": "Exportar dados",
       "sourceRef": "Fonte [{{n}}]"
     },
+    "relatedAssets": {
+      "pipeline": "Duto",
+      "cable": "Cabo",
+      "datacenter": "Datacenter",
+      "base": "Base",
+      "nuclear": "Nuclear"
+    },
+    "threatLabels": {
+      "critical": "CRÍT",
+      "high": "ALTO",
+      "medium": "MÉD",
+      "low": "BAIXO",
+      "info": "INFO"
+    },
     "pizzint": {
       "title": "Índice de Pizza do Pentágono",
       "tensionsTitle": "Tensões Geopolíticas",
@@ -503,7 +535,19 @@
         "5": "FADE OUT - PRONTIDÃO MAIS BAIXA"
       }
     },
+    "stablecoins": {
+      "pegHealth": "Saúde da Paridade",
+      "supplyVolume": "Oferta e Volume",
+      "unavailable": "Dados de stablecoins temporariamente indisponíveis",
+      "token": "Token",
+      "mcap": "Cap. Merc.",
+      "vol24h": "Vol 24h",
+      "chg24h": "Var 24h"
+    },
     "status": {
+      "dataFeeds": "Fontes de Dados",
+      "apiStatus": "Status da API",
+      "storage": "Armazenamento",
       "systemStatus": "Status do sistema",
       "updatedJustNow": "Atualizado agora há pouco",
       "updatedAt": "Atualizado {{time}}",
@@ -682,6 +726,15 @@
       "infoTooltip": "<strong>Mercados de previsão</strong> Mercados de previsão de dinheiro real:<ul><li>Os preços refletem estimativas de probabilidade de multidão</li><li>Maior volume = sinal mais confiável</li><li>Foco geopolítico e em eventos atuais</li></ul>Fonte: Polymarket (polymarket.com)"
     },
     "ucdpEvents": {
+      "stateBased": "Baseado em Estado",
+      "nonState": "Não Estatal",
+      "oneSided": "Unilateral",
+      "country": "País",
+      "deaths": "Mortes",
+      "date": "Data",
+      "actors": "Atores",
+      "deathsCount": "{{count}} mortes",
+      "moreNotShown": "{{count}} eventos adicionais não exibidos",
       "infoTooltip": "<strong>Eventos georreferenciados UCDP</strong> Dados de conflito em nível de evento da Universidade de Uppsala.<ul><li><strong>Baseado no Estado</strong>: Governo versus grupo rebelde</li><li><strong>Não estatal</strong>: Grupo armado versus grupo armado group</li><li><strong>Unilateral</strong>: Violência contra civis</li></ul>Mortes mostradas como melhor estimativa (faixa baixo-alto). Duplicatas ACLED são filtradas automaticamente.",
       "noEvents": "Nenhum evento nesta categoria"
     },
@@ -1188,6 +1241,127 @@
       "uae_ecsr": "Emirados Árabes Unidos/CEDS",
       "venezuela_crisis": "Crise na Venezuela",
       "yemen_houthis": "Iêmen/houthis"
+    }
+  },
+  "signals": {
+    "context": {
+      "prediction_leads_news": {
+        "whyItMatters": "Mercados de previsão frequentemente precificam informações antes de se tornarem notícias — traders podem ter acesso antecipado a desenvolvimentos.",
+        "actionableInsight": "Monitore notícias de última hora nas próximas 1-6 horas que possam explicar o movimento do mercado.",
+        "confidenceNote": "Maior confiança se múltiplos mercados de previsão se moverem na mesma direção."
+      },
+      "news_leads_markets": {
+        "whyItMatters": "As notícias estão saindo mais rápido do que os mercados reagem — potencial oportunidade de precificação incorreta.",
+        "actionableInsight": "Observe a recuperação do mercado conforme algoritmos e traders assimilam as notícias.",
+        "confidenceNote": "Sinal mais forte se as notícias forem de agências de notícias de nível 1."
+      },
+      "silent_divergence": {
+        "whyItMatters": "Mercado movendo-se significativamente sem catalisador noticioso identificável — possível informação privilegiada, trading algorítmico ou desenvolvimento não reportado.",
+        "actionableInsight": "Investigue fontes de dados alternativas; notícias podem surgir depois explicando o movimento.",
+        "confidenceNote": "Menor confiança pois a causa é desconhecida — trate como alerta antecipado, não como inteligência confirmada."
+      },
+      "velocity_spike": {
+        "whyItMatters": "Uma história está acelerando em múltiplas fontes de notícias — indica significância crescente e potencial impacto em mercados/políticas.",
+        "actionableInsight": "Este tópico requer atenção imediata; espere declarações oficiais ou reações do mercado.",
+        "confidenceNote": "Maior confiança com mais fontes; verifique se fontes de nível 1 estão entre elas."
+      },
+      "keyword_spike": {
+        "whyItMatters": "Um termo está aparecendo com frequência significativamente maior que sua linha de base em múltiplas fontes, indicando uma história em desenvolvimento.",
+        "actionableInsight": "Revise manchetes relacionadas e resumo de IA, depois correlacione com instabilidade de países e movimentos de mercado.",
+        "confidenceNote": "Confiança aumenta com multiplicador de base mais forte e maior diversidade de fontes."
+      },
+      "convergence": {
+        "whyItMatters": "Múltiplos tipos de fontes independentes confirmando o mesmo evento — validação cruzada aumenta a probabilidade de precisão.",
+        "actionableInsight": "Trate isto como inteligência de alta confiança; a triangulação reduz o risco de falso positivo.",
+        "confidenceNote": "Confiança muito alta quando fontes de agências, governamentais e de inteligência se alinham."
+      },
+      "triangulation": {
+        "whyItMatters": "O \"triângulo de autoridade\" (agências de notícias, fontes governamentais, especialistas de inteligência) está alinhado — este é o padrão ouro para confirmação de notícias de última hora.",
+        "actionableInsight": "Esta é inteligência acionável; espere reações de mercado/política iminentemente.",
+        "confidenceNote": "Sinal de maior confiança no sistema — múltiplas fontes autoritativas concordam."
+      },
+      "flow_drop": {
+        "whyItMatters": "Disrupção detectada no fluxo físico de commodities — restrições de oferta frequentemente precedem picos de preços.",
+        "actionableInsight": "Monitore preços de commodities energéticas; avalie a exposição da cadeia de suprimentos.",
+        "confidenceNote": "Confiança depende da duração da disrupção e disponibilidade de fornecimento alternativo."
+      },
+      "flow_price_divergence": {
+        "whyItMatters": "Notícias de disrupção de oferta ainda não refletidas nos preços de commodities — potencial vantagem informacional.",
+        "actionableInsight": "Ou os mercados estão lentos para reagir, ou a disrupção é menos significativa do que reportado.",
+        "confidenceNote": "Confiança média — mercados podem ter informações melhores que os relatórios de notícias."
+      },
+      "geo_convergence": {
+        "whyItMatters": "Múltiplos eventos noticiosos concentrando-se na mesma localização geográfica — potencial escalada ou atividade coordenada.",
+        "actionableInsight": "Aumente a prioridade de monitoramento para esta região; correlacione com dados de satélite/AIS se disponíveis.",
+        "confidenceNote": "Maior confiança se os eventos abrangem múltiplos tipos de fontes e períodos de tempo."
+      },
+      "explained_market_move": {
+        "whyItMatters": "Movimento de mercado tem catalisador noticioso claro — sem mistério, a ação de preço reflete informação conhecida.",
+        "actionableInsight": "Compreenda a narrativa que impulsiona o movimento; avalie se a reação é proporcional.",
+        "confidenceNote": "Alta confiança — notícias e ação de preço estão correlacionadas."
+      },
+      "hotspot_escalation": {
+        "whyItMatters": "Ponto quente geopolítico mostrando escalada significativa com base em atividade noticiosa, instabilidade do país, convergência geográfica e presença militar.",
+        "actionableInsight": "Aumente a prioridade de monitoramento; avalie impactos em infraestrutura, mercados e estabilidade regional.",
+        "confidenceNote": "Confiança ponderada por múltiplas fontes de dados — notícias (35%), instabilidade do país (25%), convergência geográfica (25%), atividade militar (15%)."
+      },
+      "sector_cascade": {
+        "whyItMatters": "Movimento de mercado cascateando por setores relacionados — indica reação sistêmica a um evento catalisador.",
+        "actionableInsight": "Identifique o catalisador principal; avalie a exposição em ativos correlacionados.",
+        "confidenceNote": "Maior confiança quando múltiplos setores se movem com velocidade e direção similares."
+      },
+      "military_surge": {
+        "whyItMatters": "Atividade de transporte militar significativamente acima da linha de base — indica potencial implantação, operação humanitária ou projeção de força.",
+        "actionableInsight": "Correlacione com notícias regionais; avalie atividade de bases próximas e movimentos navais.",
+        "confidenceNote": "Maior confiança com atividade sustentada por várias horas e tipos diversos de aeronaves."
+      },
+      "fallback": {
+        "whyItMatters": "Sinal detectado.",
+        "actionableInsight": "Monitore desenvolvimentos.",
+        "confidenceNote": "Confiança padrão."
+      }
+    }
+  },
+  "alerts": {
+    "instabilityRising": "{{country}} — Instabilidade crescente",
+    "instabilityFalling": "{{country}} — Instabilidade decrescente",
+    "indexRose": "Índice de instabilidade subiu de {{from}} para {{to}} ({{change}}). Fator: {{driver}}",
+    "indexFell": "Índice de instabilidade caiu de {{from}} para {{to}} ({{change}}). Fator: {{driver}}",
+    "geoAlert": "Alerta geográfico: {{location}}",
+    "cascadeAlert": "Alerta de cascata de infraestrutura",
+    "infraAlert": "Alerta de infraestrutura: {{name}}",
+    "countriesAffected": "{{count}} países afetados, maior impacto: {{impact}}",
+    "alert": "Alerta: {{location}}",
+    "multipleRegions": "Múltiplas regiões",
+    "trending": "\"{{term}}\" em tendência — {{count}} menções em {{hours}}h",
+    "eventsDetected": "{{count}} eventos detectados na região ({{lat}}°, {{lon}}°)"
+  },
+  "intel": {
+    "topics": {
+      "military": {
+        "name": "Atividade Militar",
+        "description": "Exercícios militares, implantações e operações"
+      },
+      "cyber": {
+        "name": "Ameaças Cibernéticas",
+        "description": "Ataques cibernéticos, ransomware e ameaças digitais"
+      },
+      "nuclear": {
+        "name": "Nuclear",
+        "description": "Programas nucleares, inspeções da AIEA, proliferação"
+      },
+      "sanctions": {
+        "name": "Sanções",
+        "description": "Sanções econômicas e restrições comerciais"
+      },
+      "intelligence": {
+        "name": "Inteligência",
+        "description": "Espionagem, operações de inteligência, vigilância"
+      },
+      "maritime": {
+        "name": "Segurança Marítima",
+        "description": "Operações navais, pontos de estrangulamento marítimos, rotas marítimas"
+      }
     }
   },
   "common": {
