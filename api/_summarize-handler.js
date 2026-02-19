@@ -149,6 +149,7 @@ Rules:
  * @property {string} apiUrl      - Full chat-completions endpoint URL
  * @property {string} model       - Model identifier
  * @property {Record<string, string>} headers - Request headers (incl. auth)
+ * @property {Record<string, unknown>} [extraBody] - Extra request body fields (e.g. think: false)
  *
  * @typedef {Object} ProviderConfig
  * @property {string} name        - Provider label in responses (e.g. 'groq')
@@ -195,7 +196,7 @@ export function createSummarizeHandler(providerConfig) {
       });
     }
 
-    const { apiUrl, model, headers: providerHeaders } = credentials;
+    const { apiUrl, model, headers: providerHeaders, extraBody } = credentials;
 
     const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
     if (contentLength > 51200) {
@@ -247,6 +248,7 @@ export function createSummarizeHandler(providerConfig) {
           temperature: 0.3,
           max_tokens: 150,
           top_p: 0.9,
+          ...extraBody,
         }),
       });
 
@@ -270,10 +272,18 @@ export function createSummarizeHandler(providerConfig) {
 
       const data = await response.json();
       const message = data.choices?.[0]?.message;
-      const summary = (
-        (typeof message?.content === 'string' ? message.content.trim() : '')
-        || (typeof message?.reasoning === 'string' ? message.reasoning.trim() : '')
-      );
+      let rawContent = (typeof message?.content === 'string' ? message.content.trim() : '')
+        || (typeof message?.reasoning === 'string' ? message.reasoning.trim() : '');
+
+      // Strip <think>...</think> reasoning tokens (common in DeepSeek-R1, QwQ, etc.)
+      rawContent = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+      // Some models output unterminated <think> blocks — strip from <think> to end if no closing tag
+      if (rawContent.includes('<think>') && !rawContent.includes('</think>')) {
+        rawContent = rawContent.replace(/<think>[\s\S]*/gi, '').trim();
+      }
+
+      const summary = rawContent;
 
       if (!summary) {
         return new Response(JSON.stringify({ error: 'Empty response', fallback: true }), {

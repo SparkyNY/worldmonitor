@@ -29,6 +29,7 @@ export default createSummarizeHandler({
       apiUrl: new URL('/v1/chat/completions', baseUrl).toString(),
       model: process.env.OLLAMA_MODEL || DEFAULT_MODEL,
       headers,
+      extraBody: { think: false },
     };
   },
 });

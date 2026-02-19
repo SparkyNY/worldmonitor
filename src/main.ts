@@ -97,6 +97,9 @@ requestAnimationFrame(() => {
   document.documentElement.classList.remove('no-transition');
 });
 
+// Clear stale settings-open flag (survives ungraceful shutdown)
+localStorage.removeItem('wm-settings-open');
+
 const app = new App('app');
 app
   .init()
