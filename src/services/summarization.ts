@@ -28,6 +28,13 @@ interface ApiProviderConfig {
   label: string;  // Human-readable name for progress messages
 }
 
+interface ProviderApiPayload {
+  summary?: unknown;
+  cached?: unknown;
+  fallback?: unknown;
+  model?: unknown;
+}
+
 const API_PROVIDERS: ApiProviderConfig[] = [
   { featureId: 'aiOllama',      endpoint: '/api/ollama-summarize',     name: 'ollama',     label: 'Ollama' },
   { featureId: 'aiGroq',        endpoint: '/api/groq-summarize',       name: 'groq',       label: 'Groq AI' },
@@ -56,13 +63,18 @@ async function tryApiProvider(
       throw new Error(`${provider.label} error: ${response.status}`);
     }
 
-    const data = await response.json();
-    const resultProvider = data.cached ? 'cache' : provider.name;
-    console.log(`[Summarization] ${data.cached ? 'Redis cache hit' : `${provider.label} success`}:`, data.model);
+    const payload = await response.json() as ProviderApiPayload;
+    if (payload.fallback) return null;
+    const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
+    if (!summary) return null;
+
+    const cached = Boolean(payload.cached);
+    const resultProvider = cached ? 'cache' : provider.name;
+    console.log(`[Summarization] ${cached ? 'Redis cache hit' : `${provider.label} success`}:`, payload.model);
     return {
-      summary: data.summary,
+      summary,
       provider: resultProvider as SummarizationProvider,
-      cached: !!data.cached,
+      cached,
     };
   } catch (error) {
     console.warn(`[Summarization] ${provider.label} failed:`, error);
@@ -227,8 +239,10 @@ export async function translateText(
       });
 
       if (response.ok) {
-        const data = await response.json();
-        return data.summary;
+        const payload = await response.json() as ProviderApiPayload;
+        if (payload.fallback) continue;
+        const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
+        if (summary) return summary;
       }
     } catch (e) {
       console.warn(`${provider.label} translation failed`, e);

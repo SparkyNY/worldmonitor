@@ -483,6 +483,45 @@ test('validates OLLAMA_API_URL via /api/local-validate-secret (reachable endpoin
   }
 });
 
+test('validates LM Studio style /v1 base URL via /api/local-validate-secret', async () => {
+  const mockOpenAiCompatible = createServer((req, res) => {
+    if (req.url === '/v1/models') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ data: [{ id: 'qwen2.5-7b-instruct' }] }));
+    } else {
+      res.writeHead(404);
+      res.end('not found');
+    }
+  });
+  const providerPort = await listen(mockOpenAiCompatible);
+
+  const localApi = await setupApiDir({});
+  const app = await createLocalApiServer({
+    port: 0,
+    apiDir: localApi.apiDir,
+    logger: { log() {}, warn() {}, error() {} },
+  });
+  const { port } = await app.start();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/local-validate-secret`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'OLLAMA_API_URL', value: `http://127.0.0.1:${providerPort}/v1` }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.valid, true);
+    assert.equal(body.message, 'Ollama endpoint verified');
+  } finally {
+    await app.close();
+    await localApi.cleanup();
+    await new Promise((resolve, reject) => {
+      mockOpenAiCompatible.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+});
+
 test('validates OLLAMA_API_URL via native /api/tags fallback', async () => {
   // Mock server that only responds to /api/tags (not /v1/models)
   const mockOllama = createServer((req, res) => {

@@ -269,7 +269,11 @@ export function createSummarizeHandler(providerConfig) {
       }
 
       const data = await response.json();
-      const summary = data.choices?.[0]?.message?.content?.trim();
+      const message = data.choices?.[0]?.message;
+      const summary = (
+        (typeof message?.content === 'string' ? message.content.trim() : '')
+        || (typeof message?.reasoning === 'string' ? message.reasoning.trim() : '')
+      );
 
       if (!summary) {
         return new Response(JSON.stringify({ error: 'Empty response', fallback: true }), {

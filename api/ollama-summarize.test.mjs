@@ -90,6 +90,27 @@ test('returns summary with provider "ollama" on success', async () => {
   assert.equal(body.model, 'llama3.1:8b');
 });
 
+test('supports LM Studio style OpenAI base URL ending with /v1', async () => {
+  process.env.OLLAMA_API_URL = 'http://127.0.0.1:1234/v1';
+  process.env.OLLAMA_MODEL = 'qwen2.5-7b-instruct';
+
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    assert.equal(target, 'http://127.0.0.1:1234/v1/chat/completions');
+    return ollamaCompletionResponse('LM Studio endpoint responded successfully.', 'qwen2.5-7b-instruct');
+  };
+
+  const response = await handler(makeRequest({
+    headlines: ['AI startup launches a new coding assistant'],
+    mode: 'brief',
+  }));
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.provider, 'ollama');
+  assert.equal(body.model, 'qwen2.5-7b-instruct');
+});
+
 test('returns fallback signal when Ollama API returns error', async () => {
   process.env.OLLAMA_API_URL = 'http://127.0.0.1:11434';
 
@@ -129,6 +150,28 @@ test('returns fallback signal when Ollama returns empty response', async () => {
   const body = await response.json();
   assert.equal(body.fallback, true);
   assert.equal(body.error, 'Empty response');
+});
+
+test('uses reasoning field when content is empty', async () => {
+  process.env.OLLAMA_API_URL = 'http://127.0.0.1:11434';
+
+  globalThis.fetch = async () => {
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: '', reasoning: 'Markets stabilized after central bank guidance.' } }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  const response = await handler(makeRequest({
+    headlines: ['Central bank signals no immediate rate hike'],
+  }));
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.provider, 'ollama');
+  assert.equal(body.summary, 'Markets stabilized after central bank guidance.');
 });
 
 test('returns 400 when headlines array is missing', async () => {

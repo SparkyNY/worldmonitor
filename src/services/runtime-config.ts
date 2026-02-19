@@ -85,7 +85,7 @@ export const RUNTIME_FEATURES: RuntimeFeatureDefinition[] = [
   {
     id: 'aiOllama',
     name: 'Ollama local summarization',
-    description: 'Local LLM provider via Ollama OpenAI-compatible endpoint (desktop-first).',
+    description: 'Local LLM provider via OpenAI-compatible endpoint (Ollama or LM Studio, desktop-first).',
     requiredSecrets: ['OLLAMA_API_URL'],
     fallback: 'Falls back to Groq, then OpenRouter, then local browser model.',
   },
@@ -225,6 +225,12 @@ export function validateSecret(key: RuntimeSecretKey, value: string): { valid: b
   if (URL_SECRET_KEYS.has(key)) {
     try {
       const parsed = new URL(trimmed);
+      if (key === 'OLLAMA_API_URL') {
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          return { valid: false, hint: 'Must be an http(s) URL' };
+        }
+        return { valid: true };
+      }
       if (!['http:', 'https:', 'ws:', 'wss:'].includes(parsed.protocol)) {
         return { valid: false, hint: 'Must be an http(s) or ws(s) URL' };
       }
