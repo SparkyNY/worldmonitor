@@ -967,6 +967,22 @@ Every API edge function includes `Cache-Control` headers that enable Vercel's CD
 
 Static assets use content-hash filenames with 1-year immutable cache headers. The service worker file (`sw.js`) is never cached (`max-age=0, must-revalidate`) to ensure update detection.
 
+### Brotli Pre-Compression (Build-Time)
+
+`vite build` now emits pre-compressed Brotli artifacts (`*.br`) for static assets larger than 1KB (JS, CSS, HTML, SVG, JSON, XML, TXT, WASM). This reduces transfer size by roughly 20–30% vs gzip-only delivery when the edge can serve Brotli directly.
+
+For the Hetzner Nginx origin, enable static compressed file serving so `dist/*.br` files are returned without runtime recompression:
+
+```nginx
+gzip on;
+gzip_static on;
+
+brotli on;
+brotli_static on;
+```
+
+Cloudflare will negotiate Brotli automatically for compatible clients when the origin/edge has Brotli assets available.
+
 ### Railway Relay Compression
 
 All relay server responses pass through `gzipSync` when the client accepts gzip and the payload exceeds 1KB. This applies to OpenSky aircraft JSON, RSS XML feeds, UCDP event data, AIS snapshots, and health checks — reducing wire size by approximately 80%.
