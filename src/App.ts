@@ -402,6 +402,9 @@ export class App {
 
   private handleDeepLinks(): void {
     const url = new URL(window.location.href);
+    const MAX_DEEP_LINK_RETRIES = 60;
+    const DEEP_LINK_RETRY_INTERVAL_MS = 500;
+    const DEEP_LINK_INITIAL_DELAY_MS = 2000;
 
     // Check for story deep link: /story?c=UA&t=ciianalysis
     if (url.pathname === '/story' || url.searchParams.has('c')) {
@@ -417,14 +420,21 @@ export class App {
         const countryName = countryNames[countryCode.toUpperCase()] || countryCode;
 
         // Wait for data to load, then open story
+        let attempts = 0;
         const checkAndOpen = () => {
           if (dataFreshness.hasSufficientData() && this.latestClusters.length > 0) {
             this.openCountryStory(countryCode.toUpperCase(), countryName);
+            return;
+          }
+          attempts += 1;
+          if (attempts >= MAX_DEEP_LINK_RETRIES) {
+            this.showToast('Data not available');
+            return;
           } else {
-            setTimeout(checkAndOpen, 500);
+            setTimeout(checkAndOpen, DEEP_LINK_RETRY_INTERVAL_MS);
           }
         };
-        setTimeout(checkAndOpen, 2000);
+        setTimeout(checkAndOpen, DEEP_LINK_INITIAL_DELAY_MS);
 
         // Update URL without reload
         history.replaceState(null, '', '/');
@@ -437,14 +447,21 @@ export class App {
     this.pendingDeepLinkCountry = null;
     if (deepLinkCountry) {
       const cName = App.resolveCountryName(deepLinkCountry);
+      let attempts = 0;
       const checkAndOpenBrief = () => {
         if (dataFreshness.hasSufficientData()) {
           this.openCountryBriefByCode(deepLinkCountry, cName);
+          return;
+        }
+        attempts += 1;
+        if (attempts >= MAX_DEEP_LINK_RETRIES) {
+          this.showToast('Data not available');
+          return;
         } else {
-          setTimeout(checkAndOpenBrief, 500);
+          setTimeout(checkAndOpenBrief, DEEP_LINK_RETRY_INTERVAL_MS);
         }
       };
-      setTimeout(checkAndOpenBrief, 2000);
+      setTimeout(checkAndOpenBrief, DEEP_LINK_INITIAL_DELAY_MS);
     }
   }
 
