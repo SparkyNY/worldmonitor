@@ -813,6 +813,7 @@ canvas,
   cursor: grab;
   transition: transform 0.15s, box-shadow 0.15s;
   position: relative;
+  contain: content;
 }
 
 /* .panel.resized: Custom height set - use grid-row span for height */
