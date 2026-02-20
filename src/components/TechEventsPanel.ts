@@ -84,7 +84,7 @@ export class TechEventsPanel extends Panel {
         <div class="tech-events-error">
           <span class="error-icon">⚠️</span>
           <span class="error-text">${escapeHtml(this.error)}</span>
-          <button class="retry-btn" onclick="this.closest('.panel').querySelector('.panel-content').__panel?.refresh()">Retry</button>
+          <button class="retry-btn" onclick="this.closest('.panel').querySelector('.panel-content').__panel?.refresh()">${t('common.retry')}</button>
         </div>
       `;
       return;
@@ -97,15 +97,15 @@ export class TechEventsPanel extends Panel {
     this.content.innerHTML = `
       <div class="tech-events-panel">
         <div class="tech-events-tabs">
-          <button class="tab ${this.viewMode === 'upcoming' ? 'active' : ''}" data-view="upcoming">Upcoming</button>
-          <button class="tab ${this.viewMode === 'conferences' ? 'active' : ''}" data-view="conferences">Conferences</button>
-          <button class="tab ${this.viewMode === 'earnings' ? 'active' : ''}" data-view="earnings">Earnings</button>
-          <button class="tab ${this.viewMode === 'all' ? 'active' : ''}" data-view="all">All</button>
+          <button class="tab ${this.viewMode === 'upcoming' ? 'active' : ''}" data-view="upcoming">${t('components.techEvents.upcoming')}</button>
+          <button class="tab ${this.viewMode === 'conferences' ? 'active' : ''}" data-view="conferences">${t('components.techEvents.conferences')}</button>
+          <button class="tab ${this.viewMode === 'earnings' ? 'active' : ''}" data-view="earnings">${t('components.techEvents.earnings')}</button>
+          <button class="tab ${this.viewMode === 'all' ? 'active' : ''}" data-view="all">${t('components.techEvents.all')}</button>
         </div>
         <div class="tech-events-stats">
-          <span class="stat">📅 ${upcomingConferences.length} conferences</span>
-          <span class="stat">📍 ${mappableCount} on map</span>
-          <a href="https://www.techmeme.com/events" target="_blank" rel="noopener" class="source-link">Techmeme Events ↗</a>
+          <span class="stat">📅 ${t('components.techEvents.conferencesCount', { count: String(upcomingConferences.length) })}</span>
+          <span class="stat">📍 ${t('components.techEvents.onMap', { count: String(mappableCount) })}</span>
+          <a href="https://www.techmeme.com/events" target="_blank" rel="noopener" class="source-link">${t('components.techEvents.techmemeEvents')}</a>
         </div>
         <div class="tech-events-list">
           ${filteredEvents.length > 0
@@ -209,8 +209,8 @@ export class TechEventsPanel extends Panel {
         <div class="event-date">
           <span class="event-month">${startDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</span>
           <span class="event-day">${startDate.getDate()}</span>
-          ${isToday ? '<span class="today-badge">TODAY</span>' : ''}
-          ${isSoon ? '<span class="soon-badge">SOON</span>' : ''}
+          ${isToday ? `<span class="today-badge">${t('components.techEvents.today')}</span>` : ''}
+          ${isSoon ? `<span class="soon-badge">${t('components.techEvents.soon')}</span>` : ''}
         </div>
         <div class="event-content">
           <div class="event-header">

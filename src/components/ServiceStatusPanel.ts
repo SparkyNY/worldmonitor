@@ -39,14 +39,17 @@ interface ServiceStatusResponse {
 
 type CategoryFilter = 'all' | 'cloud' | 'dev' | 'comm' | 'ai' | 'saas';
 
-const CATEGORY_LABELS: Record<CategoryFilter, string> = {
-  all: 'All',
-  cloud: 'Cloud',
-  dev: 'Dev Tools',
-  comm: 'Comms',
-  ai: 'AI',
-  saas: 'SaaS',
-};
+function getCategoryLabel(category: CategoryFilter): string {
+  const labels: Record<CategoryFilter, string> = {
+    all: t('components.serviceStatus.categories.all'),
+    cloud: t('components.serviceStatus.categories.cloud'),
+    dev: t('components.serviceStatus.categories.dev'),
+    comm: t('components.serviceStatus.categories.comm'),
+    ai: t('components.serviceStatus.categories.ai'),
+    saas: t('components.serviceStatus.categories.saas'),
+  };
+  return labels[category];
+}
 
 export class ServiceStatusPanel extends Panel {
   private services: ServiceStatus[] = [];
@@ -104,7 +107,7 @@ export class ServiceStatusPanel extends Panel {
       this.content.innerHTML = `
         <div class="service-status-loading">
           <div class="loading-spinner"></div>
-          <span>Checking services...</span>
+          <span>${t('components.serviceStatus.checkingServices')}</span>
         </div>
       `;
       return;
@@ -114,7 +117,7 @@ export class ServiceStatusPanel extends Panel {
       this.content.innerHTML = `
         <div class="service-status-error">
           <span class="error-text">${escapeHtml(this.error)}</span>
-          <button class="retry-btn">Retry</button>
+          <button class="retry-btn">${t('common.retry')}</button>
         </div>
       `;
       this.content.querySelector('.retry-btn')?.addEventListener('click', () => {
@@ -142,7 +145,7 @@ export class ServiceStatusPanel extends Panel {
       <div class="service-status-list">
         ${servicesHtml}
       </div>
-      ${issues.length === 0 ? '<div class="all-operational">All services operational</div>' : ''}
+      ${issues.length === 0 ? `<div class="all-operational">${t('components.serviceStatus.allOperational')}</div>` : ''}
     `;
 
     this.attachFilterListeners();
@@ -155,7 +158,7 @@ export class ServiceStatusPanel extends Panel {
     if (!this.localBackend?.enabled) {
       return `
         <div class="service-status-backend warning">
-          Desktop local backend unavailable. Falling back to cloud API.
+          ${t('components.serviceStatus.backendUnavailable')}
         </div>
       `;
     }
@@ -179,15 +182,15 @@ export class ServiceStatusPanel extends Panel {
       <div class="service-status-summary">
         <div class="summary-item operational">
           <span class="summary-count">${operational}</span>
-          <span class="summary-label">OK</span>
+          <span class="summary-label">${t('components.serviceStatus.ok')}</span>
         </div>
         <div class="summary-item degraded">
           <span class="summary-count">${degraded}</span>
-          <span class="summary-label">Degraded</span>
+          <span class="summary-label">${t('components.serviceStatus.degraded')}</span>
         </div>
         <div class="summary-item outage">
           <span class="summary-count">${outage}</span>
-          <span class="summary-label">Outage</span>
+          <span class="summary-label">${t('components.serviceStatus.outage')}</span>
         </div>
       </div>
     `;
@@ -202,13 +205,13 @@ export class ServiceStatusPanel extends Panel {
 
     return `
       <div class="service-status-desktop-readiness">
-        <div class="service-status-desktop-title">Desktop readiness</div>
-        <div class="service-status-desktop-subtitle">Acceptance checks: ${checks.filter(check => check.ready).length}/${checks.length} ready · key-backed features ${keySummary.available}/${keySummary.total}</div>
+        <div class="service-status-desktop-title">${t('components.serviceStatus.desktopReadiness')}</div>
+        <div class="service-status-desktop-subtitle">${t('components.serviceStatus.acceptanceChecks', { ready: String(checks.filter(check => check.ready).length), total: String(checks.length), available: String(keySummary.available), featureTotal: String(keySummary.total) })}</div>
         <ul class="service-status-desktop-list">
           ${checks.map(check => `<li>${check.ready ? '✅' : '⚠️'} ${escapeHtml(check.label)}</li>`).join('')}
         </ul>
         <details class="service-status-non-parity">
-          <summary>Non-parity fallbacks (${nonParity.length})</summary>
+          <summary>${t('components.serviceStatus.nonParityFallbacks', { count: String(nonParity.length) })}</summary>
           <ul>
             ${nonParity.map(feature => `<li><strong>${escapeHtml(feature.panel)}</strong>: ${escapeHtml(feature.fallback)}</li>`).join('')}
           </ul>
@@ -218,9 +221,10 @@ export class ServiceStatusPanel extends Panel {
   }
 
   private renderFilters(): string {
-    const filters = Object.entries(CATEGORY_LABELS).map(([key, label]) => {
+    const categories: CategoryFilter[] = ['all', 'cloud', 'dev', 'comm', 'ai', 'saas'];
+    const filters = categories.map(key => {
       const active = this.filter === key ? 'active' : '';
-      return `<button class="status-filter-btn ${active}" data-filter="${key}">${label}</button>`;
+      return `<button class="status-filter-btn ${active}" data-filter="${key}">${getCategoryLabel(key)}</button>`;
     }).join('');
 
     return `<div class="service-status-filters">${filters}</div>`;

@@ -85,7 +85,7 @@ export class Panel {
       const infoBtn = document.createElement('button');
       infoBtn.className = 'panel-info-btn';
       infoBtn.innerHTML = '?';
-      infoBtn.setAttribute('aria-label', 'Show methodology info');
+      infoBtn.setAttribute('aria-label', t('components.panel.showMethodologyInfo'));
 
       const tooltip = document.createElement('div');
       tooltip.className = 'panel-info-tooltip';
@@ -138,7 +138,7 @@ export class Panel {
     // Add resize handle
     this.resizeHandle = document.createElement('div');
     this.resizeHandle.className = 'panel-resize-handle';
-    this.resizeHandle.title = 'Drag to resize (double-click to reset)';
+    this.resizeHandle.title = t('components.panel.dragToResize');
     this.resizeHandle.draggable = false; // Prevent parent's drag from capturing
     this.element.appendChild(this.resizeHandle);
     this.setupResizeHandlers();
@@ -303,7 +303,7 @@ export class Panel {
 
   public showConfigError(message: string): void {
     const settingsBtn = isDesktopRuntime()
-      ? '<button type="button" class="config-error-settings-btn">Open Settings</button>'
+      ? `<button type="button" class="config-error-settings-btn">${t('components.panel.openSettings')}</button>`
       : '';
     this.content.innerHTML = `<div class="config-error-message">${escapeHtml(message)}${settingsBtn}</div>`;
     if (isDesktopRuntime()) {
