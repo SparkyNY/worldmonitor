@@ -226,9 +226,11 @@ export async function fetchOilAnalytics(): Promise<OilAnalytics> {
 }
 
 export function formatOilValue(value: number, unit: string): string {
-  if (unit.includes('$')) return `$${value.toFixed(2)}`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-  return value.toFixed(1);
+  const v = Number(value);
+  if (!Number.isFinite(v)) return '—';
+  if (unit.includes('$')) return `$${v.toFixed(2)}`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  return v.toFixed(1);
 }
 
 export function getTrendIndicator(trend: OilMetric['trend']): string {

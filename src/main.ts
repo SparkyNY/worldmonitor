@@ -46,7 +46,7 @@ Sentry.init({
     /Java bridge method invocation error/,
     /Could not compile fragment shader/,
     /can't redefine non-configurable property/,
-    /Can.t find variable: (CONFIG|currentInset)/,
+    /Can.t find variable: (CONFIG|currentInset|NP)/,
     /invalid origin/,
     /\.data\.split is not a function/,
     /signal is aborted without reason/,
@@ -64,8 +64,13 @@ Sentry.init({
     /FetchEvent\.respondWith/,
     /e\.toLowerCase is not a function/,
     /\.trim is not a function/,
-    /\.indexOf is not a function/,
+    /\.(indexOf|findIndex) is not a function/,
     /QuotaExceededError/,
+    /^TypeError: 已取消$/,
+    /Maximum call stack size exceeded/,
+    /^fetchError: Network request failed$/,
+    /window\.ethereum/,
+    /^SyntaxError: Unexpected token/,
   ],
   beforeSend(event) {
     const msg = event.exception?.values?.[0]?.value ?? '';
