@@ -269,6 +269,116 @@ test('strips browser origin headers before invoking local handlers', async () =>
   }
 });
 
+test('preserves Request body when handler uses fetch(Request)', async () => {
+  let receivedBody = '';
+
+  const upstream = createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (chunk) => chunks.push(chunk));
+    req.on('end', () => {
+      receivedBody = Buffer.concat(chunks).toString('utf8');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ receivedBody }));
+    });
+  });
+  const upstreamPort = await listen(upstream);
+  process.env.WM_TEST_UPSTREAM = `http://127.0.0.1:${upstreamPort}`;
+
+  const localApi = await setupApiDir({
+    'request-proxy.js': `
+      export default async function handler() {
+        const request = new Request(\`\${process.env.WM_TEST_UPSTREAM}/echo\`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ secret: 'keep-body' }),
+        });
+        const upstream = await fetch(request);
+        const payload = await upstream.text();
+        return new Response(payload, {
+          status: upstream.status,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+    `,
+  });
+
+  const app = await createLocalApiServer({
+    port: 0,
+    apiDir: localApi.apiDir,
+    logger: { log() {}, warn() {}, error() {} },
+  });
+  const { port } = await app.start();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/request-proxy`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.receivedBody.includes('"secret":"keep-body"'), true);
+    assert.equal(receivedBody.includes('"secret":"keep-body"'), true);
+  } finally {
+    delete process.env.WM_TEST_UPSTREAM;
+    await app.close();
+    await localApi.cleanup();
+    await new Promise((resolve, reject) => {
+      upstream.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
+test('returns local handler error when fetch(Request) uses a consumed body', async () => {
+  let upstreamHits = 0;
+
+  const upstream = createServer((req, res) => {
+    upstreamHits += 1;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+  });
+  const upstreamPort = await listen(upstream);
+  process.env.WM_TEST_UPSTREAM = `http://127.0.0.1:${upstreamPort}`;
+
+  const localApi = await setupApiDir({
+    'request-consumed.js': `
+      export default async function handler() {
+        const request = new Request(\`\${process.env.WM_TEST_UPSTREAM}/echo\`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ secret: 'used-body' }),
+        });
+        await request.text();
+        await fetch(request);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+    `,
+  });
+
+  const app = await createLocalApiServer({
+    port: 0,
+    apiDir: localApi.apiDir,
+    logger: { log() {}, warn() {}, error() {} },
+  });
+  const { port } = await app.start();
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/request-consumed`);
+    assert.equal(response.status, 502);
+    const body = await response.json();
+    assert.equal(body.error, 'Local handler error');
+    assert.equal(typeof body.reason, 'string');
+    assert.equal(body.reason.length > 0, true);
+    assert.equal(upstreamHits, 0);
+  } finally {
+    delete process.env.WM_TEST_UPSTREAM;
+    await app.close();
+    await localApi.cleanup();
+    await new Promise((resolve, reject) => {
+      upstream.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
+
 test('strips browser origin headers when proxying to cloud fallback (cloudFallback enabled)', async () => {
   const remote = await setupRemoteServer();
   const localApi = await setupApiDir({});
