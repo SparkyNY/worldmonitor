@@ -3,6 +3,7 @@ import type { PanelConfig } from '@/types';
 import type { MapView } from '@/components';
 import type { ClusteredEvent } from '@/types';
 import type { DashboardSnapshot } from '@/services/storage';
+import confetti from 'canvas-confetti';
 import {
   PlaybackControl,
   StatusPanel,
@@ -58,6 +59,19 @@ export interface EventHandlerCallbacks {
 }
 
 export class EventHandlerManager implements AppModule {
+  private static readonly KONAMI_SEQUENCE = [
+    'arrowup',
+    'arrowup',
+    'arrowdown',
+    'arrowdown',
+    'arrowleft',
+    'arrowright',
+    'arrowleft',
+    'arrowright',
+    'b',
+    'a',
+  ];
+
   private ctx: AppContext;
   private callbacks: EventHandlerCallbacks;
 
@@ -66,6 +80,10 @@ export class EventHandlerManager implements AppModule {
   private boundVisibilityHandler: (() => void) | null = null;
   private boundDesktopExternalLinkHandler: ((e: MouseEvent) => void) | null = null;
   private boundIdleResetHandler: (() => void) | null = null;
+  private boundKonamiHandler: ((e: KeyboardEvent) => void) | null = null;
+  private konamiProgress = 0;
+  private konamiOverlay: HTMLDivElement | null = null;
+  private konamiAutoCloseTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private idleTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private snapshotIntervalId: ReturnType<typeof setInterval> | null = null;
   private clockIntervalId: ReturnType<typeof setInterval> | null = null;
@@ -158,6 +176,15 @@ export class EventHandlerManager implements AppModule {
       clearInterval(this.clockIntervalId);
       this.clockIntervalId = null;
     }
+    if (this.boundKonamiHandler) {
+      document.removeEventListener('keydown', this.boundKonamiHandler);
+      this.boundKonamiHandler = null;
+    }
+    if (this.konamiAutoCloseTimeoutId) {
+      clearTimeout(this.konamiAutoCloseTimeoutId);
+      this.konamiAutoCloseTimeoutId = null;
+    }
+    this.removeKonamiPopup();
     this.ctx.tvMode?.destroy();
     this.ctx.tvMode = null;
     this.ctx.unifiedSettings?.destroy();
@@ -288,6 +315,120 @@ export class EventHandlerManager implements AppModule {
       };
       document.addEventListener('click', this.boundDesktopExternalLinkHandler, true);
     }
+
+    this.setupKonamiCode();
+  }
+
+  private setupKonamiCode(): void {
+    if (this.boundKonamiHandler) {
+      document.removeEventListener('keydown', this.boundKonamiHandler);
+    }
+
+    this.boundKonamiHandler = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (this.isTypingTarget(event.target)) {
+        this.konamiProgress = 0;
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const expected = EventHandlerManager.KONAMI_SEQUENCE[this.konamiProgress];
+
+      if (key === expected) {
+        this.konamiProgress += 1;
+        if (this.konamiProgress === EventHandlerManager.KONAMI_SEQUENCE.length) {
+          this.konamiProgress = 0;
+          this.showKonamiPopup();
+          this.launchKonamiConfetti();
+        }
+        return;
+      }
+
+      this.konamiProgress = key === EventHandlerManager.KONAMI_SEQUENCE[0] ? 1 : 0;
+    };
+
+    document.addEventListener('keydown', this.boundKonamiHandler);
+  }
+
+  private isTypingTarget(target: EventTarget | null): boolean {
+    const element = target instanceof HTMLElement ? target : null;
+    if (!element) return false;
+    if (element.isContentEditable) return true;
+    if (element.closest('[contenteditable=""], [contenteditable="true"], [contenteditable]')) {
+      return true;
+    }
+    return element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT';
+  }
+
+  private showKonamiPopup(): void {
+    this.removeKonamiPopup();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay active konami-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Konami celebration');
+
+    const modal = document.createElement('div');
+    modal.className = 'modal konami-modal';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'modal-close konami-close';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.textContent = '×';
+
+    const headline = document.createElement('h2');
+    headline.className = 'konami-headline';
+    headline.textContent = 'He-HEYYYY!!!';
+
+    modal.append(closeBtn, headline);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    this.konamiOverlay = overlay;
+
+    const dismiss = () => this.removeKonamiPopup();
+    closeBtn.addEventListener('click', dismiss);
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) dismiss();
+    });
+
+    this.konamiAutoCloseTimeoutId = setTimeout(() => {
+      this.removeKonamiPopup();
+    }, 5000);
+  }
+
+  private removeKonamiPopup(): void {
+    if (this.konamiAutoCloseTimeoutId) {
+      clearTimeout(this.konamiAutoCloseTimeoutId);
+      this.konamiAutoCloseTimeoutId = null;
+    }
+    if (this.konamiOverlay) {
+      this.konamiOverlay.remove();
+      this.konamiOverlay = null;
+    }
+  }
+
+  private launchKonamiConfetti(): void {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const base = {
+      particleCount: 120,
+      spread: 90,
+      startVelocity: 42,
+      ticks: 220,
+      scalar: 1.1,
+      zIndex: 2000,
+    };
+    void confetti({
+      ...base,
+      angle: 60,
+      origin: { x: 0.1, y: 0.72 },
+    });
+    void confetti({
+      ...base,
+      angle: 120,
+      origin: { x: 0.9, y: 0.72 },
+    });
   }
 
   private setupIdleDetection(): void {
