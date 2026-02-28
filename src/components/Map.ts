@@ -12,6 +12,8 @@ import type { GeoHubActivity } from '@/services/geo-activity';
 import { getNaturalEventIcon } from '@/services/eonet';
 import type { WeatherAlert } from '@/services/weather';
 import { getSeverityColor } from '@/services/weather';
+import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
+import type { LocalTransitVehicle } from '@/services/local-transit';
 import {
   MAP_URLS,
   INTEL_HOTSPOTS,
@@ -42,7 +44,6 @@ import {
   CENTRAL_BANKS,
   COMMODITY_HUBS,
 } from '@/config';
-import { tokenizeForMatch, matchKeyword, findMatchingKeywords } from '@/utils/keyword-match';
 import { MapPopup } from './MapPopup';
 import {
   updateHotspotEscalation,
@@ -2174,8 +2175,8 @@ export class MapComponent {
       });
     }
 
-    // Geo Hub Activity Markers (shows activity heatmap for geopolitical hubs - full variant)
-    if (SITE_VARIANT === 'full' && this.geoActivities.length > 0) {
+    // Geo Hub Activity Markers (shows activity heatmap for geopolitical hubs).
+    if ((SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd') && this.geoActivities.length > 0) {
       this.geoActivities.forEach((activity) => {
         const pos = projection([activity.lon, activity.lat]);
         if (!pos) return;
@@ -2741,27 +2742,32 @@ export class MapComponent {
   }
 
   private getRelatedNews(hotspot: Hotspot): NewsItem[] {
-    const conflictTopics = ['gaza', 'ukraine', 'ukrainian', 'russia', 'russian', 'israel', 'israeli', 'iran', 'iranian', 'china', 'chinese', 'taiwan', 'taiwanese', 'korea', 'korean', 'syria', 'syrian'];
+    // High-priority conflict keywords that indicate the news is really about another topic
+    const conflictTopics = ['gaza', 'ukraine', 'russia', 'israel', 'iran', 'china', 'taiwan', 'korea', 'syria'];
 
     return this.news
       .map((item) => {
-        const tokens = tokenizeForMatch(item.title);
-        const matchedKeywords = findMatchingKeywords(tokens, hotspot.keywords);
+        const titleLower = item.title.toLowerCase();
+        const matchedKeywords = hotspot.keywords.filter((kw) => titleLower.includes(kw.toLowerCase()));
 
         if (matchedKeywords.length === 0) return null;
 
+        // Check if this news mentions other hotspot conflict topics
         const conflictMatches = conflictTopics.filter(t =>
-          matchKeyword(tokens, t) && !hotspot.keywords.some(k => k.toLowerCase().includes(t))
+          titleLower.includes(t) && !hotspot.keywords.some(k => k.toLowerCase().includes(t))
         );
 
+        // If article mentions a major conflict topic that isn't this hotspot, deprioritize heavily
         if (conflictMatches.length > 0) {
+          // Only include if it ALSO has a strong local keyword (city name, agency)
           const strongLocalMatch = matchedKeywords.some(kw =>
             kw.toLowerCase() === hotspot.name.toLowerCase() ||
-            hotspot.agencies?.some(a => matchKeyword(tokens, a))
+            hotspot.agencies?.some(a => titleLower.includes(a.toLowerCase()))
           );
           if (!strongLocalMatch) return null;
         }
 
+        // Score: more keyword matches = more relevant
         const score = matchedKeywords.length;
         return { item, score };
       })
@@ -2780,8 +2786,8 @@ export class MapComponent {
       let matchedCount = 0;
 
       news.forEach((item) => {
-        const tokens = tokenizeForMatch(item.title);
-        const matches = spot.keywords.filter((kw) => matchKeyword(tokens, kw));
+        const titleLower = item.title.toLowerCase();
+        const matches = spot.keywords.filter((kw) => titleLower.includes(kw.toLowerCase()));
 
         if (matches.length > 0) {
           matchedCount++;
@@ -2971,6 +2977,11 @@ export class MapComponent {
   }
 
   public reset(): void {
+    if (SITE_VARIANT === 'local') {
+      this.state.zoom = 10.6;
+      this.setCenter(42.3601, -71.0589);
+      return;
+    }
     this.state.zoom = 1;
     this.state.pan = { x: 0, y: 0 };
     if (this.state.view !== 'global') {
@@ -3457,6 +3468,38 @@ export class MapComponent {
   public setTechEvents(events: TechEventMarker[]): void {
     this.techEvents = events;
     this.render();
+  }
+
+  public setBostonPoliceDistricts(_data: BostonLayerData): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
+  }
+
+  public setBostonFireHydrants(_data: BostonLayerData): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
+  }
+
+  public setBostonFireDepartments(_data: BostonLayerData): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
+  }
+
+  public setBostonCommunityCenters(_data: BostonLayerData): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
+  }
+
+  public setBostonCrimeIncidents(_incidents: BostonIncident[]): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
+  }
+
+  public setBostonFireIncidents(_incidents: BostonIncident[]): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
+  }
+
+  public setBostonTransitVehicles(_vehicles: LocalTransitVehicle[]): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
+  }
+
+  public setBostonLayerEnabled(_layerId: BostonLayerId, _enabled: boolean): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
   }
 
   public setCyberThreats(_threats: CyberThreat[]): void {

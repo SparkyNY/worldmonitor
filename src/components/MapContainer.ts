@@ -36,6 +36,8 @@ import type { KindnessPoint } from '@/services/kindness-data';
 import type { HappinessData } from '@/services/happiness-data';
 import type { SpeciesRecovery } from '@/services/conservation-data';
 import type { RenewableInstallation } from '@/services/renewable-installations';
+import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
+import type { LocalTransitVehicle } from '@/services/local-transit';
 
 export type TimeRange = '1h' | '6h' | '24h' | '48h' | '7d' | 'all';
 export type MapView = 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
@@ -371,6 +373,46 @@ export class MapContainer {
       this.deckGLMap?.setRenewableInstallations(installations);
     }
     // SVG map does not support renewable installations layer
+  }
+
+  public setBostonPoliceDistricts(data: BostonLayerData): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonPoliceDistricts(data);
+    else this.svgMap?.setBostonPoliceDistricts(data);
+  }
+
+  public setBostonFireHydrants(data: BostonLayerData): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonFireHydrants(data);
+    else this.svgMap?.setBostonFireHydrants(data);
+  }
+
+  public setBostonFireDepartments(data: BostonLayerData): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonFireDepartments(data);
+    else this.svgMap?.setBostonFireDepartments(data);
+  }
+
+  public setBostonCommunityCenters(data: BostonLayerData): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonCommunityCenters(data);
+    else this.svgMap?.setBostonCommunityCenters(data);
+  }
+
+  public setBostonCrimeIncidents(incidents: BostonIncident[]): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonCrimeIncidents(incidents);
+    else this.svgMap?.setBostonCrimeIncidents(incidents);
+  }
+
+  public setBostonFireIncidents(incidents: BostonIncident[]): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonFireIncidents(incidents);
+    else this.svgMap?.setBostonFireIncidents(incidents);
+  }
+
+  public setBostonTransitVehicles(vehicles: LocalTransitVehicle[]): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonTransitVehicles(vehicles);
+    else this.svgMap?.setBostonTransitVehicles(vehicles);
+  }
+
+  public setBostonLayerEnabled(layerId: BostonLayerId, enabled: boolean): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonLayerEnabled(layerId, enabled);
+    else this.svgMap?.setBostonLayerEnabled(layerId, enabled);
   }
 
   public updateHotspotActivity(news: NewsItem[]): void {

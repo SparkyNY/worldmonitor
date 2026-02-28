@@ -218,9 +218,91 @@
 .giving-section-title { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600; }
 .giving-receiver-list { list-style: none; padding: 0; margin: 0; }
 .giving-receiver-list li { padding: 3px 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 11px; }
+
+/* ----------------------------------------------------------
+   Boston Open Data Panel
+   ---------------------------------------------------------- */
+.boston-panel-content { font-size: 12px; display: flex; flex-direction: column; gap: 10px; }
+.boston-toolbar { display: flex; gap: 8px; align-items: center; }
+.boston-section { border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px; background: var(--overlay-subtle); }
+.boston-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px; font-weight: 700; }
+.boston-section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.boston-section-title-row .boston-section-title { margin-bottom: 0; }
+.boston-btn { background: color-mix(in srgb, var(--accent) 15%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); color: var(--accent); border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
+.boston-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.boston-btn-secondary { color: var(--text-secondary); border-color: var(--border-strong); background: transparent; }
+.boston-layer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.boston-layer-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px; background: var(--surface-hover); border-radius: 4px; }
+.boston-layer-item label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+.boston-transit-meta { margin-bottom: 8px; color: var(--text-muted); font-size: 10px; }
+.boston-transit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.boston-transit-card { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px; background: var(--surface); }
+.boston-transit-card strong { color: var(--text); font-size: 11px; }
+.boston-transit-card span { color: var(--text-muted); font-size: 10px; }
+.boston-transit-alerts { display: grid; gap: 6px; max-height: 170px; overflow: auto; }
+.boston-transit-alert { display: grid; gap: 3px; border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px; background: var(--surface); }
+.boston-transit-alert span { color: var(--text-secondary); font-size: 10px; line-height: 1.4; }
+.boston-transit-alert a { color: var(--accent); font-size: 10px; text-decoration: none; }
+.boston-transit-warning { margin-top: 6px; color: var(--semantic-high); font-size: 10px; }
+.boston-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.boston-tab { flex: 1; border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 4px; padding: 5px 8px; cursor: pointer; font-size: 11px; }
+.boston-tab.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.boston-view { display: none; }
+.boston-view.active { display: block; }
+.boston-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.boston-controls label { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted); font-size: 10px; }
+.boston-controls input, .boston-controls select { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); padding: 4px 6px; font-size: 11px; }
+.boston-range-pills { display: flex; gap: 6px; margin-bottom: 8px; }
+.boston-pill { border: 1px solid var(--border-strong); background: transparent; color: var(--text-muted); border-radius: 999px; padding: 3px 10px; font-size: 10px; cursor: pointer; }
+.boston-pill.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.boston-list-wrap { max-height: 280px; overflow: auto; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--surface); }
+.boston-fire-chart { display: grid; gap: 4px; margin-bottom: 8px; }
+.boston-fire-bar-row { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr 36px; align-items: center; gap: 8px; font-size: 10px; color: var(--text-muted); }
+.boston-fire-bar { width: 100%; height: 6px; border-radius: 3px; background: var(--border-subtle); overflow: hidden; }
+.boston-fire-bar i { display: block; height: 100%; background: color-mix(in srgb, var(--semantic-high) 70%, var(--accent)); border-radius: 3px; }
+.boston-table { width: 100%; border-collapse: collapse; }
+.boston-table th { position: sticky; top: 0; background: var(--surface); text-align: left; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; padding: 6px; border-bottom: 1px solid var(--border); }
+.boston-table td { padding: 6px; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); font-size: 11px; }
+.boston-incident-row { cursor: pointer; }
+.boston-incident-row:hover { background: var(--surface-hover); }
+.boston-incident-row.selected { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.boston-empty { text-align: center; color: var(--text-muted); padding: 10px; }
+.boston-incident-summary { color: var(--text-muted); font-size: 11px; margin-top: 6px; }
+.boston-provenance-list { display: grid; gap: 8px; }
+.boston-prov-item { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px; background: var(--surface); }
+.boston-prov-item strong { color: var(--text); font-size: 11px; }
+.boston-prov-item span { color: var(--text-muted); font-size: 10px; }
+.boston-warning { color: var(--semantic-high) !important; }
 .giving-receiver-list li:last-child { border-bottom: none; }
 .giving-inst-content { }
 .giving-inst-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+
+/* ----------------------------------------------------------
+   OSINT Workbench Panel
+   ---------------------------------------------------------- */
+.osint-panel-content { font-size: 12px; display: grid; gap: 8px; }
+.osint-toolbar { display: grid; grid-template-columns: 120px 1fr auto; gap: 6px; align-items: end; }
+.osint-toolbar label { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+.osint-type-select, .osint-query-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); padding: 6px 8px; font-size: 11px; }
+.osint-run-btn, .osint-open-all-btn { border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 11px; }
+.osint-open-all-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.osint-error { color: var(--semantic-high); font-size: 11px; }
+.osint-results-header { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.osint-results { display: grid; gap: 6px; }
+.osint-result-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid var(--border-subtle); background: var(--surface); border-radius: 4px; padding: 6px 8px; }
+.osint-result-item a { color: var(--text-secondary); text-decoration: none; font-weight: 600; }
+.osint-result-item a:hover { color: var(--accent); text-decoration: underline; }
+.osint-result-item span { color: var(--text-muted); font-size: 10px; }
+.osint-empty { border: 1px dashed var(--border); border-radius: 4px; padding: 10px; color: var(--text-muted); text-align: center; }
+.osint-framework-links { display: grid; gap: 6px; margin-top: 4px; }
+.osint-quick-link { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--overlay-subtle); padding: 6px 8px; text-decoration: none; }
+.osint-quick-link strong { color: var(--text-secondary); font-size: 11px; }
+.osint-quick-link span { color: var(--text-muted); font-size: 10px; }
+.osint-quick-link:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+@media (max-width: 720px) {
+  .osint-toolbar { grid-template-columns: 1fr; }
+}
 
 /* ----------------------------------------------------------
    Security Advisories Panel

@@ -3,6 +3,7 @@ const WS_API_URL = import.meta.env.VITE_WS_API_URL || '';
 const DEFAULT_REMOTE_HOSTS: Record<string, string> = {
   tech: WS_API_URL,
   full: WS_API_URL,
+  gtd: WS_API_URL,
   world: WS_API_URL,
   happy: WS_API_URL,
 };

@@ -304,16 +304,6 @@ export interface MilitaryBase {
   source?: string;            // Reference URL
 }
 
-export interface MilitaryBaseEnriched extends MilitaryBase {
-  kind?: string;
-  tier?: number;
-  catAirforce?: boolean;
-  catNaval?: boolean;
-  catNuclear?: boolean;
-  catSpace?: boolean;
-  catTraining?: boolean;
-}
-
 export interface CableLandingPoint {
   country: string;       // ISO code
   countryName: string;

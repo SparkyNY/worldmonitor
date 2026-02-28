@@ -1,7 +1,6 @@
 import { STARTUP_ECOSYSTEMS } from '@/config/startup-ecosystems';
 import { TECH_COMPANIES } from '@/config/tech-companies';
 import { STARTUP_HUBS } from '@/config/tech-geo';
-import { tokenizeForMatch, matchKeyword } from '@/utils/keyword-match';
 
 export interface TechHubLocation {
   id: string;
@@ -212,13 +211,14 @@ export interface HubMatch {
 export function inferHubsFromTitle(title: string): HubMatch[] {
   const index = buildTechHubIndex();
   const matches: HubMatch[] = [];
-  const tokens = tokenizeForMatch(title);
+  const titleLower = title.toLowerCase();
   const seenHubs = new Set<string>();
 
+  // Check each keyword
   for (const [keyword, hubIds] of index.byKeyword) {
-    if (keyword.length < 3) continue;
+    if (keyword.length < 3) continue; // Skip very short keywords
 
-    if (matchKeyword(tokens, keyword)) {
+    if (titleLower.includes(keyword)) {
       for (const hubId of hubIds) {
         if (seenHubs.has(hubId)) continue;
         seenHubs.add(hubId);

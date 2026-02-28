@@ -74,6 +74,25 @@ const VARIANT_META: Record<string, {
       'Geopolitical intelligence',
     ],
   },
+  gtd: {
+    title: 'GTD Monitor - Global Terrorism Database Dashboard',
+    description: 'Global Terrorism Database dashboard for tracking terrorism, conflict, and geopolitical risk signals in real time.',
+    keywords: 'global terrorism database, GTD, terrorism dashboard, conflict monitoring, geopolitical risk, OSINT terrorism, incident intelligence',
+    url: 'https://gtd.worldmonitor.app/',
+    siteName: 'GTD Monitor',
+    shortName: 'GTDMonitor',
+    subject: 'Global Terrorism and Conflict Intelligence',
+    classification: 'Terrorism Dashboard, Conflict Intelligence, OSINT Tool',
+    categories: ['news', 'productivity'],
+    features: [
+      'Terrorism and conflict tracking',
+      'Real-time geopolitical news',
+      'Military and risk overlays',
+      'Incident pattern awareness',
+      'Regional threat intelligence',
+      'Global map monitoring',
+    ],
+  },
   tech: {
     title: 'Tech Monitor - Real-Time AI & Tech Industry Dashboard',
     description: 'Real-time AI and tech industry dashboard tracking tech giants, AI labs, startup ecosystems, funding rounds, and tech events worldwide.',
@@ -204,7 +223,7 @@ function htmlVariantPlugin(): Plugin {
       }
 
       // Favicon variant paths — replace /favico/ paths with variant-specific subdirectory
-      if (activeVariant !== 'full') {
+      if (activeVariant === 'tech' || activeVariant === 'finance' || activeVariant === 'happy') {
         result = result
           .replace(/\/favico\/favicon/g, `/favico/${activeVariant}/favicon`)
           .replace(/\/favico\/apple-touch-icon/g, `/favico/${activeVariant}/apple-touch-icon`)
@@ -506,7 +525,7 @@ const RSS_PROXY_ALLOWED_DOMAINS = new Set([
   'rss.politico.com', 'www.anandtech.com', 'www.tomshardware.com', 'www.semianalysis.com',
   'feed.infoq.com', 'thenewstack.io', 'devops.com', 'dev.to', 'lobste.rs', 'changelog.com',
   'seekingalpha.com', 'news.crunchbase.com', 'www.saastr.com', 'feeds.feedburner.com',
-  'www.producthunt.com', 'www.axios.com', 'api.axios.com', 'github.blog', 'githubnext.com',
+  'www.producthunt.com', 'www.axios.com', 'github.blog', 'githubnext.com',
   'mshibanami.github.io', 'www.engadget.com', 'news.mit.edu', 'dev.events',
   'www.ycombinator.com', 'a16z.com', 'review.firstround.com', 'www.sequoiacap.com',
   'www.nfx.com', 'www.aaronsw.com', 'bothsidesofthetable.com', 'www.lennysnewsletter.com',

@@ -193,20 +193,12 @@ const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
   SN:[14.5,-14.5],CM:[7.4,12.4],CI:[7.5,-5.5],TZ:[-6.4,34.9],UG:[1.4,32.3],
 };
 
-function djb2(seed: string): number {
-  let h = 5381;
-  for (let i = 0; i < seed.length; i++) h = ((h << 5) + h + seed.charCodeAt(i)) & 0xffffffff;
-  return h;
-}
-
-function getCountryCentroid(countryCode: string, seed?: string): { lat: number; lon: number } | null {
+function getCountryCentroid(countryCode: string): { lat: number; lon: number } | null {
   if (!countryCode) return null;
   const coords = COUNTRY_CENTROIDS[countryCode.toUpperCase()];
   if (!coords) return null;
-  const key = seed || countryCode;
-  const latOffset = (((djb2(key) & 0xffff) / 0xffff) - 0.5) * 2;
-  const lonOffset = (((djb2(key + ':lon') & 0xffff) / 0xffff) - 0.5) * 2;
-  return { lat: coords[0] + latOffset, lon: coords[1] + lonOffset };
+  const jitter = () => (Math.random() - 0.5) * 2;
+  return { lat: coords[0] + jitter(), lon: coords[1] + jitter() };
 }
 
 // ========================================================================
@@ -378,7 +370,7 @@ export async function hydrateThreatCoordinates(threats: RawThreat[]): Promise<Ra
       return { ...threat, lat: lookup.lat, lon: lookup.lon, country: threat.country || lookup.country };
     }
 
-    const centroid = getCountryCentroid(threat.country, threat.indicator);
+    const centroid = getCountryCentroid(threat.country);
     if (centroid) {
       return { ...threat, lat: centroid.lat, lon: centroid.lon };
     }

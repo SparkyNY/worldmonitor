@@ -135,7 +135,8 @@ export async function listEtfFlows(
     }
 
     if (etfs.length === 0) {
-      return misses >= 3
+      const rateLimited = misses >= 3;
+      return rateLimited
         ? { timestamp: new Date().toISOString(), etfs: [], rateLimited: true }
         : null;
     }
@@ -158,7 +159,6 @@ export async function listEtfFlows(
         outflowCount,
       },
       etfs,
-      rateLimited: false,
     };
   });
 
@@ -178,7 +178,6 @@ export async function listEtfFlows(
       outflowCount: 0,
     },
     etfs: [],
-    rateLimited: false,
   };
   } catch {
     return etfCache || {
@@ -192,7 +191,6 @@ export async function listEtfFlows(
         outflowCount: 0,
       },
       etfs: [],
-      rateLimited: false,
     };
   }
 }

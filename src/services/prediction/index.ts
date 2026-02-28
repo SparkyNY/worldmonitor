@@ -54,6 +54,14 @@ const client = new PredictionServiceClient('', { fetch: (...args) => globalThis.
 // Cloudflare blocks server-side TLS but browsers pass JA3 fingerprint checks
 let directFetchWorks: boolean | null = null;
 let directFetchProbe: Promise<boolean> | null = null;
+let loggedDirectFetchBlocked = false;
+
+function logDirectFetchBlockedOnce(): void {
+  if (loggedDirectFetchBlocked) return;
+  loggedDirectFetchBlocked = true;
+  console.log('[Polymarket] Direct fetch blocked by Cloudflare, using proxy');
+}
+
 async function probeDirectFetchCapability(): Promise<boolean> {
   if (directFetchWorks !== null) return directFetchWorks;
   if (!directFetchProbe) {
@@ -62,10 +70,16 @@ async function probeDirectFetchCapability(): Promise<boolean> {
     })
       .then(resp => {
         directFetchWorks = resp.ok;
+        if (directFetchWorks) {
+          console.log('[Polymarket] Direct browser fetch working');
+        } else {
+          logDirectFetchBlockedOnce();
+        }
         return directFetchWorks;
       })
       .catch(() => {
         directFetchWorks = false;
+        logDirectFetchBlockedOnce();
         return false;
       })
       .finally(() => {
@@ -86,11 +100,13 @@ async function polyFetch(endpoint: 'events' | 'markets', params: Record<string, 
         headers: { 'Accept': 'application/json' },
       });
       if (resp.ok) {
+        if (directFetchWorks !== true) console.log('[Polymarket] Direct browser fetch working');
         directFetchWorks = true;
         return resp;
       }
     } catch {
       directFetchWorks = false;
+      logDirectFetchBlockedOnce();
     }
   }
 

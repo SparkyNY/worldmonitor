@@ -1,5 +1,4 @@
 import type { ClusteredEvent, RelatedAsset, AssetType, RelatedAssetContext } from '@/types';
-import { tokenizeForMatch, matchKeyword } from '@/utils/keyword-match';
 import { t } from '@/services/i18n';
 import {
   INTEL_HOTSPOTS,
@@ -28,20 +27,24 @@ interface AssetOrigin {
   label: string;
 }
 
+function toTitleLower(titles: string[]): string[] {
+  return titles.map(title => title.toLowerCase());
+}
+
 function detectAssetTypes(titles: string[]): AssetType[] {
-  const tokenized = titles.map(t => tokenizeForMatch(t));
+  const normalized = toTitleLower(titles);
   const types = Object.entries(ASSET_KEYWORDS)
     .filter(([, keywords]) =>
-      tokenized.some(tokens => keywords.some(keyword => matchKeyword(tokens, keyword)))
+      normalized.some(title => keywords.some(keyword => title.includes(keyword)))
     )
     .map(([type]) => type as AssetType);
   return types;
 }
 
 function countKeywordMatches(titles: string[], keywords: string[]): number {
-  const tokenized = titles.map(t => tokenizeForMatch(t));
+  const normalized = toTitleLower(titles);
   return keywords.reduce((count, keyword) => {
-    return count + tokenized.filter(tokens => matchKeyword(tokens, keyword)).length;
+    return count + normalized.filter(title => title.includes(keyword)).length;
   }, 0);
 }
 

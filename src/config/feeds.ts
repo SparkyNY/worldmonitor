@@ -32,7 +32,6 @@ export const SOURCE_TIERS: Record<string, number> = {
   'Al Jazeera': 2,
   'Financial Times': 2,
   'Politico': 2,
-  'Axios': 2,
   'EuroNews': 2,
   'France 24': 2,
   'Le Monde': 2,
@@ -321,7 +320,7 @@ export const SOURCE_TYPES: Record<string, SourceType> = {
   'BBC World': 'mainstream', 'BBC Middle East': 'mainstream',
   'Guardian World': 'mainstream', 'Guardian ME': 'mainstream',
   'NPR News': 'mainstream', 'Al Jazeera': 'mainstream',
-  'CNN World': 'mainstream', 'Politico': 'mainstream', 'Axios': 'mainstream',
+  'CNN World': 'mainstream', 'Politico': 'mainstream',
   'EuroNews': 'mainstream', 'France 24': 'mainstream', 'Le Monde': 'mainstream',
   // European Addition
   'El País': 'mainstream', 'El Mundo': 'mainstream', 'BBC Mundo': 'mainstream',
@@ -444,7 +443,6 @@ const FULL_FEEDS: Record<string, Feed[]> = {
   us: [
     { name: 'NPR News', url: rss('https://feeds.npr.org/1001/rss.xml') },
     { name: 'Politico', url: rss('https://news.google.com/rss/search?q=site:politico.com+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Axios', url: rss('https://api.axios.com/feed/') },
   ],
   europe: [
     {
@@ -986,6 +984,75 @@ const FINANCE_FEEDS: Record<string, Feed[]> = {
   ],
 };
 
+// Local variant feeds (Boston/Regional)
+const LOCAL_FEEDS: Record<string, Feed[]> = {
+  local: [
+    { name: 'Boston Globe', url: rss('https://news.google.com/rss/search?q=site:bostonglobe.com+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'WBUR News', url: rss('https://rss.wbur.org/wbur/news') },
+    { name: 'GBH News', url: rss('https://news.google.com/rss/search?q=site:wgbh.org+OR+site:gbhnews.org+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'WBZ Boston', url: rss('https://news.google.com/rss/search?q=site:cbsnews.com+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Universal Hub', url: rss('https://www.universalhub.com/rss.xml') },
+    { name: 'WCVB Boston', url: rss('https://www.wcvb.com/topstories-rss') },
+    { name: 'Boston 25 News', url: rss('https://www.boston25news.com/arc/outboundfeeds/rss/') },
+    { name: 'Boston Herald', url: rss('https://news.google.com/rss/search?q=site:bostonherald.com+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Boston.com', url: rss('https://www.boston.com/feed/') },
+  ],
+  city: [
+    { name: 'City of Boston', url: rss('https://news.google.com/rss/search?q=site:boston.gov+when:3d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Boston Public Health', url: rss('https://news.google.com/rss/search?q=site:boston.gov+\"public+health\"+when:7d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Mass.gov', url: rss('https://news.google.com/rss/search?q=site:mass.gov+when:3d&hl=en-US&gl=US&ceid=US:en') },
+  ],
+  transit: [
+    { name: 'MBTA Alerts', url: rss('https://www.mbta.com/alerts/rss') },
+    { name: 'MassDOT', url: rss('https://news.google.com/rss/search?q=site:mass.gov+MassDOT+traffic+when:3d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Boston Traffic', url: rss('https://news.google.com/rss/search?q=Boston+traffic+I-93+I-90+when:1d&hl=en-US&gl=US&ceid=US:en') },
+  ],
+  weather: [
+    { name: 'NWS Boston', url: rss('https://news.google.com/rss/search?q=(\"National+Weather+Service\"+Boston)+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'New England Weather', url: rss('https://news.google.com/rss/search?q=New+England+weather+warning+OR+watch+when:2d&hl=en-US&gl=US&ceid=US:en') },
+  ],
+  outages: [
+    { name: 'DownDetector US', url: rss('https://news.google.com/rss/search?q=Downdetector+US+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Internet Outages (US)', url: rss('https://news.google.com/rss/search?q=(internet+outage+OR+ISP+outage)+United+States+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Comcast/Xfinity Outages', url: rss('https://news.google.com/rss/search?q=(Comcast+OR+Xfinity)+outage+Boston+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Verizon Outages', url: rss('https://news.google.com/rss/search?q=Verizon+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'AT&T Outages', url: rss('https://news.google.com/rss/search?q=AT%26T+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'T-Mobile Outages', url: rss('https://news.google.com/rss/search?q=T-Mobile+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Spectrum Outages', url: rss('https://news.google.com/rss/search?q=Spectrum+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Cox Outages', url: rss('https://news.google.com/rss/search?q=Cox+Communications+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'US Cellular Outages', url: rss('https://news.google.com/rss/search?q=US+Cellular+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+  ],
+};
+
+// OSINT workbench variant feeds
+const OSINT_FEEDS: Record<string, Feed[]> = {
+  osint: [
+    { name: 'Bellingcat', url: rss('https://www.bellingcat.com/feed/') },
+    { name: 'Oryx OSINT', url: rss('https://www.oryxspioenkop.com/feeds/posts/default?alt=rss') },
+    { name: 'OSINT Curious', url: rss('https://osintcurio.us/feed/') },
+    { name: 'Hunchly Blog', url: rss('https://www.hunch.ly/blog-feed.xml') },
+    { name: 'Digital Investigation', url: rss('https://news.google.com/rss/search?q=(OSINT+OR+\"open+source+intelligence\")+investigation+when:3d&hl=en-US&gl=US&ceid=US:en') },
+  ],
+  security: [
+    { name: 'CISA Advisories', url: rss('https://www.cisa.gov/cybersecurity-advisories/all.xml') },
+    { name: 'Krebs Security', url: rss('https://krebsonsecurity.com/feed/') },
+    { name: 'The Hacker News', url: rss('https://feeds.feedburner.com/TheHackersNews') },
+    { name: 'SANS ISC', url: rss('https://isc.sans.edu/rssfeed.xml') },
+  ],
+  cyber: [
+    { name: 'Ransomware.live', url: rss('https://www.ransomware.live/rss.xml') },
+    { name: 'Abuse.ch', url: rss('https://abuse.ch/feed/') },
+    { name: 'Security Week', url: rss('https://www.securityweek.com/feed/') },
+    { name: 'Recorded Future News', url: rss('https://www.recordedfuture.com/feed') },
+  ],
+  outages: [
+    { name: 'DownDetector', url: rss('https://news.google.com/rss/search?q=Downdetector+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Cloudflare Status', url: rss('https://www.cloudflarestatus.com/history.atom') },
+    { name: 'AWS Status News', url: rss('https://news.google.com/rss/search?q=AWS+status+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Google Cloud Outages', url: rss('https://news.google.com/rss/search?q=(Google+Cloud+OR+GCP)+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+  ],
+};
+
 const HAPPY_FEEDS: Record<string, Feed[]> = {
   positive: [
     { name: 'Good News Network', url: rss('https://www.goodnewsnetwork.org/feed/') },
@@ -1027,6 +1094,12 @@ export const FEEDS = SITE_VARIANT === 'tech'
     ? FINANCE_FEEDS
     : SITE_VARIANT === 'happy'
       ? HAPPY_FEEDS
+      : SITE_VARIANT === 'gtd'
+        ? FULL_FEEDS
+      : SITE_VARIANT === 'local'
+        ? LOCAL_FEEDS
+        : SITE_VARIANT === 'osint'
+          ? OSINT_FEEDS
       : FULL_FEEDS;
 
 export const SOURCE_REGION_MAP: Record<string, { labelKey: string; feedKeys: string[] }> = {
@@ -1060,6 +1133,12 @@ export const SOURCE_REGION_MAP: Record<string, { labelKey: string; feedKeys: str
   dealsCorpFin: { labelKey: 'header.sourceRegionDeals', feedKeys: ['institutional', 'derivatives'] },
   finRegulation: { labelKey: 'header.sourceRegionFinRegulation', feedKeys: ['regulation'] },
   gulfMena: { labelKey: 'header.sourceRegionGulfMena', feedKeys: ['gccNews'] },
+
+  // Local variant regions
+  localRegion: { labelKey: 'header.sourceRegionLocal', feedKeys: ['local', 'city', 'transit', 'weather', 'outages'] },
+
+  // OSINT variant regions
+  osintRegion: { labelKey: 'header.sourceRegionOsint', feedKeys: ['osint', 'security', 'cyber', 'outages'] },
 };
 
 export const INTEL_SOURCES: Feed[] = [

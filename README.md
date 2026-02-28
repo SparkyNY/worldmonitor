@@ -1405,12 +1405,14 @@ Contributions welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed gui
 ```bash
 # Development
 npm run dev          # Full variant (worldmonitor.app)
+npm run dev:gtd      # GTD variant (gtd.worldmonitor.app)
 npm run dev:tech     # Tech variant (tech.worldmonitor.app)
 npm run dev:finance  # Finance variant (finance.worldmonitor.app)
 npm run dev:happy    # Happy variant (happy.worldmonitor.app)
 
 # Production builds
 npm run build:full      # Build full variant
+npm run build:gtd       # Build GTD variant
 npm run build:tech      # Build tech variant
 npm run build:finance   # Build finance variant
 npm run build:happy     # Build happy variant

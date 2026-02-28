@@ -331,6 +331,7 @@ async function fetchFromOpenSky(): Promise<MilitaryFlight[]> {
     throw new Error('All regions failed — upstream may be down');
   }
 
+  console.log(`[Military Flights] Found ${allFlights.length} military aircraft from ${MILITARY_QUERY_REGIONS.length} regions`);
   return allFlights;
 }
 
@@ -343,6 +344,7 @@ async function enrichFlightsWithWingbits(flights: MilitaryFlight[]): Promise<Mil
   // Check if Wingbits is configured
   const isConfigured = await checkWingbitsStatus();
   if (!isConfigured) {
+    console.log('[Military Flights] Wingbits not configured, skipping enrichment');
     return flights;
   }
 
@@ -355,6 +357,8 @@ async function enrichFlightsWithWingbits(flights: MilitaryFlight[]): Promise<Mil
   if (detailsMap.size === 0) {
     return flights;
   }
+
+  console.log(`[Military Flights] Enriching ${detailsMap.size} of ${flights.length} aircraft with Wingbits data`);
 
   // Enrich each flight
   return flights.map(flight => {
@@ -534,6 +538,7 @@ export async function fetchMilitaryFlights(): Promise<{
     // Generate clusters
     const clusters = clusterFlights(flights);
 
+    console.log(`[Military Flights] Total: ${flights.length} flights, ${clusters.length} clusters`);
     return { flights, clusters };
   }, { flights: [], clusters: [] });
 }

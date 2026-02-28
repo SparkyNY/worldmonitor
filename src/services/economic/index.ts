@@ -26,7 +26,6 @@ import { createCircuitBreaker } from '@/utils';
 import { getCSSColor } from '@/utils';
 import { isFeatureAvailable } from '../runtime-config';
 import { dataFreshness } from '../data-freshness';
-import { getHydratedData } from '@/services/bootstrap';
 
 // ---- Client + Circuit Breakers ----
 
@@ -562,16 +561,11 @@ export interface BisData {
 
 export async function fetchBisData(): Promise<BisData> {
   const empty: BisData = { policyRates: [], exchangeRates: [], creditToGdp: [], fetchedAt: new Date() };
-
-  const hPolicy = getHydratedData('bisPolicy') as GetBisPolicyRatesResponse | undefined;
-  const hEer = getHydratedData('bisExchange') as GetBisExchangeRatesResponse | undefined;
-  const hCredit = getHydratedData('bisCredit') as GetBisCreditResponse | undefined;
-
   try {
     const [policy, eer, credit] = await Promise.all([
-      hPolicy ? Promise.resolve(hPolicy) : bisPolicyBreaker.execute(() => client.getBisPolicyRates({}), emptyBisPolicyFallback),
-      hEer ? Promise.resolve(hEer) : bisEerBreaker.execute(() => client.getBisExchangeRates({}), emptyBisEerFallback),
-      hCredit ? Promise.resolve(hCredit) : bisCreditBreaker.execute(() => client.getBisCredit({}), emptyBisCreditFallback),
+      bisPolicyBreaker.execute(() => client.getBisPolicyRates({}), emptyBisPolicyFallback),
+      bisEerBreaker.execute(() => client.getBisExchangeRates({}), emptyBisEerFallback),
+      bisCreditBreaker.execute(() => client.getBisCredit({}), emptyBisCreditFallback),
     ]);
     return {
       policyRates: policy.rates,

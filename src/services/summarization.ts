@@ -84,6 +84,7 @@ async function tryApiProvider(
 
     const cached = Boolean(resp.cached);
     const resultProvider = cached ? 'cache' : providerDef.provider;
+    console.log(`[Summarization] ${cached ? 'Redis cache hit' : `${providerDef.label} success`}:`, resp.model);
     return {
       summary,
       provider: resultProvider as SummarizationProvider,
@@ -101,6 +102,7 @@ async function tryApiProvider(
 async function tryBrowserT5(headlines: string[], modelId?: string): Promise<SummarizationResult | null> {
   try {
     if (!mlWorker.isAvailable) {
+      console.log('[Summarization] Browser ML not available');
       return null;
     }
     lastAttemptedProvider = 'browser';
@@ -114,6 +116,7 @@ async function tryBrowserT5(headlines: string[], modelId?: string): Promise<Summ
       return null;
     }
 
+    console.log('[Summarization] Browser T5 success');
     return {
       summary,
       provider: 'browser',
@@ -192,8 +195,11 @@ async function generateSummaryInternal(
         onProgress?.(1, totalSteps, 'Running local AI model (beta)...');
         const browserResult = await tryBrowserT5(headlines, 'summarization-beta');
         if (browserResult) {
+          console.log('[BETA] Browser T5-small:', browserResult.summary);
           const groqProvider = API_PROVIDERS.find(p => p.provider === 'groq');
-          if (groqProvider && !options?.skipCloudProviders) tryApiProvider(groqProvider, headlines, geoContext).catch(() => {});
+          if (groqProvider && !options?.skipCloudProviders) tryApiProvider(groqProvider, headlines, geoContext).then(r => {
+            if (r) console.log('[BETA] Groq comparison:', r.summary);
+          }).catch(() => {});
 
           return browserResult;
         }
@@ -206,6 +212,7 @@ async function generateSummaryInternal(
       }
     } else {
       const totalSteps = API_PROVIDERS.length + 2;
+      console.log('[BETA] T5-small not loaded yet, using cloud providers first');
       if (mlWorker.isAvailable && !options?.skipBrowserFallback) {
         mlWorker.loadModel('summarization-beta').catch(() => {});
       }
@@ -214,6 +221,7 @@ async function generateSummaryInternal(
       if (!options?.skipCloudProviders) {
         const chainResult = await runApiChain(API_PROVIDERS, headlines, geoContext, undefined, onProgress, 1, totalSteps);
         if (chainResult) {
+          if (chainResult.provider === 'groq') console.log('[BETA] Groq:', chainResult.summary);
           return chainResult;
         }
       }

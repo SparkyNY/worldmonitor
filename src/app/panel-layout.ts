@@ -34,7 +34,10 @@ import {
   TradePolicyPanel,
   SupplyChainPanel,
   SecurityAdvisoriesPanel,
+  BostonPanel,
+  OsintWorkbenchPanel,
 } from '@/components';
+import type { BostonDatasetId, BostonIncident, BostonLayerId } from '@/services/boston-open-data';
 import { SatelliteFiresPanel } from '@/components/SatelliteFiresPanel';
 import { PositiveNewsFeedPanel } from '@/components/PositiveNewsFeedPanel';
 import { CountersPanel } from '@/components/CountersPanel';
@@ -65,6 +68,13 @@ export interface PanelLayoutCallbacks {
   loadAllData: () => Promise<void>;
   updateMonitorResults: () => void;
   loadSecurityAdvisories?: () => Promise<void>;
+  loadBostonCached?: () => Promise<void>;
+  refreshBostonAll?: () => Promise<void>;
+  refreshBostonDataset?: (datasetId: BostonDatasetId) => Promise<void>;
+  refreshBostonTransit?: () => Promise<void>;
+  setBostonLayerEnabled?: (layerId: BostonLayerId, enabled: boolean) => void;
+  setBostonCrimeFilter?: (incidents: BostonIncident[]) => void;
+  setBostonFireFilter?: (incidents: BostonIncident[]) => void;
 }
 
 export class PanelLayoutManager implements AppModule {
@@ -111,22 +121,32 @@ export class PanelLayoutManager implements AppModule {
         <div class="header-left">
           <div class="variant-switcher">${(() => {
             const local = this.ctx.isDesktopApp || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            const showExtendedVariants = local || SITE_VARIANT === 'local' || SITE_VARIANT === 'osint';
             const vHref = (v: string, prod: string) => local || SITE_VARIANT === v ? '#' : prod;
-            const vTarget = (v: string) => !local && SITE_VARIANT !== v ? 'target="_blank" rel="noopener"' : '';
+            const vTarget = (v: string, prod: string) => (!local && SITE_VARIANT !== v && prod !== '#') ? 'target="_blank" rel="noopener"' : '';
             return `
             <a href="${vHref('full', 'https://worldmonitor.app')}"
                class="variant-option ${SITE_VARIANT === 'full' ? 'active' : ''}"
                data-variant="full"
-               ${vTarget('full')}
+               ${vTarget('full', 'https://worldmonitor.app')}
                title="${t('header.world')}${SITE_VARIANT === 'full' ? ` ${t('common.currentVariant')}` : ''}">
               <span class="variant-icon">🌍</span>
               <span class="variant-label">${t('header.world')}</span>
             </a>
             <span class="variant-divider"></span>
+            <a href="${vHref('gtd', 'https://gtd.worldmonitor.app')}"
+               class="variant-option ${SITE_VARIANT === 'gtd' ? 'active' : ''}"
+               data-variant="gtd"
+               ${vTarget('gtd', 'https://gtd.worldmonitor.app')}
+               title="Global Terrorism Database${SITE_VARIANT === 'gtd' ? ` ${t('common.currentVariant')}` : ''}">
+              <span class="variant-icon">🎯</span>
+              <span class="variant-label">GTD</span>
+            </a>
+            <span class="variant-divider"></span>
             <a href="${vHref('tech', 'https://tech.worldmonitor.app')}"
                class="variant-option ${SITE_VARIANT === 'tech' ? 'active' : ''}"
                data-variant="tech"
-               ${vTarget('tech')}
+               ${vTarget('tech', 'https://tech.worldmonitor.app')}
                title="${t('header.tech')}${SITE_VARIANT === 'tech' ? ` ${t('common.currentVariant')}` : ''}">
               <span class="variant-icon">💻</span>
               <span class="variant-label">${t('header.tech')}</span>
@@ -135,16 +155,34 @@ export class PanelLayoutManager implements AppModule {
             <a href="${vHref('finance', 'https://finance.worldmonitor.app')}"
                class="variant-option ${SITE_VARIANT === 'finance' ? 'active' : ''}"
                data-variant="finance"
-               ${vTarget('finance')}
+               ${vTarget('finance', 'https://finance.worldmonitor.app')}
                title="${t('header.finance')}${SITE_VARIANT === 'finance' ? ` ${t('common.currentVariant')}` : ''}">
               <span class="variant-icon">📈</span>
               <span class="variant-label">${t('header.finance')}</span>
             </a>
+            ${showExtendedVariants ? `<span class="variant-divider"></span>
+            <a href="${vHref('local', '#')}"
+               class="variant-option ${SITE_VARIANT === 'local' ? 'active' : ''}"
+               data-variant="local"
+               ${vTarget('local', '#')}
+               title="${t('header.local')}${SITE_VARIANT === 'local' ? ` ${t('common.currentVariant')}` : ''}">
+              <span class="variant-icon">📍</span>
+              <span class="variant-label">${t('header.local')}</span>
+            </a>
+            <span class="variant-divider"></span>
+            <a href="${vHref('osint', '#')}"
+               class="variant-option ${SITE_VARIANT === 'osint' ? 'active' : ''}"
+               data-variant="osint"
+               ${vTarget('osint', '#')}
+               title="${t('header.osint')}${SITE_VARIANT === 'osint' ? ` ${t('common.currentVariant')}` : ''}">
+              <span class="variant-icon">🕵️</span>
+              <span class="variant-label">${t('header.osint')}</span>
+            </a>` : ''}
             ${SITE_VARIANT === 'happy' ? `<span class="variant-divider"></span>
             <a href="${vHref('happy', 'https://happy.worldmonitor.app')}"
                class="variant-option active"
                data-variant="happy"
-               ${vTarget('happy')}
+               ${vTarget('happy', 'https://happy.worldmonitor.app')}
                title="Good News ${t('common.currentVariant')}">
               <span class="variant-icon">☀️</span>
               <span class="variant-label">Good News</span>
@@ -192,7 +230,17 @@ export class PanelLayoutManager implements AppModule {
         <div class="map-section" id="mapSection">
           <div class="panel-header">
             <div class="panel-header-left">
-              <span class="panel-title">${SITE_VARIANT === 'tech' ? t('panels.techMap') : SITE_VARIANT === 'happy' ? 'Good News Map' : t('panels.map')}</span>
+              <span class="panel-title">${SITE_VARIANT === 'tech'
+        ? t('panels.techMap')
+        : SITE_VARIANT === 'gtd'
+          ? 'GTD Map'
+        : SITE_VARIANT === 'happy'
+          ? 'Good News Map'
+          : SITE_VARIANT === 'local'
+            ? t('panels.localMap')
+            : SITE_VARIANT === 'osint'
+              ? t('panels.osintMap')
+              : t('panels.map')}</span>
             </div>
             <span class="header-clock" id="headerClock"></span>
             <button class="map-pin-btn" id="mapPinBtn" title="${t('header.pinMap')}">
@@ -451,7 +499,7 @@ export class PanelLayoutManager implements AppModule {
     const economicPanel = new EconomicPanel();
     this.ctx.panels['economic'] = economicPanel;
 
-    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'finance') {
+    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd' || SITE_VARIANT === 'finance') {
       const tradePolicyPanel = new TradePolicyPanel();
       this.ctx.panels['trade-policy'] = tradePolicyPanel;
 
@@ -492,7 +540,7 @@ export class PanelLayoutManager implements AppModule {
       this.ctx.panels[panelKey] = panel;
     }
 
-    if (SITE_VARIANT === 'full') {
+    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd') {
       const gdeltIntelPanel = new GdeltIntelPanel();
       this.ctx.panels['gdelt-intel'] = gdeltIntelPanel;
 
@@ -547,6 +595,40 @@ export class PanelLayoutManager implements AppModule {
         void this.callbacks.loadSecurityAdvisories?.();
       });
       this.ctx.panels['security-advisories'] = securityAdvisoriesPanel;
+    }
+
+    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'local') {
+
+      const bostonPanel = new BostonPanel({
+        onRefreshAll: async () => {
+          await this.callbacks.refreshBostonAll?.();
+        },
+        onRefreshDataset: async (datasetId) => {
+          await this.callbacks.refreshBostonDataset?.(datasetId);
+        },
+        onRefreshTransit: async () => {
+          await this.callbacks.refreshBostonTransit?.();
+        },
+        onLayerToggle: (layerId, enabled) => {
+          this.callbacks.setBostonLayerEnabled?.(layerId, enabled);
+        },
+        onCrimeFilterChange: (incidents) => {
+          this.callbacks.setBostonCrimeFilter?.(incidents);
+        },
+        onFireFilterChange: (incidents) => {
+          this.callbacks.setBostonFireFilter?.(incidents);
+        },
+        onIncidentFocus: (incident) => {
+          if (incident.lat != null && incident.lon != null) {
+            this.ctx.map?.setCenter(incident.lat, incident.lon, 11);
+          }
+        },
+      });
+      this.ctx.panels['boston'] = bostonPanel;
+    }
+
+    if (SITE_VARIANT === 'osint') {
+      this.ctx.panels['osint-workbench'] = new OsintWorkbenchPanel();
     }
 
     if (SITE_VARIANT === 'finance') {
@@ -677,6 +759,8 @@ export class PanelLayoutManager implements AppModule {
 
     this.applyPanelSettings();
     this.applyInitialUrlState();
+    this.applyLocalVariantDefaultViewport();
+    void this.callbacks.loadBostonCached?.();
   }
 
   private applyTimeRangeFilterToNewsPanels(): void {
@@ -748,6 +832,20 @@ export class PanelLayoutManager implements AppModule {
     if (regionSelect && currentView) {
       regionSelect.value = currentView;
     }
+  }
+
+  private applyLocalVariantDefaultViewport(): void {
+    if (SITE_VARIANT !== 'local' || !this.ctx.map) return;
+    const urlState = this.ctx.initialUrlState;
+    const hasExplicitCoords = urlState?.lat != null
+      && urlState?.lon != null
+      && Number.isFinite(urlState.zoom ?? Number.NaN)
+      && (urlState.zoom ?? 0) >= 8;
+    if (hasExplicitCoords) return;
+
+    // Local variant defaults to Boston metro view unless user deep-linked
+    // directly to a specific coordinate/zoom.
+    this.ctx.map.setCenter(42.3601, -71.0589, 10.6);
   }
 
   private getSavedPanelOrder(): string[] {

@@ -12,7 +12,6 @@ import {
   LAYER_TO_SOURCE,
 } from '@/config';
 import { INTEL_HOTSPOTS, CONFLICT_ZONES } from '@/config/geo';
-import { tokenizeForMatch, matchKeyword } from '@/utils/keyword-match';
 import {
   fetchCategoryFeeds,
   getFeedFailures,
@@ -76,8 +75,6 @@ import { debounce, getCircuitBreakerCooldownInfo } from '@/utils';
 import { isFeatureAvailable } from '@/services/runtime-config';
 import { getAiFlowSettings } from '@/services/ai-flow-settings';
 import { t } from '@/services/i18n';
-import { getHydratedData } from '@/services/bootstrap';
-import type { GetSectorSummaryResponse } from '@/generated/client/worldmonitor/market/v1/service_client';
 import { maybeShowDownloadBanner } from '@/components/DownloadBanner';
 import { mountCommunityWidget } from '@/components/CommunityWidget';
 import { ResearchServiceClient } from '@/generated/client/worldmonitor/research/v1/service_client';
@@ -100,6 +97,7 @@ import {
   TradePolicyPanel,
   SupplyChainPanel,
   SecurityAdvisoriesPanel,
+  BostonPanel,
 } from '@/components';
 import { SatelliteFiresPanel } from '@/components/SatelliteFiresPanel';
 import { classifyNewsItem } from '@/services/positive-classifier';
@@ -116,6 +114,10 @@ import { fetchAllPositiveTopicIntelligence } from '@/services/gdelt-intel';
 import { fetchPositiveGeoEvents, geocodePositiveNewsItems } from '@/services/positive-events-geo';
 import { fetchKindnessData } from '@/services/kindness-data';
 import { getPersistentCache, setPersistentCache } from '@/services/persistent-cache';
+import type { BostonDatasetId, BostonIncident, BostonLayerId, BostonProvenance } from '@/services/boston-open-data';
+import { getCachedBostonBundle, refreshBostonDataset } from '@/services/boston-open-data';
+import type { LocalTransitPayload, LocalTransitProvenance } from '@/services/local-transit';
+import { getCachedLocalTransit, refreshLocalTransit } from '@/services/local-transit';
 
 const CYBER_LAYER_ENABLED = import.meta.env.VITE_ENABLE_CYBER_LAYER === 'true';
 
@@ -129,6 +131,13 @@ export class DataLoaderManager implements AppModule {
 
   private mapFlashCache: Map<string, number> = new Map();
   private readonly MAP_FLASH_COOLDOWN_MS = 10 * 60 * 1000;
+  private bostonProvenance: Partial<Record<BostonDatasetId | 'transitStatus', BostonProvenance | LocalTransitProvenance>> = {};
+  private bostonCrimeIncidents: BostonIncident[] = [];
+  private bostonFireIncidents: BostonIncident[] = [];
+  private localTransit: LocalTransitPayload | null = null;
+  private localTransitLiveIntervalId: ReturnType<typeof setInterval> | null = null;
+  private localTransitRefreshInFlight = false;
+  private readonly LOCAL_TRANSIT_LIVE_REFRESH_MS = 30 * 1000;
   private readonly applyTimeRangeFilterToNewsPanelsDebounced = debounce(() => {
     this.applyTimeRangeFilterToNewsPanels();
   }, 120);
@@ -142,13 +151,190 @@ export class DataLoaderManager implements AppModule {
 
   init(): void {}
 
-  destroy(): void {}
+  destroy(): void {
+    if (this.localTransitLiveIntervalId) {
+      clearInterval(this.localTransitLiveIntervalId);
+      this.localTransitLiveIntervalId = null;
+    }
+  }
+
+  async loadBostonCached(): Promise<void> {
+    const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
+    if (!panel) return;
+
+    const bundle = await getCachedBostonBundle();
+    for (const payload of Object.values(bundle)) {
+      if (!payload) continue;
+      this.ingestBostonPayload(payload.provenance.datasetId, payload);
+    }
+
+    const transit = await getCachedLocalTransit();
+    if (transit) this.ingestTransitPayload(transit);
+    this.pushBostonStateToUi();
+    this.ensureLocalTransitLiveUpdates();
+  }
+
+  async refreshBostonAllData(): Promise<void> {
+    const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
+    panel?.setAllRefreshing(true);
+    try {
+      const datasets: BostonDatasetId[] = [
+        'crimeIncidents',
+        'fireIncidents',
+        'policeDistricts',
+        'fireHydrants',
+        'fireDepartments',
+        'communityCenters',
+      ];
+
+      const transitTask = this.localTransitRefreshInFlight
+        ? Promise.resolve({ kind: 'transit-skipped' as const })
+        : (async () => {
+            this.localTransitRefreshInFlight = true;
+            try {
+              return {
+                kind: 'transit' as const,
+                payload: await refreshLocalTransit(),
+              };
+            } finally {
+              this.localTransitRefreshInFlight = false;
+            }
+          })();
+
+      const results = await Promise.allSettled([
+        ...datasets.map(async (datasetId) => ({
+          kind: 'boston' as const,
+          datasetId,
+          payload: await refreshBostonDataset(datasetId),
+        })),
+        transitTask,
+      ]);
+
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          if (result.value.kind === 'boston') this.ingestBostonPayload(result.value.datasetId, result.value.payload);
+          else if (result.value.kind === 'transit') this.ingestTransitPayload(result.value.payload);
+          continue;
+        }
+
+        console.warn('[Boston] Refresh failed', result.reason);
+      }
+      this.pushBostonStateToUi();
+      this.ensureLocalTransitLiveUpdates();
+    } finally {
+      panel?.setAllRefreshing(false);
+    }
+  }
+
+  async refreshBostonSingleDataset(datasetId: BostonDatasetId): Promise<void> {
+    const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
+    panel?.setDatasetRefreshing(datasetId, true);
+    try {
+      const payload = await refreshBostonDataset(datasetId);
+      this.ingestBostonPayload(datasetId, payload);
+      this.pushBostonStateToUi();
+    } catch (error) {
+      console.warn(`[Boston] Dataset refresh failed: ${datasetId}`, error);
+    } finally {
+      panel?.setDatasetRefreshing(datasetId, false);
+    }
+  }
+
+  async refreshLocalTransitData(options: { silent?: boolean } = {}): Promise<void> {
+    if (this.localTransitRefreshInFlight) return;
+    this.localTransitRefreshInFlight = true;
+    const silent = options.silent === true;
+    const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
+    if (!silent) panel?.setDatasetRefreshing('transitStatus', true);
+    try {
+      const payload = await refreshLocalTransit();
+      this.ingestTransitPayload(payload);
+      this.pushBostonStateToUi();
+    } catch (error) {
+      console.warn('[Boston] Transit refresh failed', error);
+    } finally {
+      this.localTransitRefreshInFlight = false;
+      if (!silent) panel?.setDatasetRefreshing('transitStatus', false);
+    }
+  }
+
+  setBostonLayerEnabled(layerId: BostonLayerId, enabled: boolean): void {
+    this.ctx.map?.setBostonLayerEnabled(layerId, enabled);
+  }
+
+  setBostonCrimeFilter(incidents: BostonIncident[]): void {
+    this.ctx.map?.setBostonCrimeIncidents(incidents);
+  }
+
+  setBostonFireFilter(incidents: BostonIncident[]): void {
+    this.ctx.map?.setBostonFireIncidents(incidents);
+  }
+
+  private ingestBostonPayload(datasetId: BostonDatasetId, payload: Awaited<ReturnType<typeof refreshBostonDataset>>): void {
+    this.bostonProvenance[datasetId] = payload.provenance;
+
+    if (datasetId === 'crimeIncidents' && payload.incidents) {
+      this.bostonCrimeIncidents = payload.incidents;
+    }
+    if (datasetId === 'fireIncidents' && payload.incidents) {
+      this.bostonFireIncidents = payload.incidents;
+    }
+
+    if (payload.layer) {
+      if (datasetId === 'policeDistricts') this.ctx.map?.setBostonPoliceDistricts(payload.layer);
+      if (datasetId === 'fireHydrants') this.ctx.map?.setBostonFireHydrants(payload.layer);
+      if (datasetId === 'fireDepartments') this.ctx.map?.setBostonFireDepartments(payload.layer);
+      if (datasetId === 'communityCenters') this.ctx.map?.setBostonCommunityCenters(payload.layer);
+    }
+  }
+
+  private ingestTransitPayload(payload: LocalTransitPayload): void {
+    this.localTransit = payload;
+    this.bostonProvenance[payload.provenance.datasetId] = payload.provenance;
+    this.ctx.map?.setBostonTransitVehicles(payload.vehicles);
+  }
+
+  private pushBostonStateToUi(): void {
+    const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
+    panel?.setData({
+      crimeIncidents: this.bostonCrimeIncidents,
+      fireIncidents: this.bostonFireIncidents,
+      transit: this.localTransit,
+      provenance: this.bostonProvenance,
+    });
+
+    if (!panel) {
+      this.ctx.map?.setBostonCrimeIncidents(this.bostonCrimeIncidents);
+      this.ctx.map?.setBostonFireIncidents(this.bostonFireIncidents);
+    }
+    this.ctx.map?.setBostonTransitVehicles(this.localTransit?.vehicles ?? []);
+  }
+
+  private ensureLocalTransitLiveUpdates(): void {
+    if (SITE_VARIANT !== 'local') return;
+    if (!this.ctx.panels['boston']) return;
+    if (this.localTransitLiveIntervalId) return;
+
+    this.localTransitLiveIntervalId = setInterval(() => {
+      if (this.ctx.isDestroyed || this.localTransitRefreshInFlight) return;
+      void this.refreshLocalTransitData({ silent: true });
+    }, this.LOCAL_TRANSIT_LIVE_REFRESH_MS);
+
+    const lastFetchedAt = this.localTransit?.provenance?.fetchedAt ? Date.parse(this.localTransit.provenance.fetchedAt) : Number.NaN;
+    const isStale = !Number.isFinite(lastFetchedAt) || Date.now() - lastFetchedAt > this.LOCAL_TRANSIT_LIVE_REFRESH_MS;
+    if (isStale) {
+      void this.refreshLocalTransitData({ silent: true });
+    }
+  }
 
   private shouldShowIntelligenceNotifications(): boolean {
     return !this.ctx.isMobile && !!this.ctx.findingsBadge?.isPopupEnabled();
   }
 
   async loadAllData(): Promise<void> {
+    const isGeopoliticalVariant = SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd';
+    const isHeavyVariant = isGeopoliticalVariant || SITE_VARIANT === 'tech' || SITE_VARIANT === 'finance';
+
     const runGuarded = async (name: string, fn: () => Promise<void>): Promise<void> => {
       if (this.ctx.isDestroyed || this.ctx.inFlight.has(name)) return;
       this.ctx.inFlight.add(name);
@@ -165,8 +351,8 @@ export class DataLoaderManager implements AppModule {
       { name: 'news', task: runGuarded('news', () => this.loadNews()) },
     ];
 
-    // Happy variant only loads news data -- skip all geopolitical/financial/military data
-    if (SITE_VARIANT !== 'happy') {
+    // Restrict expensive market/intelligence background fetches to full/tech/finance variants.
+    if (isHeavyVariant) {
       tasks.push({ name: 'markets', task: runGuarded('markets', () => this.loadMarkets()) });
       tasks.push({ name: 'predictions', task: runGuarded('predictions', () => this.loadPredictions()) });
       tasks.push({ name: 'pizzint', task: runGuarded('pizzint', () => this.loadPizzInt()) });
@@ -176,7 +362,7 @@ export class DataLoaderManager implements AppModule {
       tasks.push({ name: 'bis', task: runGuarded('bis', () => this.loadBisData()) });
 
       // Trade policy data (FULL and FINANCE only)
-      if (SITE_VARIANT === 'full' || SITE_VARIANT === 'finance') {
+      if (isGeopoliticalVariant || SITE_VARIANT === 'finance') {
         tasks.push({ name: 'tradePolicy', task: runGuarded('tradePolicy', () => this.loadTradePolicy()) });
         tasks.push({ name: 'supplyChain', task: runGuarded('supplyChain', () => this.loadSupplyChain()) });
       }
@@ -227,11 +413,16 @@ export class DataLoaderManager implements AppModule {
       }),
     });
 
-    if (SITE_VARIANT === 'full') {
+    // Boston data stays manual on first boot; include it on subsequent global refreshes.
+    if ((SITE_VARIANT === 'full' || SITE_VARIANT === 'local') && this.ctx.initialLoadComplete && this.ctx.panels['boston']) {
+      tasks.push({ name: 'bostonAll', task: runGuarded('bostonAll', () => this.refreshBostonAllData()) });
+    }
+
+    if (isGeopoliticalVariant) {
       tasks.push({ name: 'intelligence', task: runGuarded('intelligence', () => this.loadIntelligenceSignals()) });
     }
 
-    if (SITE_VARIANT === 'full') tasks.push({ name: 'firms', task: runGuarded('firms', () => this.loadFirmsData()) });
+    if (isGeopoliticalVariant) tasks.push({ name: 'firms', task: runGuarded('firms', () => this.loadFirmsData()) });
     if (this.ctx.mapLayers.natural) tasks.push({ name: 'natural', task: runGuarded('natural', () => this.loadNatural()) });
     if (SITE_VARIANT !== 'happy' && this.ctx.mapLayers.weather) tasks.push({ name: 'weather', task: runGuarded('weather', () => this.loadWeatherAlerts()) });
     if (SITE_VARIANT !== 'happy' && this.ctx.mapLayers.ais) tasks.push({ name: 'ais', task: runGuarded('ais', () => this.loadAisSignals()) });
@@ -316,7 +507,7 @@ export class DataLoaderManager implements AppModule {
   }
 
   private findFlashLocation(title: string): { lat: number; lon: number } | null {
-    const tokens = tokenizeForMatch(title);
+    const titleLower = title.toLowerCase();
     let bestMatch: { lat: number; lon: number; matches: number } | null = null;
 
     const countKeywordMatches = (keywords: string[] | undefined): number => {
@@ -324,7 +515,7 @@ export class DataLoaderManager implements AppModule {
       let matches = 0;
       for (const keyword of keywords) {
         const cleaned = keyword.trim().toLowerCase();
-        if (cleaned.length >= 3 && matchKeyword(tokens, cleaned)) {
+        if (cleaned.length >= 3 && titleLower.includes(cleaned)) {
           matches++;
         }
       }
@@ -564,7 +755,7 @@ export class DataLoaderManager implements AppModule {
       }
     });
 
-    if (SITE_VARIANT === 'full') {
+    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd') {
       const enabledIntelSources = INTEL_SOURCES.filter(f => !this.ctx.disabledSources.has(f.name));
       const intelPanel = this.ctx.newsPanels['intel'];
       if (enabledIntelSources.length === 0) {
@@ -669,25 +860,19 @@ export class DataLoaderManager implements AppModule {
       } else {
         this.ctx.statusPanel?.updateApi('Finnhub', { status: 'ok' });
 
-        const hydratedSectors = getHydratedData('sectors') as GetSectorSummaryResponse | undefined;
-        if (hydratedSectors?.sectors?.length) {
-          const mapped = hydratedSectors.sectors.map((s) => ({ name: s.name, change: s.change }));
-          (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(mapped);
-        } else {
-          const sectorsResult = await fetchMultipleStocks(
-            SECTORS.map((s) => ({ ...s, display: s.name })),
-            {
-              onBatch: (partialSectors) => {
-                (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(
-                  partialSectors.map((s) => ({ name: s.name, change: s.change }))
-                );
-              },
-            }
-          );
-          (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(
-            sectorsResult.data.map((s) => ({ name: s.name, change: s.change }))
-          );
-        }
+        const sectorsResult = await fetchMultipleStocks(
+          SECTORS.map((s) => ({ ...s, display: s.name })),
+          {
+            onBatch: (partialSectors) => {
+              (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(
+                partialSectors.map((s) => ({ name: s.name, change: s.change }))
+              );
+            },
+          }
+        );
+        (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(
+          sectorsResult.data.map((s) => ({ name: s.name, change: s.change }))
+        );
       }
 
       const commoditiesPanel = this.ctx.panels['commodities'] as CommoditiesPanel;

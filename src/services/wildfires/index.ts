@@ -5,7 +5,6 @@ import {
   type ListFireDetectionsResponse,
 } from '@/generated/client/worldmonitor/wildfire/v1/service_client';
 import { createCircuitBreaker } from '@/utils';
-import { getHydratedData } from '@/services/bootstrap';
 
 export type { FireDetection };
 
@@ -47,8 +46,7 @@ const emptyFallback: ListFireDetectionsResponse = { fireDetections: [] };
 // -- Public API --
 
 export async function fetchAllFires(_days?: number): Promise<FetchResult> {
-  const hydrated = getHydratedData('wildfires') as ListFireDetectionsResponse | undefined;
-  const response = hydrated ?? await breaker.execute(async () => {
+  const response = await breaker.execute(async () => {
     return client.listFireDetections({ start: 0, end: 0, pageSize: 0, cursor: '', neLat: 0, neLon: 0, swLat: 0, swLon: 0 });
   }, emptyFallback);
   const detections = response.fireDetections;

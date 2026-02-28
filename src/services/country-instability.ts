@@ -1,5 +1,4 @@
 import type { SocialUnrestEvent, MilitaryFlight, MilitaryVessel, ClusteredEvent, InternetOutage } from '@/types';
-import { tokenizeForMatch, matchKeyword } from '@/utils/keyword-match';
 import { INTEL_HOTSPOTS, CONFLICT_ZONES, STRATEGIC_WATERWAYS } from '@/config/geo';
 import { CURATED_COUNTRIES, DEFAULT_BASELINE_RISK, DEFAULT_EVENT_MULTIPLIER, getHotspotCountries } from '@/config/countries';
 import { focalPointDetector } from './focal-point-detector';
@@ -137,11 +136,11 @@ export function getPreviousScores(): Map<string, number> {
 export type { CountryData };
 
 function normalizeCountryName(name: string): string | null {
-  const tokens = tokenizeForMatch(name);
+  const lower = name.toLowerCase();
   for (const [code, cfg] of Object.entries(CURATED_COUNTRIES)) {
-    if (cfg.scoringKeywords.some(kw => matchKeyword(tokens, kw))) return code;
+    if (cfg.scoringKeywords.some(kw => lower.includes(kw))) return code;
   }
-  return nameToCountryCode(name.toLowerCase());
+  return nameToCountryCode(lower);
 }
 
 export function ingestProtestsForCII(events: SocialUnrestEvent[]): void {
@@ -348,16 +347,16 @@ export function ingestMilitaryForCII(flights: MilitaryFlight[], vessels: Militar
 
 export function ingestNewsForCII(events: ClusteredEvent[]): void {
   for (const e of events) {
-    const tokens = tokenizeForMatch(e.primaryTitle);
+    const title = e.primaryTitle.toLowerCase();
     const matched = new Set<string>();
 
     for (const [code, cfg] of Object.entries(CURATED_COUNTRIES)) {
-      if (cfg.scoringKeywords.some(kw => matchKeyword(tokens, kw))) {
+      if (cfg.scoringKeywords.some(kw => title.includes(kw))) {
         matched.add(code);
       }
     }
 
-    for (const code of matchCountryNamesInText(e.primaryTitle.toLowerCase())) {
+    for (const code of matchCountryNamesInText(title)) {
       matched.add(code);
     }
 

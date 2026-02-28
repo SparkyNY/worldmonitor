@@ -124,7 +124,6 @@ const ALLOWED_DOMAINS = [
   // Additional tech variant domains
   'www.producthunt.com',
   'www.axios.com',
-  'api.axios.com',
   'github.blog',
   'githubnext.com',
   'mshibanami.github.io',
@@ -206,6 +205,7 @@ const ALLOWED_DOMAINS = [
   'www.who.int',
   'www.cisa.gov',
   'www.crisisgroup.org',
+  'www.amtrak.com',
   // Think Tanks & Research (Added 2026-01-29)
   'rusi.org',
   'warontherocks.com',

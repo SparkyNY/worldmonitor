@@ -5132,6 +5132,35 @@ a.prediction-link:hover {
   cursor: pointer;
 }
 
+.konami-overlay {
+  background: rgba(0, 0, 0, 0.78);
+  z-index: 1800;
+}
+
+.konami-modal {
+  position: relative;
+  text-align: center;
+  max-width: 680px;
+  width: min(92vw, 680px);
+  padding: 28px 24px 30px;
+}
+
+.konami-close {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+}
+
+.konami-headline {
+  margin: 0;
+  font-size: clamp(2.1rem, 8vw, 5.2rem);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: var(--semantic-elevated);
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(255, 210, 124, 0.45);
+}
+
 .confirm-modal-message {
   margin: 0 0 16px;
   font-size: 14px;

@@ -10,7 +10,6 @@ import {
   type ShippingRatePoint,
 } from '@/generated/client/worldmonitor/supply_chain/v1/service_client';
 import { createCircuitBreaker } from '@/utils';
-import { getHydratedData } from '@/services/bootstrap';
 
 export type {
   GetShippingRatesResponse,
@@ -34,9 +33,6 @@ const emptyChokepoints: GetChokepointStatusResponse = { chokepoints: [], fetched
 const emptyMinerals: GetCriticalMineralsResponse = { minerals: [], fetchedAt: '', upstreamUnavailable: false };
 
 export async function fetchShippingRates(): Promise<GetShippingRatesResponse> {
-  const hydrated = getHydratedData('shippingRates') as GetShippingRatesResponse | undefined;
-  if (hydrated) return hydrated;
-
   try {
     return await shippingBreaker.execute(async () => {
       return client.getShippingRates({});
@@ -47,9 +43,6 @@ export async function fetchShippingRates(): Promise<GetShippingRatesResponse> {
 }
 
 export async function fetchChokepointStatus(): Promise<GetChokepointStatusResponse> {
-  const hydrated = getHydratedData('chokepoints') as GetChokepointStatusResponse | undefined;
-  if (hydrated) return hydrated;
-
   try {
     return await chokepointBreaker.execute(async () => {
       return client.getChokepointStatus({});
@@ -60,9 +53,6 @@ export async function fetchChokepointStatus(): Promise<GetChokepointStatusRespon
 }
 
 export async function fetchCriticalMinerals(): Promise<GetCriticalMineralsResponse> {
-  const hydrated = getHydratedData('minerals') as GetCriticalMineralsResponse | undefined;
-  if (hydrated) return hydrated;
-
   try {
     return await mineralsBreaker.execute(async () => {
       return client.getCriticalMinerals({});

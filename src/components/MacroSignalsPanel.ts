@@ -3,7 +3,6 @@ import { escapeHtml } from '@/utils/sanitize';
 import { t } from '@/services/i18n';
 import { EconomicServiceClient } from '@/generated/client/worldmonitor/economic/v1/service_client';
 import type { GetMacroSignalsResponse } from '@/generated/client/worldmonitor/economic/v1/service_client';
-import { getHydratedData } from '@/services/bootstrap';
 
 interface MacroSignalData {
   timestamp: string;
@@ -123,24 +122,23 @@ export class MacroSignalsPanel extends Panel {
   private data: MacroSignalData | null = null;
   private loading = true;
   private error: string | null = null;
-  private lastTimestamp = '';
+
+  private refreshInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     super({ id: 'macro-signals', title: t('panels.macroSignals'), showCount: false });
     void this.fetchData();
+    this.refreshInterval = setInterval(() => this.fetchData(), 3 * 60000);
   }
 
-  public async fetchData(): Promise<boolean> {
-    const hydrated = getHydratedData('macroSignals') as GetMacroSignalsResponse | undefined;
-    if (hydrated) {
-      this.data = mapProtoToData(hydrated);
-      this.lastTimestamp = this.data.timestamp;
-      this.error = null;
-      this.loading = false;
-      this.renderPanel();
-      return true;
+  public destroy(): void {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
     }
+  }
 
+  private async fetchData(): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const res = await economicClient.getMacroSignals({});
@@ -154,7 +152,7 @@ export class MacroSignalsPanel extends Panel {
         }
         break;
       } catch (err) {
-        if (this.isAbortError(err)) return false;
+        if (this.isAbortError(err)) return;
         if (attempt < 2) {
           this.showRetrying();
           await new Promise(r => setTimeout(r, 20_000));
@@ -165,11 +163,6 @@ export class MacroSignalsPanel extends Panel {
     }
     this.loading = false;
     this.renderPanel();
-
-    const ts = this.data?.timestamp ?? '';
-    const changed = ts !== this.lastTimestamp;
-    this.lastTimestamp = ts;
-    return changed;
   }
 
   private renderPanel(): void {
