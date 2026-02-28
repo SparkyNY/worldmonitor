@@ -301,3 +301,39 @@ export function getCountryBbox(code: string): [number, number, number, number] |
   const entry = countryIndex.get(code.toUpperCase());
   return entry?.bbox ?? null;
 }
+
+export const ME_STRIKE_BOUNDS: Record<string, { n: number; s: number; e: number; w: number }> = {
+  BH: { n: 26.3, s: 25.8, e: 50.8, w: 50.3 }, QA: { n: 26.2, s: 24.5, e: 51.7, w: 50.7 },
+  LB: { n: 34.7, s: 33.1, e: 36.6, w: 35.1 }, KW: { n: 30.1, s: 28.5, e: 48.5, w: 46.5 },
+  IL: { n: 33.3, s: 29.5, e: 35.9, w: 34.3 }, AE: { n: 26.1, s: 22.6, e: 56.4, w: 51.6 },
+  JO: { n: 33.4, s: 29.2, e: 39.3, w: 34.9 }, SY: { n: 37.3, s: 32.3, e: 42.4, w: 35.7 },
+  OM: { n: 26.4, s: 16.6, e: 59.8, w: 52.0 }, IQ: { n: 37.4, s: 29.1, e: 48.6, w: 38.8 },
+  YE: { n: 19, s: 12, e: 54.5, w: 42 }, IR: { n: 40, s: 25, e: 63, w: 44 },
+  SA: { n: 32, s: 16, e: 55, w: 35 },
+};
+
+export function resolveCountryFromBounds(
+  lat: number, lon: number,
+  bounds: Record<string, { n: number; s: number; e: number; w: number }>,
+): string | null {
+  const matches: Array<{ code: string; area: number }> = [];
+  for (const [code, b] of Object.entries(bounds)) {
+    if (lat >= b.s && lat <= b.n && lon >= b.w && lon <= b.e) {
+      matches.push({ code, area: (b.n - b.s) * (b.e - b.w) });
+    }
+  }
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0]!.code;
+
+  let anyGeometryAvailable = false;
+  for (const m of matches) {
+    const precise = isCoordinateInCountry(lat, lon, m.code);
+    if (precise === true) return m.code;
+    if (precise === false) anyGeometryAvailable = true;
+  }
+
+  if (!anyGeometryAvailable) return null;
+
+  matches.sort((a, b) => a.area - b.area);
+  return matches[0]!.code;
+}

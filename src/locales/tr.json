@@ -36,7 +36,8 @@
       "earthquakes": "depremler",
       "displaced": "yerinden edilen",
       "climate": "Iklim stresi",
-      "conflictEvents": "catisma olaylari"
+      "conflictEvents": "catisma olaylari",
+      "gpsJammingZones": "GPS Jamming Zones"
     },
     "timeAgo": {
       "m": "{{count}}dk once",
@@ -204,7 +205,9 @@
     "gccInvestments": "GCC Yatirimlari",
     "geoHubs": "Jeopolitik Merkezler",
     "liveWebcams": "Canli Web Kameralari",
-    "securityAdvisories": "Güvenlik Uyarıları"
+    "securityAdvisories": "Güvenlik Uyarıları",
+    "orefSirens": "Israel Sirens",
+    "telegramIntel": "Telegram İstihbarat"
   },
   "modals": {
     "search": {
@@ -423,7 +426,8 @@
         "earthquakes": "depremler",
         "displaced": "yerinden edilen",
         "climate": "Iklim stresi",
-        "conflictEvents": "catisma olaylari"
+        "conflictEvents": "catisma olaylari",
+        "gpsJammingZones": "GPS Jamming Zones"
       },
       "timeAgo": {
         "m": "{{count}}dk once",
@@ -466,6 +470,7 @@
   "components": {
     "webcams": {
       "regions": {
+        "iran": "IRAN ATTACKS",
         "all": "TUMU",
         "mideast": "ORTA DOGU",
         "europe": "AVRUPA",
@@ -578,7 +583,8 @@
       "error": "Tahminler yuklenemedi",
       "yes": "Evet",
       "no": "Hayir",
-      "vol": "Hacim"
+      "vol": "Hacim",
+      "closes": "Kapanış"
     },
     "stablecoins": {
       "pegHealth": "Parite Sagligi",
@@ -784,7 +790,9 @@
         "centralBanks": "Merkez Bankalari",
         "commodityHubs": "Emtia Merkezleri",
         "gulfInvestments": "GCC Yatirimlari",
-        "tradeRoutes": "Ticaret Rotaları"
+        "tradeRoutes": "Ticaret Rotaları",
+        "gpsJamming": "GPS JAMMING",
+        "dayNight": "Gündüz/Gece"
       },
       "tooltip": {
         "earthquake": "Deprem",
@@ -833,7 +841,8 @@
           "geopolitical": "Jeopolitik",
           "militaryStrategic": "Askeri ve Stratejik",
           "transport": "Ulasim",
-          "labels": "Etiketler"
+          "labels": "Etiketler",
+          "overlays": "Katmanlar ve etiketler"
         },
         "descriptions": {
           "techStartupHubs": "Buyuk girisim ekosistemleri (SF, NYC, Londra vb.)",
@@ -875,7 +884,8 @@
           "transportDelays": "Havaalani gecikmeleri ve yer durdurmalari (FAA)",
           "naturalEventsFull": "Depremler (USGS) + firtinalar, yanginlar, yanardaglar, seller (NASA EONET)",
           "waterwaysLabels": "Stratejik darbogaz etiketleri",
-          "tradeRoutes": "Limanları stratejik darboğazlar üzerinden bağlayan başlıca küresel deniz yolları"
+          "tradeRoutes": "Limanları stratejik darboğazlar üzerinden bağlayan başlıca küresel deniz yolları",
+          "dayNight": "Gündüz ve gece bölgelerini gösteren gerçek zamanlı güneş terminatörü"
         },
         "notes": {
           "timeAffects": "Etkiler: Depremler, Hava Durumu, Protestolar, Kesintiler"
@@ -1135,6 +1145,19 @@
     "gdeltIntel": {
       "infoTooltip": "<strong>GDELT Istihbarati</strong> Gercek zamanli kuresel haber izleme:<ul><li>Secilmis konu kategorileri (catismalar, siber vb.)</li><li>100+ dilden cevrilen makaleler</li><li>Her 15 dakikada guncelleme</li></ul>Kaynak: GDELT Project (gdeltproject.org)"
     },
+    "telegramIntel": {
+      "infoTooltip": "İzlenen Telegram OSINT kanallarından gerçek zamanlı sinyaller",
+      "loading": "Telegram aktarıcısına bağlanılıyor...",
+      "empty": "Mevcut mesaj yok",
+      "disabled": "Telegram aktarıcısı etkin değil",
+      "filterAll": "Tümü",
+      "filterBreaking": "Son Dakika",
+      "filterConflict": "Çatışma",
+      "filterAlerts": "Uyarılar",
+      "filterOsint": "OSINT",
+      "filterPolitics": "Siyaset",
+      "filterMiddleeast": "Orta Doğu"
+    },
     "investments": {
       "infoTooltip": "Suudi Arabistan ve BAE'nin kuresel kritik altyapilara dogrudan yabanci yatirimlari veritabani. Yatirimi haritada gormek icin bir satira tiklayin.",
       "searchPlaceholder": "Search assets, countries, entities…",
@@ -1308,6 +1331,17 @@
         "daysAgo": "{{count}} gün önce"
       },
       "infoTooltip": "<strong>Güvenlik Uyarıları</strong><br>Hükümet kurumlarından seyahat uyarıları ve güvenlik bildirimleri."
+    },
+    "orefSirens": {
+      "checking": "Checking siren alerts...",
+      "noAlerts": "No active sirens — all clear",
+      "notConfigured": "Sirens service not configured",
+      "activeSirens": "{{count}} active siren(s)",
+      "area": "Area",
+      "time": "Time",
+      "justNow": "just now",
+      "historyCount": "{{count}} alerts in last 24h",
+      "infoTooltip": "<strong>Israel Sirens</strong><br>Real-time rocket and missile siren alerts from Israel Home Front Command.<br><br>Data is polled every 10 seconds. A pulsing red indicator means active sirens are sounding."
     }
   },
   "popups": {
@@ -1361,12 +1395,20 @@
       "riots": "Isyanlar",
       "highSeverity": "Yuksek Siddet"
     },
+    "gpsJamming": {
+      "title": "GPS/GNSS Paraziti",
+      "interference": "Parazit",
+      "aircraftAffected": "Etkilenen Uçaklar",
+      "aircraftNormal": "Normal Uçaklar",
+      "h3Hex": "H3 Hex"
+    },
     "flight": {
       "groundStop": "YER DURDURMA",
       "groundDelay": "YER GECIKME PROGRAMI",
       "departureDelay": "KALKIS GECIKMELERI",
       "arrivalDelay": "VARIS GECIKMELERI",
       "delaysReported": "BILDIRILEN GECIKMELER",
+      "closure": "HAVAALANI KAPALI",
       "delays": "GECIKMELER",
       "avgDelay": "ORT. GECIKME",
       "cancelled": "IPTAL EDILEN",

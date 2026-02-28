@@ -63,7 +63,9 @@
     "polymarket": "Voorspellingen",
     "climate": "Klimaatafwijkingen",
     "liveWebcams": "Live Webcams",
-    "securityAdvisories": "Veiligheidsadviezen"
+    "securityAdvisories": "Veiligheidsadviezen",
+    "orefSirens": "Israel Sirens",
+    "telegramIntel": "Telegram Inlichtingen"
   },
   "modals": {
     "search": {
@@ -228,7 +230,8 @@
         "earthquakes": "aardbevingen",
         "displaced": "ontheemd",
         "climate": "Klimaatstress",
-        "conflictEvents": "conflictgebeurtenissen"
+        "conflictEvents": "conflictgebeurtenissen",
+        "gpsJammingZones": "GPS Jamming Zones"
       },
       "loadingIndex": "Index laden...",
       "identifying": "Land identificeren...",
@@ -334,6 +337,7 @@
     },
     "webcams": {
       "regions": {
+        "iran": "IRAN ATTACKS",
         "all": "ALLE",
         "mideast": "MIDDEN-OOSTEN",
         "europe": "EUROPA",
@@ -414,7 +418,9 @@
         "centralBanks": "Centrale banken",
         "commodityHubs": "Grondstoffenhubs",
         "gulfInvestments": "GCC-investeringen",
-        "tradeRoutes": "Handelsroutes"
+        "tradeRoutes": "Handelsroutes",
+        "gpsJamming": "GPS JAMMING",
+        "dayNight": "Dag/Nacht"
       },
       "layersTitle": "Lagen",
       "layerGuide": "Lagengids",
@@ -465,7 +471,8 @@
           "geopolitical": "Geopolitiek",
           "militaryStrategic": "Militair en strategisch",
           "transport": "Vervoer",
-          "labels": "Etiketten"
+          "labels": "Etiketten",
+          "overlays": "Overlays & etiketten"
         },
         "descriptions": {
           "techStartupHubs": "Grote startup-ecosystemen (SF, NYC, Londen, etc.)",
@@ -507,7 +514,8 @@
           "transportDelays": "Luchthavenvertragingen en grondstops (FAA)",
           "naturalEventsFull": "Aardbevingen (USGS) + stormen, branden, vulkanen, overstromingen (NASA EONET)",
           "waterwaysLabels": "Strategische chokepoint-labels",
-          "tradeRoutes": "Belangrijke wereldwijde scheepvaartroutes die havens verbinden via strategische knelpunten"
+          "tradeRoutes": "Belangrijke wereldwijde scheepvaartroutes die havens verbinden via strategische knelpunten",
+          "dayNight": "Realtime zonneterminator met dag- en nachtzones"
         },
         "notes": {
           "timeAffects": "Beïnvloedt: aardbevingen, weer, protesten, stroomstoringen"
@@ -853,6 +861,19 @@
     "gdeltIntel": {
       "infoTooltip": "<strong>GDELT Intelligence</strong> Realtime monitoring van mondiaal nieuws:<ul><li>Samengestelde onderwerpcategorieën (conflicten, cyber, etc.)</li><li>Artikelen uit meer dan 100 talen vertaald</li><li>Updates elke 15 minuten</li></ul>Bron: GDELT Project (gdeltproject.org)"
     },
+    "telegramIntel": {
+      "infoTooltip": "Realtime signalen van gemonitorde Telegram OSINT-kanalen",
+      "loading": "Verbinding maken met Telegram-relay...",
+      "empty": "Geen berichten beschikbaar",
+      "disabled": "Telegram-relay niet actief",
+      "filterAll": "Alles",
+      "filterBreaking": "Belangrijk",
+      "filterConflict": "Conflicten",
+      "filterAlerts": "Waarschuwingen",
+      "filterOsint": "OSINT",
+      "filterPolitics": "Politiek",
+      "filterMiddleeast": "Midden-Oosten"
+    },
     "investments": {
       "infoTooltip": "Database van directe buitenlandse investeringen van Saoedi-Arabië en de VAE in mondiale kritieke infrastructuur. Klik op een rij om naar de investering op de kaart te vliegen.",
       "searchPlaceholder": "Search assets, countries, entities…",
@@ -988,6 +1009,7 @@
     },
     "predictions": {
       "vol": "Vol",
+      "closes": "Sluit",
       "yes": "Ja",
       "no": "Nee",
       "tooltip": "<strong>Voorspellingsmarkten</strong><br>Markten met echt geld:<br><ul><li>Prijzen weerspiegelen waarschijnlijkheidsschattingen</li><li>Hoger volume = betrouwbaarder signaal</li><li>Geopolitieke en actuele evenementen</li></ul>Bron: Polymarket (polymarket.com)",
@@ -1167,6 +1189,17 @@
         "daysAgo": "{{count}} dagen geleden"
       },
       "infoTooltip": "<strong>Veiligheidsadviezen</strong><br>Reisadviezen en veiligheidswaarschuwingen van overheidsinstanties."
+    },
+    "orefSirens": {
+      "checking": "Checking siren alerts...",
+      "noAlerts": "No active sirens — all clear",
+      "notConfigured": "Sirens service not configured",
+      "activeSirens": "{{count}} active siren(s)",
+      "area": "Area",
+      "time": "Time",
+      "justNow": "just now",
+      "historyCount": "{{count}} alerts in last 24h",
+      "infoTooltip": "<strong>Israel Sirens</strong><br>Real-time rocket and missile siren alerts from Israel Home Front Command.<br><br>Data is polled every 10 seconds. A pulsing red indicator means active sirens are sounding."
     }
   },
   "popups": {
@@ -1219,12 +1252,20 @@
       "riots": "Rellen",
       "highSeverity": "Hoge ernst"
     },
+    "gpsJamming": {
+      "title": "GPS/GNSS-storing",
+      "interference": "Storing",
+      "aircraftAffected": "Getroffen vliegtuigen",
+      "aircraftNormal": "Normale vliegtuigen",
+      "h3Hex": "H3 Hex"
+    },
     "flight": {
       "groundStop": "GRONDSTOP",
       "groundDelay": "GRONDVERTRAGING",
       "departureDelay": "VERTREKVERTRAGINGEN",
       "arrivalDelay": "AANKOMSTVERTRAGINGEN",
       "delaysReported": "VERTRAGINGEN GEMELD",
+      "closure": "LUCHTHAVEN GESLOTEN",
       "delays": "VERTRAGINGEN",
       "avgDelay": "GEM. VERTRAGING",
       "cancelled": "GEANNULEERD",
@@ -1909,7 +1950,8 @@
       "earthquakes": "aardbevingen",
       "displaced": "ontheemden",
       "climate": "Klimaatstress",
-      "conflictEvents": "conflictgebeurtenissen"
+      "conflictEvents": "conflictgebeurtenissen",
+      "gpsJammingZones": "GPS Jamming Zones"
     },
     "timeAgo": {
       "m": "{{count}}m geleden",

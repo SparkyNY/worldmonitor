@@ -36,7 +36,8 @@
       "earthquakes": "terremotos",
       "displaced": "desplazados",
       "climate": "Estrés climático",
-      "conflictEvents": "eventos de conflicto"
+      "conflictEvents": "eventos de conflicto",
+      "gpsJammingZones": "GPS Jamming Zones"
     },
     "timeAgo": {
       "m": "{{count}}hace m",
@@ -204,7 +205,9 @@
     "gccInvestments": "Inversiones del CCG",
     "geoHubs": "Geopolitical Hotspots",
     "liveWebcams": "Cámaras en Vivo",
-    "securityAdvisories": "Alertas de Seguridad"
+    "securityAdvisories": "Alertas de Seguridad",
+    "orefSirens": "Israel Sirens",
+    "telegramIntel": "Inteligencia Telegram"
   },
   "modals": {
     "search": {
@@ -383,7 +386,8 @@
         "earthquakes": "terremotos",
         "displaced": "desplazado",
         "climate": "Estrés climático",
-        "conflictEvents": "eventos de conflicto"
+        "conflictEvents": "eventos de conflicto",
+        "gpsJammingZones": "GPS Jamming Zones"
       },
       "loadingIndex": "Cargando índice...",
       "identifying": "Identificando el país...",
@@ -475,6 +479,7 @@
     },
     "webcams": {
       "regions": {
+        "iran": "IRAN ATTACKS",
         "all": "TODOS",
         "mideast": "MEDIO ORIENTE",
         "europe": "EUROPA",
@@ -578,7 +583,8 @@
       "error": "No se pudieron cargar las predicciones",
       "yes": "Sí",
       "no": "No",
-      "vol": "volumen"
+      "vol": "volumen",
+      "closes": "Cierra"
     },
     "deckgl": {
       "views": {
@@ -648,7 +654,9 @@
         "centralBanks": "Bancos centrales",
         "commodityHubs": "Centros de productos básicos",
         "gulfInvestments": "Inversiones del CCG",
-        "tradeRoutes": "Rutas Comerciales"
+        "tradeRoutes": "Rutas Comerciales",
+        "gpsJamming": "GPS JAMMING",
+        "dayNight": "Día/Noche"
       },
       "layersTitle": "capas",
       "layerGuide": "Guía de capas",
@@ -699,7 +707,8 @@
           "geopolitical": "Geopolítico",
           "militaryStrategic": "Militar y estratégico",
           "transport": "Transporte",
-          "labels": "Etiquetas"
+          "labels": "Etiquetas",
+          "overlays": "Superposiciones y etiquetas"
         },
         "descriptions": {
           "techStartupHubs": "Principales ecosistemas de startups (SF, Nueva York, Londres, etc.)",
@@ -741,7 +750,8 @@
           "transportDelays": "Retrasos en el aeropuerto y paradas en tierra (FAA)",
           "naturalEventsFull": "Terremotos (USGS) + tormentas, incendios, volcanes, inundaciones (NASA EONET)",
           "waterwaysLabels": "Etiquetas de cuellos de botella estratégicos",
-          "tradeRoutes": "Principales rutas marítimas globales que conectan puertos a través de puntos estratégicos"
+          "tradeRoutes": "Principales rutas marítimas globales que conectan puertos a través de puntos estratégicos",
+          "dayNight": "Terminador solar en tiempo real mostrando zonas de día y noche"
         },
         "notes": {
           "timeAffects": "Afecta: terremotos, clima, protestas, apagones"
@@ -1048,6 +1058,19 @@
     "gdeltIntel": {
       "infoTooltip": "<strong>GDELT Intelligence</strong> Monitoreo de noticias globales en tiempo real:<ul><li>Categorías de temas seleccionados (conflictos, cibernética, etc.)</li><li>Artículos de más de 100 idiomas traducidos</li><li>Actualizaciones cada 15 minutos</li></ul>Fuente: Proyecto GDELT (gdeltproject.org)"
     },
+    "telegramIntel": {
+      "infoTooltip": "Señales en tiempo real de canales OSINT de Telegram monitoreados",
+      "loading": "Conectando al relé de Telegram...",
+      "empty": "No hay mensajes disponibles",
+      "disabled": "Relé de Telegram no activo",
+      "filterAll": "Todos",
+      "filterBreaking": "Urgente",
+      "filterConflict": "Conflictos",
+      "filterAlerts": "Alertas",
+      "filterOsint": "OSINT",
+      "filterPolitics": "Política",
+      "filterMiddleeast": "Medio Oriente"
+    },
     "investments": {
       "infoTooltip": "Base de datos de inversiones extranjeras directas de Arabia Saudita y Emiratos Árabes Unidos en infraestructura crítica global. Haga clic en una fila para volar a la inversión en el mapa.",
       "searchPlaceholder": "Search assets, countries, entities…",
@@ -1308,6 +1331,17 @@
         "daysAgo": "hace {{count}} d"
       },
       "infoTooltip": "<strong>Alertas de Seguridad</strong><br>Avisos de viaje y alertas de seguridad de agencias gubernamentales."
+    },
+    "orefSirens": {
+      "checking": "Checking siren alerts...",
+      "noAlerts": "No active sirens — all clear",
+      "notConfigured": "Sirens service not configured",
+      "activeSirens": "{{count}} active siren(s)",
+      "area": "Area",
+      "time": "Time",
+      "justNow": "just now",
+      "historyCount": "{{count}} alerts in last 24h",
+      "infoTooltip": "<strong>Israel Sirens</strong><br>Real-time rocket and missile siren alerts from Israel Home Front Command.<br><br>Data is polled every 10 seconds. A pulsing red indicator means active sirens are sounding."
     }
   },
   "popups": {
@@ -1360,12 +1394,20 @@
       "riots": "Disturbios",
       "highSeverity": "Alta Gravedad"
     },
+    "gpsJamming": {
+      "title": "Interferencia GPS/GNSS",
+      "interference": "Interferencia",
+      "aircraftAffected": "Aeronaves afectadas",
+      "aircraftNormal": "Aeronaves normales",
+      "h3Hex": "H3 Hex"
+    },
     "flight": {
       "groundStop": "PARADA EN TIERRA",
       "groundDelay": "PROGRAMA DE RETRASO EN TIERRA",
       "departureDelay": "RETRASOS DE SALIDA",
       "arrivalDelay": "RETRASOS DE LLEGADA",
       "delaysReported": "RETRASOS REPORTADOS",
+      "closure": "CIERRE DE AEROPUERTO",
       "delays": "RETRASOS",
       "avgDelay": "RETRASO PROM.",
       "cancelled": "CANCELADO",

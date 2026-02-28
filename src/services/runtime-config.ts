@@ -23,7 +23,9 @@ export type RuntimeSecretKey =
   | 'OLLAMA_API_URL'
   | 'OLLAMA_MODEL'
   | 'WORLDMONITOR_API_KEY'
-  | 'WTO_API_KEY';
+  | 'WTO_API_KEY'
+  | 'AVIATIONSTACK_API'
+  | 'ICAO_API_KEY';
 
 export type RuntimeFeatureId =
   | 'aiGroq'
@@ -42,7 +44,9 @@ export type RuntimeFeatureId =
   | 'nasaFirms'
   | 'aiOllama'
   | 'wtoTrade'
-  | 'supplyChain';
+  | 'supplyChain'
+  | 'aviationStack'
+  | 'icaoNotams';
 
 export interface RuntimeFeatureDefinition {
   id: RuntimeFeatureId;
@@ -89,6 +93,8 @@ const defaultToggles: Record<RuntimeFeatureId, boolean> = {
   aiOllama: true,
   wtoTrade: true,
   supplyChain: true,
+  aviationStack: true,
+  icaoNotams: true,
 };
 
 export const RUNTIME_FEATURES: RuntimeFeatureDefinition[] = [
@@ -212,6 +218,20 @@ export const RUNTIME_FEATURES: RuntimeFeatureDefinition[] = [
     description: 'Shipping rates via FRED Baltic Dry Index. Chokepoints and minerals use public data.',
     requiredSecrets: ['FRED_API_KEY'],
     fallback: 'Chokepoints and minerals always available; shipping requires FRED key.',
+  },
+  {
+    id: 'aviationStack',
+    name: 'AviationStack flight delays',
+    description: 'Real-time international airport delay data from AviationStack API.',
+    requiredSecrets: ['AVIATIONSTACK_API'],
+    fallback: 'Non-US airports use simulated delay data.',
+  },
+  {
+    id: 'icaoNotams',
+    name: 'ICAO NOTAM closures (Middle East)',
+    description: 'Airport closure detection for MENA airports from ICAO NOTAM data service.',
+    requiredSecrets: ['ICAO_API_KEY'],
+    fallback: 'Closures detected only via AviationStack flight cancellation data.',
   },
 ];
 

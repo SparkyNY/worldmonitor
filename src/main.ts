@@ -47,7 +47,7 @@ Sentry.init({
     /Java bridge method invocation error/,
     /Could not compile fragment shader/,
     /can't redefine non-configurable property/,
-    /Can.t find variable: (CONFIG|currentInset|NP)/,
+    /Can.t find variable: (CONFIG|currentInset|NP|webkit)/,
     /invalid origin/,
     /\.data\.split is not a function/,
     /signal is aborted without reason/,
@@ -114,6 +114,18 @@ Sentry.init({
     /AbortError: The user aborted a request/,
     /\w+ is not a function.*\/uv\/service\//,
     /__isInQueue__/,
+    /^(?:LIDNotify(?:Id)?|onWebViewAppeared|onGetWiFiBSSID) is not defined$/,
+    /signal timed out/,
+    /Se requiere plan premium/,
+    /hybridExecute is not defined/,
+    /reading 'postMessage'/,
+    /NotSupportedError/,
+    /appendChild.*Unexpected token/,
+    /\bmag is not defined\b/,
+    /evaluating '[^']*\.luma/,
+    /translateNotifyError/,
+    /GM_getValue/,
+    /^InvalidStateError:|The object is in an invalid state/,
   ],
   beforeSend(event) {
     const msg = event.exception?.values?.[0]?.value ?? '';
@@ -125,7 +137,7 @@ Sentry.init({
     }
     // Suppress any TypeError that happens entirely within maplibre or deck.gl internals
     if (/^TypeError:/.test(msg) && frames.length > 0) {
-      const nonSentryFrames = frames.filter(f => !/\/sentry-[A-Za-z0-9-]+\.js/.test(f.filename ?? ''));
+      const nonSentryFrames = frames.filter(f => f.filename && f.filename !== '<anonymous>' && !/\/sentry-[A-Za-z0-9-]+\.js/.test(f.filename));
       if (nonSentryFrames.length > 0 && nonSentryFrames.every(f => /\/(map|maplibre|deck-stack)-[A-Za-z0-9-]+\.js/.test(f.filename ?? ''))) return null;
     }
     // Suppress errors originating entirely from blob: URLs (browser extensions)

@@ -3,7 +3,7 @@ import type { TimelineEvent } from '@/components/CountryTimeline';
 import { CountryTimeline } from '@/components/CountryTimeline';
 import { CountryBriefPage } from '@/components/CountryBriefPage';
 import { reverseGeocode } from '@/utils/reverse-geocode';
-import { getCountryAtCoordinates, hasCountryGeometry, isCoordinateInCountry } from '@/services/country-geometry';
+import { getCountryAtCoordinates, hasCountryGeometry, isCoordinateInCountry, ME_STRIKE_BOUNDS } from '@/services/country-geometry';
 import { calculateCII, getCountryData, TIER1_COUNTRIES } from '@/services/country-instability';
 import { signalAggregator } from '@/services/signal-aggregator';
 import { dataFreshness } from '@/services/data-freshness';
@@ -198,6 +198,13 @@ export class CountryIntelManager implements AppModule {
         context.regionalConvergence = convergences.map((r) => r.description);
       }
 
+      if (this.ctx.intelligenceCache.advisories) {
+        const countryAdvisories = this.ctx.intelligenceCache.advisories.filter(a => a.country === code);
+        if (countryAdvisories.length > 0) {
+          context.travelAdvisories = countryAdvisories.map(a => ({ source: a.source, level: a.level, title: a.title }));
+        }
+      }
+
       const headlines = filteredNews.slice(0, 15).map((n) => n.title);
       if (headlines.length) context.headlines = headlines;
 
@@ -236,6 +243,9 @@ export class CountryIntelManager implements AppModule {
           if (signals.protests > 0) lines.push(t('countryBrief.fallback.protestsDetected', { count: String(signals.protests) }));
           if (signals.militaryFlights > 0) lines.push(t('countryBrief.fallback.aircraftTracked', { count: String(signals.militaryFlights) }));
           if (signals.militaryVessels > 0) lines.push(t('countryBrief.fallback.vesselsTracked', { count: String(signals.militaryVessels) }));
+          if (signals.activeStrikes > 0) lines.push(t('countryBrief.fallback.activeStrikes', { count: String(signals.activeStrikes) }));
+          if (signals.travelAdvisoryMaxLevel === 'do-not-travel') lines.push(`⚠️ Travel advisory: Do Not Travel (${signals.travelAdvisories} source${signals.travelAdvisories > 1 ? 's' : ''})`);
+          else if (signals.travelAdvisoryMaxLevel === 'reconsider') lines.push(`⚠️ Travel advisory: Reconsider Travel (${signals.travelAdvisories} source${signals.travelAdvisories > 1 ? 's' : ''})`);
           if (signals.outages > 0) lines.push(t('countryBrief.fallback.internetOutages', { count: String(signals.outages) }));
           if (signals.earthquakes > 0) lines.push(t('countryBrief.fallback.recentEarthquakes', { count: String(signals.earthquakes) }));
           if (context.stockIndex) lines.push(t('countryBrief.fallback.stockIndex', { value: context.stockIndex }));
@@ -330,6 +340,16 @@ export class CountryIntelManager implements AppModule {
       }
     }
 
+    for (const e of this.getCountryStrikes(code, hasGeoShape)) {
+      const ts = e.timestamp < 1e12 ? e.timestamp * 1000 : e.timestamp;
+      events.push({
+        timestamp: ts,
+        lane: 'conflict',
+        label: e.title || `Strike: ${e.locationName}`,
+        severity: (e.severity.toLowerCase() === 'high' || e.severity.toLowerCase() === 'critical') ? 'critical' : 'high',
+      });
+    }
+
     this.ctx.countryTimeline = new CountryTimeline(mount);
     this.ctx.countryTimeline.render(events.filter(e => e.timestamp >= sevenDaysAgo));
   }
@@ -371,8 +391,38 @@ export class CountryIntelManager implements AppModule {
       }).length;
     }
 
+    const activeStrikes = this.getCountryStrikes(code, hasGeoShape).length;
+
+    let aviationDisruptions = 0;
+    if (this.ctx.intelligenceCache.flightDelays) {
+      aviationDisruptions = this.ctx.intelligenceCache.flightDelays.filter(d =>
+        (d.severity === 'major' || d.severity === 'severe' || d.delayType === 'closure') &&
+        d.country?.toLowerCase() === countryLower
+      ).length;
+    }
+
     const ciiData = getCountryData(code);
     const isTier1 = !!TIER1_COUNTRIES[code];
+
+    let orefSirens = 0;
+    let orefHistory24h = 0;
+    if (code === 'IL' && this.ctx.intelligenceCache.orefAlerts) {
+      orefSirens = this.ctx.intelligenceCache.orefAlerts.alertCount;
+      orefHistory24h = this.ctx.intelligenceCache.orefAlerts.historyCount24h;
+    }
+
+    let travelAdvisories = 0;
+    let travelAdvisoryMaxLevel: string | null = null;
+    const advisoryLevelRank: Record<string, number> = { 'do-not-travel': 4, 'reconsider': 3, 'caution': 2, 'normal': 1, 'info': 0 };
+    if (this.ctx.intelligenceCache.advisories) {
+      const countryAdvisories = this.ctx.intelligenceCache.advisories.filter(a => a.country === code);
+      travelAdvisories = countryAdvisories.length;
+      for (const a of countryAdvisories) {
+        if (a.level && (advisoryLevelRank[a.level] || 0) > (advisoryLevelRank[travelAdvisoryMaxLevel || ''] || 0)) {
+          travelAdvisoryMaxLevel = a.level;
+        }
+      }
+    }
 
     return {
       protests,
@@ -383,6 +433,13 @@ export class CountryIntelManager implements AppModule {
       displacementOutflow: ciiData?.displacementOutflow ?? 0,
       climateStress: ciiData?.climateStress ?? 0,
       conflictEvents: ciiData?.conflicts?.length ?? 0,
+      activeStrikes,
+      orefSirens,
+      orefHistory24h,
+      aviationDisruptions,
+      travelAdvisories,
+      travelAdvisoryMaxLevel,
+      gpsJammingHexes: (ciiData?.gpsJammingHighCount ?? 0) + (ciiData?.gpsJammingMediumCount ?? 0),
       isTier1,
     };
   }
@@ -416,6 +473,16 @@ export class CountryIntelManager implements AppModule {
     setTimeout(() => { el.classList.remove('visible'); setTimeout(() => el.remove(), 300); }, 3000);
   }
 
+  private getCountryStrikes(code: string, hasGeoShape: boolean): typeof this.ctx.intelligenceCache.iranEvents & object {
+    if (!this.ctx.intelligenceCache.iranEvents) return [];
+    const seen = new Set<string>();
+    return this.ctx.intelligenceCache.iranEvents.filter(e => {
+      if (seen.has(e.id)) return false;
+      seen.add(e.id);
+      return hasGeoShape && this.isInCountry(e.latitude, e.longitude, code);
+    });
+  }
+
   private isInCountry(lat: number, lon: number, code: string): boolean {
     const precise = isCoordinateInCountry(lat, lon, code);
     if (precise != null) return precise;
@@ -425,10 +492,7 @@ export class CountryIntelManager implements AppModule {
   }
 
   static COUNTRY_BOUNDS: Record<string, { n: number; s: number; e: number; w: number }> = {
-    IR: { n: 40, s: 25, e: 63, w: 44 }, IL: { n: 33.3, s: 29.5, e: 35.9, w: 34.3 },
-    SA: { n: 32, s: 16, e: 55, w: 35 }, AE: { n: 26.1, s: 22.6, e: 56.4, w: 51.6 },
-    IQ: { n: 37.4, s: 29.1, e: 48.6, w: 38.8 }, SY: { n: 37.3, s: 32.3, e: 42.4, w: 35.7 },
-    YE: { n: 19, s: 12, e: 54.5, w: 42 }, LB: { n: 34.7, s: 33.1, e: 36.6, w: 35.1 },
+    ...ME_STRIKE_BOUNDS,
     CN: { n: 53.6, s: 18.2, e: 134.8, w: 73.5 }, TW: { n: 25.3, s: 21.9, e: 122, w: 120 },
     JP: { n: 45.5, s: 24.2, e: 153.9, w: 122.9 }, KR: { n: 38.6, s: 33.1, e: 131.9, w: 124.6 },
     KP: { n: 43.0, s: 37.7, e: 130.7, w: 124.2 }, IN: { n: 35.5, s: 6.7, e: 97.4, w: 68.2 },

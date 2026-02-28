@@ -36,7 +36,8 @@
       "earthquakes": "землетрясения",
       "displaced": "перемещённые",
       "climate": "Климатическая нагрузка",
-      "conflictEvents": "конфликтные события"
+      "conflictEvents": "конфликтные события",
+      "gpsJammingZones": "GPS Jamming Zones"
     },
     "timeAgo": {
       "m": "{{count}}м назад",
@@ -204,7 +205,9 @@
     "gccInvestments": "Инвестиции стран Залива",
     "geoHubs": "Геополитические хабы",
     "liveWebcams": "Веб-камеры",
-    "securityAdvisories": "Предупреждения безопасности"
+    "securityAdvisories": "Предупреждения безопасности",
+    "orefSirens": "Israel Sirens",
+    "telegramIntel": "Разведка Telegram"
   },
   "modals": {
     "search": {
@@ -423,7 +426,8 @@
         "earthquakes": "землетрясения",
         "displaced": "перемещённые",
         "climate": "Климатическая нагрузка",
-        "conflictEvents": "конфликтные события"
+        "conflictEvents": "конфликтные события",
+        "gpsJammingZones": "GPS Jamming Zones"
       },
       "timeAgo": {
         "m": "{{count}}м назад",
@@ -475,6 +479,7 @@
     },
     "webcams": {
       "regions": {
+        "iran": "IRAN ATTACKS",
         "all": "ВСЕ",
         "mideast": "БЛИЖНИЙ ВОСТОК",
         "europe": "ЕВРОПА",
@@ -578,7 +583,8 @@
       "error": "Не удалось загрузить прогнозы",
       "yes": "Да",
       "no": "Нет",
-      "vol": "Объём"
+      "vol": "Объём",
+      "closes": "Закрывается"
     },
     "stablecoins": {
       "pegHealth": "Здоровье привязки",
@@ -784,7 +790,9 @@
         "centralBanks": "Центральные банки",
         "commodityHubs": "Сырьевые хабы",
         "gulfInvestments": "Инвестиции стран Залива",
-        "tradeRoutes": "Торговые маршруты"
+        "tradeRoutes": "Торговые маршруты",
+        "gpsJamming": "GPS JAMMING",
+        "dayNight": "День/Ночь"
       },
       "tooltip": {
         "earthquake": "Землетрясение",
@@ -833,7 +841,8 @@
           "geopolitical": "Геополитика",
           "militaryStrategic": "Военные и стратегические",
           "transport": "Транспорт",
-          "labels": "Обозначения"
+          "labels": "Обозначения",
+          "overlays": "Оверлеи и обозначения"
         },
         "descriptions": {
           "techStartupHubs": "Крупные стартап-экосистемы (Сан-Франциско, Нью-Йорк, Лондон и др.)",
@@ -875,7 +884,8 @@
           "transportDelays": "Задержки и остановки аэропортов (FAA)",
           "naturalEventsFull": "Землетрясения (USGS) + штормы, пожары, вулканы, наводнения (NASA EONET)",
           "waterwaysLabels": "Обозначения стратегических узких мест",
-          "tradeRoutes": "Основные мировые судоходные маршруты, соединяющие порты через стратегические узкие места"
+          "tradeRoutes": "Основные мировые судоходные маршруты, соединяющие порты через стратегические узкие места",
+          "dayNight": "Солнечный терминатор в реальном времени, показывающий зоны дня и ночи"
         },
         "notes": {
           "timeAffects": "Влияет на: Землетрясения, Погода, Протесты, Сбои"
@@ -1168,6 +1178,19 @@
     "gdeltIntel": {
       "infoTooltip": "<strong>Разведка GDELT</strong> Мониторинг мировых новостей в реальном времени:<ul><li>Курированные тематические категории (конфликты, кибер и др.)</li><li>Статьи на 100+ языках с переводом</li><li>Обновление каждые 15 минут</li></ul>Источник: GDELT Project (gdeltproject.org)"
     },
+    "telegramIntel": {
+      "infoTooltip": "Сигналы в реальном времени из отслеживаемых Telegram-каналов OSINT",
+      "loading": "Подключение к ретранслятору Telegram...",
+      "empty": "Сообщения отсутствуют",
+      "disabled": "Ретранслятор Telegram неактивен",
+      "filterAll": "Все",
+      "filterBreaking": "Срочное",
+      "filterConflict": "Конфликты",
+      "filterAlerts": "Оповещения",
+      "filterOsint": "OSINT",
+      "filterPolitics": "Политика",
+      "filterMiddleeast": "Ближний Восток"
+    },
     "investments": {
       "infoTooltip": "База данных прямых иностранных инвестиций Саудовской Аравии и ОАЭ в мировую критическую инфраструктуру. Нажмите на строку для перехода к инвестиции на карте.",
       "searchPlaceholder": "Search assets, countries, entities…",
@@ -1308,6 +1331,17 @@
         "daysAgo": "{{count}} дн. назад"
       },
       "infoTooltip": "<strong>Предупреждения безопасности</strong><br>Рекомендации по поездкам и предупреждения от государственных ведомств."
+    },
+    "orefSirens": {
+      "checking": "Checking siren alerts...",
+      "noAlerts": "No active sirens — all clear",
+      "notConfigured": "Sirens service not configured",
+      "activeSirens": "{{count}} active siren(s)",
+      "area": "Area",
+      "time": "Time",
+      "justNow": "just now",
+      "historyCount": "{{count}} alerts in last 24h",
+      "infoTooltip": "<strong>Israel Sirens</strong><br>Real-time rocket and missile siren alerts from Israel Home Front Command.<br><br>Data is polled every 10 seconds. A pulsing red indicator means active sirens are sounding."
     }
   },
   "popups": {
@@ -1361,12 +1395,20 @@
       "riots": "Беспорядки",
       "highSeverity": "Высокая степень тяжести"
     },
+    "gpsJamming": {
+      "title": "Помехи GPS/GNSS",
+      "interference": "Помехи",
+      "aircraftAffected": "Затронутые воздушные суда",
+      "aircraftNormal": "Нормальные воздушные суда",
+      "h3Hex": "H3 Hex"
+    },
     "flight": {
       "groundStop": "НАЗЕМНАЯ ОСТАНОВКА",
       "groundDelay": "ПРОГРАММА НАЗЕМНЫХ ЗАДЕРЖЕК",
       "departureDelay": "ЗАДЕРЖКИ ВЫЛЕТОВ",
       "arrivalDelay": "ЗАДЕРЖКИ ПРИЛЁТОВ",
       "delaysReported": "ЗАФИКСИРОВАНЫ ЗАДЕРЖКИ",
+      "closure": "АЭРОПОРТ ЗАКРЫТ",
       "delays": "ЗАДЕРЖКИ",
       "avgDelay": "СРЕДНЯЯ ЗАДЕРЖКА",
       "cancelled": "ОТМЕНЕНО",

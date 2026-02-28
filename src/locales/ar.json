@@ -36,7 +36,8 @@
       "earthquakes": "زلازل",
       "displaced": "نازحون",
       "climate": "إجهاد مناخي",
-      "conflictEvents": "أحداث نزاع"
+      "conflictEvents": "أحداث نزاع",
+      "gpsJammingZones": "GPS Jamming Zones"
     },
     "timeAgo": {
       "m": "{{count}}د مضت",
@@ -204,7 +205,9 @@
     "gccInvestments": "استثمارات دول الخليج",
     "geoHubs": "مراكز جيوسياسية",
     "liveWebcams": "كاميرات مباشرة",
-    "securityAdvisories": "تنبيهات أمنية"
+    "securityAdvisories": "تنبيهات أمنية",
+    "orefSirens": "Israel Sirens",
+    "telegramIntel": "استخبارات Telegram"
   },
   "modals": {
     "search": {
@@ -423,7 +426,8 @@
         "earthquakes": "زلازل",
         "displaced": "نازحون",
         "climate": "إجهاد مناخي",
-        "conflictEvents": "أحداث نزاع"
+        "conflictEvents": "أحداث نزاع",
+        "gpsJammingZones": "GPS Jamming Zones"
       },
       "timeAgo": {
         "m": "{{count}}د مضت",
@@ -466,6 +470,7 @@
   "components": {
     "webcams": {
       "regions": {
+        "iran": "IRAN ATTACKS",
         "all": "الكل",
         "mideast": "الشرق الأوسط",
         "europe": "أوروبا",
@@ -578,7 +583,8 @@
       "error": "فشل تحميل التنبؤات",
       "yes": "نعم",
       "no": "لا",
-      "vol": "الحجم"
+      "vol": "الحجم",
+      "closes": "يغلق"
     },
     "stablecoins": {
       "pegHealth": "صحة الربط",
@@ -784,7 +790,9 @@
         "centralBanks": "بنوك مركزية",
         "commodityHubs": "مراكز سلعية",
         "gulfInvestments": "استثمارات دول الخليج",
-        "tradeRoutes": "طرق التجارة"
+        "tradeRoutes": "طرق التجارة",
+        "gpsJamming": "GPS JAMMING",
+        "dayNight": "نهار/ليل"
       },
       "tooltip": {
         "earthquake": "زلزال",
@@ -833,7 +841,8 @@
           "geopolitical": "جيوسياسي",
           "militaryStrategic": "عسكري واستراتيجي",
           "transport": "النقل",
-          "labels": "التسميات"
+          "labels": "التسميات",
+          "overlays": "التراكبات والتسميات"
         },
         "descriptions": {
           "techStartupHubs": "أنظمة بيئية رئيسية للشركات الناشئة (سان فرانسيسكو، نيويورك، لندن، إلخ.)",
@@ -875,7 +884,8 @@
           "transportDelays": "تأخيرات المطارات والتوقفات الأرضية (FAA)",
           "naturalEventsFull": "زلازل (USGS) + عواصف وحرائق وبراكين وفيضانات (NASA EONET)",
           "waterwaysLabels": "تسميات نقاط الاختناق الاستراتيجية",
-          "tradeRoutes": "خطوط الشحن العالمية الرئيسية التي تربط الموانئ عبر نقاط الاختناق الاستراتيجية"
+          "tradeRoutes": "خطوط الشحن العالمية الرئيسية التي تربط الموانئ عبر نقاط الاختناق الاستراتيجية",
+          "dayNight": "خط الفاصل الشمسي في الوقت الفعلي يُظهر مناطق النهار والليل"
         },
         "notes": {
           "timeAffects": "يؤثر على: الزلازل، الطقس، الاحتجاجات، الانقطاعات"
@@ -1135,6 +1145,19 @@
     "gdeltIntel": {
       "infoTooltip": "<strong>استخبارات GDELT</strong> مراقبة أخبار عالمية فورية:<ul><li>فئات مواضيع منتقاة (نزاعات، سيبرانية، إلخ.)</li><li>مقالات من 100+ لغة مترجمة</li><li>تُحدّث كل 15 دقيقة</li></ul>المصدر: مشروع GDELT (gdeltproject.org)"
     },
+    "telegramIntel": {
+      "infoTooltip": "إشارات فورية من قنوات OSINT المراقبة على Telegram",
+      "loading": "جارٍ الاتصال بمرحّل Telegram...",
+      "empty": "لا توجد رسائل متاحة",
+      "disabled": "مرحّل Telegram غير نشط",
+      "filterAll": "الكل",
+      "filterBreaking": "عاجل",
+      "filterConflict": "نزاعات",
+      "filterAlerts": "تنبيهات",
+      "filterOsint": "OSINT",
+      "filterPolitics": "سياسة",
+      "filterMiddleeast": "الشرق الأوسط"
+    },
     "investments": {
       "infoTooltip": "قاعدة بيانات الاستثمارات الأجنبية المباشرة للمملكة العربية السعودية والإمارات في البنية التحتية الحيوية العالمية. انقر على صف للانتقال إلى موقع الاستثمار على الخريطة.",
       "searchPlaceholder": "Search assets, countries, entities…",
@@ -1308,6 +1331,17 @@
         "daysAgo": "منذ {{count}} يوم"
       },
       "infoTooltip": "<strong>تنبيهات أمنية</strong><br>تحذيرات السفر والتنبيهات الأمنية من الوكالات الحكومية."
+    },
+    "orefSirens": {
+      "checking": "Checking siren alerts...",
+      "noAlerts": "No active sirens — all clear",
+      "notConfigured": "Sirens service not configured",
+      "activeSirens": "{{count}} active siren(s)",
+      "area": "Area",
+      "time": "Time",
+      "justNow": "just now",
+      "historyCount": "{{count}} alerts in last 24h",
+      "infoTooltip": "<strong>Israel Sirens</strong><br>Real-time rocket and missile siren alerts from Israel Home Front Command.<br><br>Data is polled every 10 seconds. A pulsing red indicator means active sirens are sounding."
     }
   },
   "popups": {
@@ -1361,12 +1395,20 @@
       "riots": "أعمال شغب",
       "highSeverity": "شدة عالية"
     },
+    "gpsJamming": {
+      "title": "تداخل GPS/GNSS",
+      "interference": "التداخل",
+      "aircraftAffected": "الطائرات المتأثرة",
+      "aircraftNormal": "الطائرات السليمة",
+      "h3Hex": "H3 Hex"
+    },
     "flight": {
       "groundStop": "توقف أرضي",
       "groundDelay": "برنامج تأخير أرضي",
       "departureDelay": "تأخيرات المغادرة",
       "arrivalDelay": "تأخيرات الوصول",
       "delaysReported": "تأخيرات مُبلّغة",
+      "closure": "إغلاق المطار",
       "delays": "تأخيرات",
       "avgDelay": "متوسط التأخير",
       "cancelled": "ملغاة",
@@ -1738,6 +1780,9 @@
     },
     "commodityHub": {
       "commodities": "السلع"
+    },
+    "iranEvent": {
+      "relatedEvents": "أحداث ذات صلة"
     },
     "hotspotSubtexts": {
       "conflict_zone": "منطقة نزاع",

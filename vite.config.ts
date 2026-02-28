@@ -516,7 +516,7 @@ const RSS_PROXY_ALLOWED_DOMAINS = new Set([
   'www.fema.gov', 'www.dhs.gov', 'www.thedrive.com', 'krebsonsecurity.com',
   'finance.yahoo.com', 'thediplomat.com', 'venturebeat.com', 'foreignpolicy.com',
   'www.ft.com', 'openai.com', 'www.reutersagency.com', 'feeds.reuters.com',
-  'rsshub.app', 'asia.nikkei.com', 'www.cfr.org', 'www.csis.org', 'www.politico.com',
+  'asia.nikkei.com', 'www.cfr.org', 'www.csis.org', 'www.politico.com',
   'www.brookings.edu', 'layoffs.fyi', 'www.defensenews.com', 'www.militarytimes.com',
   'taskandpurpose.com', 'news.usni.org', 'www.oryxspioenkop.com', 'www.gov.uk',
   'www.foreignaffairs.com', 'www.atlanticcouncil.org',
@@ -985,12 +985,6 @@ export default defineConfig({
         target: 'https://feeds.npr.org',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/rss\/npr/, ''),
-      },
-      // RSS Feeds - AP News
-      '/rss/apnews': {
-        target: 'https://rsshub.app/apnews',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/rss\/apnews/, ''),
       },
       // RSS Feeds - Al Jazeera
       '/rss/aljazeera': {

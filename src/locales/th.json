@@ -36,7 +36,8 @@
       "earthquakes": "แผ่นดินไหว",
       "displaced": "ผู้พลัดถิ่น",
       "climate": "ความเครียดด้านภูมิอากาศ",
-      "conflictEvents": "เหตุการณ์ความขัดแย้ง"
+      "conflictEvents": "เหตุการณ์ความขัดแย้ง",
+      "gpsJammingZones": "GPS Jamming Zones"
     },
     "timeAgo": {
       "m": "{{count}}น. ที่แล้ว",
@@ -204,7 +205,9 @@
     "gccInvestments": "การลงทุน GCC",
     "geoHubs": "ศูนย์กลางภูมิรัฐศาสตร์",
     "liveWebcams": "เว็บแคมสด",
-    "securityAdvisories": "คำเตือนด้านความปลอดภัย"
+    "securityAdvisories": "คำเตือนด้านความปลอดภัย",
+    "orefSirens": "Israel Sirens",
+    "telegramIntel": "ข่าวกรอง Telegram"
   },
   "modals": {
     "search": {
@@ -423,7 +426,8 @@
         "earthquakes": "แผ่นดินไหว",
         "displaced": "ผู้พลัดถิ่น",
         "climate": "ความเครียดด้านภูมิอากาศ",
-        "conflictEvents": "เหตุการณ์ความขัดแย้ง"
+        "conflictEvents": "เหตุการณ์ความขัดแย้ง",
+        "gpsJammingZones": "GPS Jamming Zones"
       },
       "timeAgo": {
         "m": "{{count}}น. ที่แล้ว",
@@ -466,6 +470,7 @@
   "components": {
     "webcams": {
       "regions": {
+        "iran": "IRAN ATTACKS",
         "all": "ทั้งหมด",
         "mideast": "ตะวันออกกลาง",
         "europe": "ยุโรป",
@@ -578,7 +583,8 @@
       "error": "ไม่สามารถโหลดการพยากรณ์ได้",
       "yes": "ใช่",
       "no": "ไม่",
-      "vol": "ปริมาณ"
+      "vol": "ปริมาณ",
+      "closes": "ปิด"
     },
     "stablecoins": {
       "pegHealth": "สุขภาพ Peg",
@@ -784,7 +790,9 @@
         "centralBanks": "ธนาคารกลาง",
         "commodityHubs": "ศูนย์กลางสินค้าโภคภัณฑ์",
         "gulfInvestments": "การลงทุน GCC",
-        "tradeRoutes": "เส้นทางการค้า"
+        "tradeRoutes": "เส้นทางการค้า",
+        "gpsJamming": "GPS JAMMING",
+        "dayNight": "กลางวัน/กลางคืน"
       },
       "tooltip": {
         "earthquake": "แผ่นดินไหว",
@@ -833,7 +841,8 @@
           "geopolitical": "ภูมิรัฐศาสตร์",
           "militaryStrategic": "ทหารและยุทธศาสตร์",
           "transport": "การขนส่ง",
-          "labels": "ป้ายกำกับ"
+          "labels": "ป้ายกำกับ",
+          "overlays": "ภาพซ้อนทับและป้ายกำกับ"
         },
         "descriptions": {
           "techStartupHubs": "ระบบนิเวศสตาร์ทอัพสำคัญ (SF, NYC, ลอนดอน ฯลฯ)",
@@ -875,7 +884,8 @@
           "transportDelays": "ความล่าช้าของสนามบินและการหยุดบินภาคพื้น (FAA)",
           "naturalEventsFull": "แผ่นดินไหว (USGS) + พายุ ไฟ ภูเขาไฟ น้ำท่วม (NASA EONET)",
           "waterwaysLabels": "ป้ายกำกับจุดคอขวดยุทธศาสตร์",
-          "tradeRoutes": "เส้นทางเดินเรือหลักของโลกที่เชื่อมต่อท่าเรือผ่านจุดยุทธศาสตร์"
+          "tradeRoutes": "เส้นทางเดินเรือหลักของโลกที่เชื่อมต่อท่าเรือผ่านจุดยุทธศาสตร์",
+          "dayNight": "เส้นแบ่งเขตแสงอาทิตย์แบบเรียลไทม์แสดงโซนกลางวันและกลางคืน"
         },
         "notes": {
           "timeAffects": "ส่งผลต่อ: แผ่นดินไหว, สภาพอากาศ, การประท้วง, การหยุดชะงัก"
@@ -1135,6 +1145,19 @@
     "gdeltIntel": {
       "infoTooltip": "<strong>ข่าวกรอง GDELT</strong> การเฝ้าระวังข่าวทั่วโลกเรียลไทม์:<ul><li>หมวดหมู่หัวข้อที่คัดสรร (ความขัดแย้ง, ไซเบอร์ ฯลฯ)</li><li>บทความจาก 100+ ภาษาที่แปลแล้ว</li><li>อัปเดตทุก 15 นาที</li></ul>แหล่งที่มา: GDELT Project (gdeltproject.org)"
     },
+    "telegramIntel": {
+      "infoTooltip": "สัญญาณเรียลไทม์จากช่อง OSINT บน Telegram ที่ถูกติดตาม",
+      "loading": "กำลังเชื่อมต่อรีเลย์ Telegram...",
+      "empty": "ไม่มีข้อความ",
+      "disabled": "รีเลย์ Telegram ไม่ทำงาน",
+      "filterAll": "ทั้งหมด",
+      "filterBreaking": "ด่วน",
+      "filterConflict": "ความขัดแย้ง",
+      "filterAlerts": "แจ้งเตือน",
+      "filterOsint": "OSINT",
+      "filterPolitics": "การเมือง",
+      "filterMiddleeast": "ตะวันออกกลาง"
+    },
     "investments": {
       "infoTooltip": "ฐานข้อมูลการลงทุนโดยตรงจากต่างประเทศของซาอุดีอาระเบียและ UAE ในโครงสร้างพื้นฐานสำคัญระดับโลก คลิกแถวเพื่อบินไปยังการลงทุนบนแผนที่",
       "searchPlaceholder": "ค้นหาสินทรัพย์, ประเทศ, หน่วยงาน…",
@@ -1308,6 +1331,17 @@
         "daysAgo": "{{count}} วันที่แล้ว"
       },
       "infoTooltip": "<strong>คำเตือนด้านความปลอดภัย</strong><br>คำเตือนการเดินทางและความปลอดภัยจากหน่วยงานรัฐบาล."
+    },
+    "orefSirens": {
+      "checking": "Checking siren alerts...",
+      "noAlerts": "No active sirens — all clear",
+      "notConfigured": "Sirens service not configured",
+      "activeSirens": "{{count}} active siren(s)",
+      "area": "Area",
+      "time": "Time",
+      "justNow": "just now",
+      "historyCount": "{{count}} alerts in last 24h",
+      "infoTooltip": "<strong>Israel Sirens</strong><br>Real-time rocket and missile siren alerts from Israel Home Front Command.<br><br>Data is polled every 10 seconds. A pulsing red indicator means active sirens are sounding."
     }
   },
   "popups": {
@@ -1361,12 +1395,20 @@
       "riots": "จลาจล",
       "highSeverity": "ความรุนแรงสูง"
     },
+    "gpsJamming": {
+      "title": "การรบกวน GPS/GNSS",
+      "interference": "การรบกวน",
+      "aircraftAffected": "เครื่องบินที่ได้รับผลกระทบ",
+      "aircraftNormal": "เครื่องบินปกติ",
+      "h3Hex": "H3 Hex"
+    },
     "flight": {
       "groundStop": "หยุดภาคพื้น",
       "groundDelay": "โปรแกรมดีเลย์ภาคพื้น",
       "departureDelay": "ดีเลย์ขาออก",
       "arrivalDelay": "ดีเลย์ขาเข้า",
       "delaysReported": "รายงานดีเลย์",
+      "closure": "ปิดสนามบิน",
       "delays": "ดีเลย์",
       "avgDelay": "ดีเลย์เฉลี่ย",
       "cancelled": "ยกเลิก",
