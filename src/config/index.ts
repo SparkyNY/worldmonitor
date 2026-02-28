@@ -2,6 +2,7 @@
 // For variant-specific builds, set VITE_VARIANT environment variable
 // VITE_VARIANT=tech → tech.worldmonitor.app (tech-focused)
 // VITE_VARIANT=full → worldmonitor.app (geopolitical)
+// VITE_VARIANT=gtd → gtd.worldmonitor.app (Global Terrorism Database)
 // VITE_VARIANT=finance → finance.worldmonitor.app (markets/trading)
 // VITE_VARIANT=local → local/regional dashboard (desktop/local)
 // VITE_VARIANT=osint → OSINT workbench dashboard (desktop/local)

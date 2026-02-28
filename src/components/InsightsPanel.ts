@@ -308,7 +308,7 @@ export class InsightsPanel extends Panel {
       let signalSummary: ReturnType<typeof signalAggregator.getSummary>;
       let focalSummary: ReturnType<typeof focalPointDetector.analyze>;
 
-      if (SITE_VARIANT === 'full') {
+      if (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd') {
         signalSummary = signalAggregator.getSummary();
         this.lastConvergenceZones = signalSummary.convergenceZones;
         if (signalSummary.totalSignals > 0) {
@@ -376,8 +376,8 @@ export class InsightsPanel extends Panel {
 
         // Pass focal point context + theater posture to AI for correlation-aware summarization
         // Tech variant: no geopolitical context, just tech news summarization
-        const theaterContext = SITE_VARIANT === 'full' ? this.getTheaterPostureContext() : '';
-        const geoContext = SITE_VARIANT === 'full'
+        const theaterContext = (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd') ? this.getTheaterPostureContext() : '';
+        const geoContext = (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd')
           ? (focalSummary.aiContext || signalSummary.aiContext) + theaterContext
           : '';
         const result = await generateSummary(titles, (_step, _total, msg) => {

@@ -482,7 +482,8 @@ export class App {
   }
 
   private setupRefreshIntervals(): void {
-    const isHighThroughputVariant = SITE_VARIANT === 'full' || SITE_VARIANT === 'tech' || SITE_VARIANT === 'finance';
+    const isGeopoliticalVariant = SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd';
+    const isHighThroughputVariant = isGeopoliticalVariant || SITE_VARIANT === 'tech' || SITE_VARIANT === 'finance';
 
     // Always refresh news for all variants
     this.refreshScheduler.scheduleRefresh('news', () => this.dataLoader.loadNews(), REFRESH_INTERVALS.feeds);
@@ -512,13 +513,13 @@ export class App {
     }
 
     // WTO trade policy data — annual data, poll every 10 min to avoid hammering upstream
-    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'finance') {
+    if (isGeopoliticalVariant || SITE_VARIANT === 'finance') {
       this.refreshScheduler.scheduleRefresh('tradePolicy', () => this.dataLoader.loadTradePolicy(), 10 * 60 * 1000);
       this.refreshScheduler.scheduleRefresh('supplyChain', () => this.dataLoader.loadSupplyChain(), 10 * 60 * 1000);
     }
 
     // Refresh intelligence signals for CII (geopolitical variant only)
-    if (SITE_VARIANT === 'full') {
+    if (isGeopoliticalVariant) {
       this.refreshScheduler.scheduleRefresh('intelligence', () => {
         const { military } = this.state.intelligenceCache;
         this.state.intelligenceCache = {};

@@ -134,6 +134,15 @@ export class PanelLayoutManager implements AppModule {
               <span class="variant-label">${t('header.world')}</span>
             </a>
             <span class="variant-divider"></span>
+            <a href="${vHref('gtd', 'https://gtd.worldmonitor.app')}"
+               class="variant-option ${SITE_VARIANT === 'gtd' ? 'active' : ''}"
+               data-variant="gtd"
+               ${vTarget('gtd', 'https://gtd.worldmonitor.app')}
+               title="Global Terrorism Database${SITE_VARIANT === 'gtd' ? ` ${t('common.currentVariant')}` : ''}">
+              <span class="variant-icon">🎯</span>
+              <span class="variant-label">GTD</span>
+            </a>
+            <span class="variant-divider"></span>
             <a href="${vHref('tech', 'https://tech.worldmonitor.app')}"
                class="variant-option ${SITE_VARIANT === 'tech' ? 'active' : ''}"
                data-variant="tech"
@@ -223,6 +232,8 @@ export class PanelLayoutManager implements AppModule {
             <div class="panel-header-left">
               <span class="panel-title">${SITE_VARIANT === 'tech'
         ? t('panels.techMap')
+        : SITE_VARIANT === 'gtd'
+          ? 'GTD Map'
         : SITE_VARIANT === 'happy'
           ? 'Good News Map'
           : SITE_VARIANT === 'local'
@@ -497,7 +508,7 @@ export class PanelLayoutManager implements AppModule {
     const economicPanel = new EconomicPanel();
     this.ctx.panels['economic'] = economicPanel;
 
-    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'finance') {
+    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd' || SITE_VARIANT === 'finance') {
       const tradePolicyPanel = new TradePolicyPanel();
       this.ctx.panels['trade-policy'] = tradePolicyPanel;
 
@@ -538,7 +549,7 @@ export class PanelLayoutManager implements AppModule {
       this.ctx.panels[panelKey] = panel;
     }
 
-    if (SITE_VARIANT === 'full') {
+    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd') {
       const gdeltIntelPanel = new GdeltIntelPanel();
       this.ctx.panels['gdelt-intel'] = gdeltIntelPanel;
 

@@ -2175,8 +2175,8 @@ export class MapComponent {
       });
     }
 
-    // Geo Hub Activity Markers (shows activity heatmap for geopolitical hubs - full variant)
-    if (SITE_VARIANT === 'full' && this.geoActivities.length > 0) {
+    // Geo Hub Activity Markers (shows activity heatmap for geopolitical hubs).
+    if ((SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd') && this.geoActivities.length > 0) {
       this.geoActivities.forEach((activity) => {
         const pos = projection([activity.lon, activity.lat]);
         if (!pos) return;

@@ -74,6 +74,25 @@ const VARIANT_META: Record<string, {
       'Geopolitical intelligence',
     ],
   },
+  gtd: {
+    title: 'GTD Monitor - Global Terrorism Database Dashboard',
+    description: 'Global Terrorism Database dashboard for tracking terrorism, conflict, and geopolitical risk signals in real time.',
+    keywords: 'global terrorism database, GTD, terrorism dashboard, conflict monitoring, geopolitical risk, OSINT terrorism, incident intelligence',
+    url: 'https://gtd.worldmonitor.app/',
+    siteName: 'GTD Monitor',
+    shortName: 'GTDMonitor',
+    subject: 'Global Terrorism and Conflict Intelligence',
+    classification: 'Terrorism Dashboard, Conflict Intelligence, OSINT Tool',
+    categories: ['news', 'productivity'],
+    features: [
+      'Terrorism and conflict tracking',
+      'Real-time geopolitical news',
+      'Military and risk overlays',
+      'Incident pattern awareness',
+      'Regional threat intelligence',
+      'Global map monitoring',
+    ],
+  },
   tech: {
     title: 'Tech Monitor - Real-Time AI & Tech Industry Dashboard',
     description: 'Real-time AI and tech industry dashboard tracking tech giants, AI labs, startup ecosystems, funding rounds, and tech events worldwide.',
@@ -204,7 +223,7 @@ function htmlVariantPlugin(): Plugin {
       }
 
       // Favicon variant paths — replace /favico/ paths with variant-specific subdirectory
-      if (activeVariant !== 'full') {
+      if (activeVariant === 'tech' || activeVariant === 'finance' || activeVariant === 'happy') {
         result = result
           .replace(/\/favico\/favicon/g, `/favico/${activeVariant}/favicon`)
           .replace(/\/favico\/apple-touch-icon/g, `/favico/${activeVariant}/apple-touch-icon`)

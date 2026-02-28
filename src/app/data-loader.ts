@@ -288,7 +288,8 @@ export class DataLoaderManager implements AppModule {
   }
 
   async loadAllData(): Promise<void> {
-    const isHeavyVariant = SITE_VARIANT === 'full' || SITE_VARIANT === 'tech' || SITE_VARIANT === 'finance';
+    const isGeopoliticalVariant = SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd';
+    const isHeavyVariant = isGeopoliticalVariant || SITE_VARIANT === 'tech' || SITE_VARIANT === 'finance';
 
     const runGuarded = async (name: string, fn: () => Promise<void>): Promise<void> => {
       if (this.ctx.isDestroyed || this.ctx.inFlight.has(name)) return;
@@ -317,7 +318,7 @@ export class DataLoaderManager implements AppModule {
       tasks.push({ name: 'bis', task: runGuarded('bis', () => this.loadBisData()) });
 
       // Trade policy data (FULL and FINANCE only)
-      if (SITE_VARIANT === 'full' || SITE_VARIANT === 'finance') {
+      if (isGeopoliticalVariant || SITE_VARIANT === 'finance') {
         tasks.push({ name: 'tradePolicy', task: runGuarded('tradePolicy', () => this.loadTradePolicy()) });
         tasks.push({ name: 'supplyChain', task: runGuarded('supplyChain', () => this.loadSupplyChain()) });
       }
@@ -373,11 +374,11 @@ export class DataLoaderManager implements AppModule {
       tasks.push({ name: 'bostonAll', task: runGuarded('bostonAll', () => this.refreshBostonAllData()) });
     }
 
-    if (SITE_VARIANT === 'full') {
+    if (isGeopoliticalVariant) {
       tasks.push({ name: 'intelligence', task: runGuarded('intelligence', () => this.loadIntelligenceSignals()) });
     }
 
-    if (SITE_VARIANT === 'full') tasks.push({ name: 'firms', task: runGuarded('firms', () => this.loadFirmsData()) });
+    if (isGeopoliticalVariant) tasks.push({ name: 'firms', task: runGuarded('firms', () => this.loadFirmsData()) });
     if (this.ctx.mapLayers.natural) tasks.push({ name: 'natural', task: runGuarded('natural', () => this.loadNatural()) });
     if (SITE_VARIANT !== 'happy' && this.ctx.mapLayers.weather) tasks.push({ name: 'weather', task: runGuarded('weather', () => this.loadWeatherAlerts()) });
     if (SITE_VARIANT !== 'happy' && this.ctx.mapLayers.ais) tasks.push({ name: 'ais', task: runGuarded('ais', () => this.loadAisSignals()) });
@@ -710,7 +711,7 @@ export class DataLoaderManager implements AppModule {
       }
     });
 
-    if (SITE_VARIANT === 'full') {
+    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'gtd') {
       const enabledIntelSources = INTEL_SOURCES.filter(f => !this.ctx.disabledSources.has(f.name));
       const intelPanel = this.ctx.newsPanels['intel'];
       if (enabledIntelSources.length === 0) {

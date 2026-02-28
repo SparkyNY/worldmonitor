@@ -8,6 +8,7 @@ export const SITE_VARIANT: string = (() => {
     if (
       stored === 'tech'
       || stored === 'full'
+      || stored === 'gtd'
       || stored === 'finance'
       || stored === 'happy'
       || stored === 'local'

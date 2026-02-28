@@ -150,6 +150,22 @@ const FULL_MOBILE_MAP_LAYERS: MapLayers = {
   tradeRoutes: false,
 };
 
+const GTD_PANELS: Record<string, PanelConfig> = {
+  ...(Object.fromEntries(
+    Object.entries(FULL_PANELS).filter(([key]) => key !== 'boston')
+  ) as Record<string, PanelConfig>),
+  map: { name: 'GTD Map', enabled: true, priority: 1 },
+  insights: { name: 'GTD Insights', enabled: true, priority: 1 },
+};
+
+const GTD_MAP_LAYERS: MapLayers = {
+  ...FULL_MAP_LAYERS,
+};
+
+const GTD_MOBILE_MAP_LAYERS: MapLayers = {
+  ...FULL_MOBILE_MAP_LAYERS,
+};
+
 // ============================================
 // TECH VARIANT (Tech/AI/Startups)
 // ============================================
@@ -630,6 +646,8 @@ const HAPPY_MOBILE_MAP_LAYERS: MapLayers = {
 // ============================================
 export const DEFAULT_PANELS = SITE_VARIANT === 'happy'
   ? HAPPY_PANELS
+  : SITE_VARIANT === 'gtd'
+    ? GTD_PANELS
   : SITE_VARIANT === 'tech'
     ? TECH_PANELS
     : SITE_VARIANT === 'finance'
@@ -642,6 +660,8 @@ export const DEFAULT_PANELS = SITE_VARIANT === 'happy'
 
 export const DEFAULT_MAP_LAYERS = SITE_VARIANT === 'happy'
   ? HAPPY_MAP_LAYERS
+  : SITE_VARIANT === 'gtd'
+    ? GTD_MAP_LAYERS
   : SITE_VARIANT === 'tech'
     ? TECH_MAP_LAYERS
     : SITE_VARIANT === 'finance'
@@ -654,6 +674,8 @@ export const DEFAULT_MAP_LAYERS = SITE_VARIANT === 'happy'
 
 export const MOBILE_DEFAULT_MAP_LAYERS = SITE_VARIANT === 'happy'
   ? HAPPY_MOBILE_MAP_LAYERS
+  : SITE_VARIANT === 'gtd'
+    ? GTD_MOBILE_MAP_LAYERS
   : SITE_VARIANT === 'tech'
     ? TECH_MOBILE_MAP_LAYERS
     : SITE_VARIANT === 'finance'
@@ -692,31 +714,31 @@ export const PANEL_CATEGORY_MAP: Record<string, { labelKey: string; panelKeys: s
     panelKeys: ['map', 'live-news', 'live-webcams', 'insights', 'strategic-posture'],
   },
 
-  // Full (geopolitical) variant
+  // Full (geopolitical) + GTD variant
   intelligence: {
     labelKey: 'header.panelCatIntelligence',
     panelKeys: ['cii', 'strategic-risk', 'intel', 'gdelt-intel', 'cascade'],
-    variants: ['full'],
+    variants: ['full', 'gtd'],
   },
   regionalNews: {
     labelKey: 'header.panelCatRegionalNews',
     panelKeys: ['politics', 'us', 'europe', 'middleeast', 'africa', 'latam', 'asia'],
-    variants: ['full'],
+    variants: ['full', 'gtd'],
   },
   marketsFinance: {
     labelKey: 'header.panelCatMarketsFinance',
     panelKeys: ['commodities', 'markets', 'economic', 'trade-policy', 'supply-chain', 'finance', 'polymarket', 'macro-signals', 'etf-flows', 'stablecoins', 'crypto', 'heatmap'],
-    variants: ['full'],
+    variants: ['full', 'gtd'],
   },
   topical: {
     labelKey: 'header.panelCatTopical',
     panelKeys: ['energy', 'gov', 'thinktanks', 'tech', 'ai', 'layoffs'],
-    variants: ['full'],
+    variants: ['full', 'gtd'],
   },
   dataTracking: {
     labelKey: 'header.panelCatDataTracking',
     panelKeys: ['monitors', 'satellite-fires', 'ucdp-events', 'displacement', 'climate', 'population-exposure', 'security-advisories', 'boston'],
-    variants: ['full'],
+    variants: ['full', 'gtd'],
   },
 
   // Tech variant

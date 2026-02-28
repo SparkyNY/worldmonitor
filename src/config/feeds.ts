@@ -1086,6 +1086,8 @@ export const FEEDS = SITE_VARIANT === 'tech'
     ? FINANCE_FEEDS
     : SITE_VARIANT === 'happy'
       ? HAPPY_FEEDS
+      : SITE_VARIANT === 'gtd'
+        ? FULL_FEEDS
       : SITE_VARIANT === 'local'
         ? LOCAL_FEEDS
         : SITE_VARIANT === 'osint'
