@@ -237,9 +237,12 @@
 .boston-tab.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .boston-view { display: none; }
 .boston-view.active { display: block; }
-.boston-controls { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.boston-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; margin-bottom: 8px; }
 .boston-controls label { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted); font-size: 10px; }
 .boston-controls input, .boston-controls select { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); padding: 4px 6px; font-size: 11px; }
+.boston-range-pills { display: flex; gap: 6px; margin-bottom: 8px; }
+.boston-pill { border: 1px solid var(--border-strong); background: transparent; color: var(--text-muted); border-radius: 999px; padding: 3px 10px; font-size: 10px; cursor: pointer; }
+.boston-pill.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .boston-list-wrap { max-height: 280px; overflow: auto; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--surface); }
 .boston-fire-chart { display: grid; gap: 4px; margin-bottom: 8px; }
 .boston-fire-bar-row { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr 36px; align-items: center; gap: 8px; font-size: 10px; color: var(--text-muted); }
@@ -261,6 +264,33 @@
 .giving-receiver-list li:last-child { border-bottom: none; }
 .giving-inst-content { }
 .giving-inst-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+
+/* ----------------------------------------------------------
+   OSINT Workbench Panel
+   ---------------------------------------------------------- */
+.osint-panel-content { font-size: 12px; display: grid; gap: 8px; }
+.osint-toolbar { display: grid; grid-template-columns: 120px 1fr auto; gap: 6px; align-items: end; }
+.osint-toolbar label { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+.osint-type-select, .osint-query-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); padding: 6px 8px; font-size: 11px; }
+.osint-run-btn, .osint-open-all-btn { border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 11px; }
+.osint-open-all-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.osint-error { color: var(--semantic-high); font-size: 11px; }
+.osint-results-header { display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.osint-results { display: grid; gap: 6px; }
+.osint-result-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid var(--border-subtle); background: var(--surface); border-radius: 4px; padding: 6px 8px; }
+.osint-result-item a { color: var(--text-secondary); text-decoration: none; font-weight: 600; }
+.osint-result-item a:hover { color: var(--accent); text-decoration: underline; }
+.osint-result-item span { color: var(--text-muted); font-size: 10px; }
+.osint-empty { border: 1px dashed var(--border); border-radius: 4px; padding: 10px; color: var(--text-muted); text-align: center; }
+.osint-framework-links { display: grid; gap: 6px; margin-top: 4px; }
+.osint-quick-link { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--overlay-subtle); padding: 6px 8px; text-decoration: none; }
+.osint-quick-link strong { color: var(--text-secondary); font-size: 11px; }
+.osint-quick-link span { color: var(--text-muted); font-size: 10px; }
+.osint-quick-link:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+@media (max-width: 720px) {
+  .osint-toolbar { grid-template-columns: 1fr; }
+}
 
 /* ----------------------------------------------------------
    Security Advisories Panel

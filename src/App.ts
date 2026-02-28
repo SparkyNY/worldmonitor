@@ -481,11 +481,13 @@ export class App {
   }
 
   private setupRefreshIntervals(): void {
+    const isHighThroughputVariant = SITE_VARIANT === 'full' || SITE_VARIANT === 'tech' || SITE_VARIANT === 'finance';
+
     // Always refresh news for all variants
     this.refreshScheduler.scheduleRefresh('news', () => this.dataLoader.loadNews(), REFRESH_INTERVALS.feeds);
 
-    // Happy variant only refreshes news -- skip all geopolitical/financial/military refreshes
-    if (SITE_VARIANT !== 'happy') {
+    // Limit heavy background refreshes to full/tech/finance variants.
+    if (isHighThroughputVariant) {
       this.refreshScheduler.registerAll([
         { name: 'markets', fn: () => this.dataLoader.loadMarkets(), intervalMs: REFRESH_INTERVALS.markets },
         { name: 'predictions', fn: () => this.dataLoader.loadPredictions(), intervalMs: REFRESH_INTERVALS.predictions },

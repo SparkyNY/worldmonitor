@@ -5,7 +5,14 @@ export const SITE_VARIANT: string = (() => {
   if (env !== 'full') return env;
   if (typeof window !== 'undefined') {
     const stored = localStorage.getItem('worldmonitor-variant');
-    if (stored === 'tech' || stored === 'full' || stored === 'finance' || stored === 'happy') return stored;
+    if (
+      stored === 'tech'
+      || stored === 'full'
+      || stored === 'finance'
+      || stored === 'happy'
+      || stored === 'local'
+      || stored === 'osint'
+    ) return stored;
   }
   return env;
 })();

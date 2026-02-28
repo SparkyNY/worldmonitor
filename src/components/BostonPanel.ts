@@ -70,10 +70,13 @@ export class BostonPanel extends Panel {
   private crimeDateTo: string;
   private crimeDistrict = 'all';
   private crimeKeyword = '';
+  private crimeWindowHours = 7 * 24;
 
   private fireDateFrom: string;
   private fireDateTo: string;
   private fireType = 'all';
+  private fireKeyword = '';
+  private fireWindowHours = 7 * 24;
 
   constructor(callbacks: BostonPanelCallbacks) {
     super({
@@ -88,7 +91,7 @@ export class BostonPanel extends Panel {
 
     const now = new Date();
     const to = now.toISOString().slice(0, 10);
-    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     this.crimeDateFrom = from;
     this.crimeDateTo = to;
     this.fireDateFrom = from;
@@ -142,6 +145,18 @@ export class BostonPanel extends Panel {
         return;
       }
 
+      const rangeBtn = target.closest<HTMLElement>('[data-boston-range-hours]');
+      if (rangeBtn?.dataset.bostonRangeHours) {
+        const hours = Number(rangeBtn.dataset.bostonRangeHours);
+        const scope = (rangeBtn.dataset.bostonRangeScope as 'crime' | 'fire') ?? 'crime';
+        if (Number.isFinite(hours) && hours > 0) {
+          this.applyRangeWindow(scope, hours);
+          this.emitFilteredIncidents();
+          this.renderPanel();
+        }
+        return;
+      }
+
       const refreshAll = target.closest<HTMLElement>('[data-boston-refresh="all"]');
       if (refreshAll) {
         void this.callbacks.onRefreshAll();
@@ -188,11 +203,23 @@ export class BostonPanel extends Panel {
 
       if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
 
-      if (target.dataset.bostonCrimeDateFrom != null) this.crimeDateFrom = target.value;
-      if (target.dataset.bostonCrimeDateTo != null) this.crimeDateTo = target.value;
+      if (target.dataset.bostonCrimeDateFrom != null) {
+        this.crimeDateFrom = target.value;
+        this.crimeWindowHours = 0;
+      }
+      if (target.dataset.bostonCrimeDateTo != null) {
+        this.crimeDateTo = target.value;
+        this.crimeWindowHours = 0;
+      }
       if (target.dataset.bostonCrimeDistrict != null) this.crimeDistrict = target.value;
-      if (target.dataset.bostonFireDateFrom != null) this.fireDateFrom = target.value;
-      if (target.dataset.bostonFireDateTo != null) this.fireDateTo = target.value;
+      if (target.dataset.bostonFireDateFrom != null) {
+        this.fireDateFrom = target.value;
+        this.fireWindowHours = 0;
+      }
+      if (target.dataset.bostonFireDateTo != null) {
+        this.fireDateTo = target.value;
+        this.fireWindowHours = 0;
+      }
       if (target.dataset.bostonFireType != null) this.fireType = target.value;
 
       this.emitFilteredIncidents();
@@ -206,6 +233,10 @@ export class BostonPanel extends Panel {
         this.crimeKeyword = target.value;
         this.emitFilteredIncidents();
         this.renderPanel();
+      } else if (target.dataset.bostonFireKeyword != null) {
+        this.fireKeyword = target.value;
+        this.emitFilteredIncidents();
+        this.renderPanel();
       }
     });
   }
@@ -217,19 +248,32 @@ export class BostonPanel extends Panel {
 
   private getFilteredCrimeIncidents(): BostonIncident[] {
     return this.data.crimeIncidents
-      .filter((incident) => inDateRange(incident.date, this.crimeDateFrom, this.crimeDateTo))
+      .filter((incident) => inDateRange(incident.dateTimeReported ?? incident.date, this.crimeDateFrom, this.crimeDateTo))
       .filter((incident) => this.crimeDistrict === 'all' || incident.district === this.crimeDistrict)
       .filter((incident) => {
         if (!this.crimeKeyword.trim()) return true;
         const q = this.crimeKeyword.toLowerCase();
-        return incident.description.toLowerCase().includes(q) || incident.incidentType.toLowerCase().includes(q);
+        return incident.incidentNumber.toLowerCase().includes(q)
+          || incident.description.toLowerCase().includes(q)
+          || incident.incidentType.toLowerCase().includes(q)
+          || incident.typeCode.toLowerCase().includes(q)
+          || incident.address.toLowerCase().includes(q);
       });
   }
 
   private getFilteredFireIncidents(): BostonIncident[] {
     return this.data.fireIncidents
-      .filter((incident) => inDateRange(incident.date, this.fireDateFrom, this.fireDateTo))
-      .filter((incident) => this.fireType === 'all' || incident.incidentType === this.fireType);
+      .filter((incident) => inDateRange(incident.dateTimeReported ?? incident.date, this.fireDateFrom, this.fireDateTo))
+      .filter((incident) => this.fireType === 'all' || incident.incidentType === this.fireType)
+      .filter((incident) => {
+        if (!this.fireKeyword.trim()) return true;
+        const q = this.fireKeyword.toLowerCase();
+        return incident.incidentNumber.toLowerCase().includes(q)
+          || incident.description.toLowerCase().includes(q)
+          || incident.incidentType.toLowerCase().includes(q)
+          || incident.typeCode.toLowerCase().includes(q)
+          || incident.address.toLowerCase().includes(q);
+      });
   }
 
   private getCrimeDistrictOptions(): string[] {
@@ -287,12 +331,18 @@ export class BostonPanel extends Panel {
                   ${districtOptions.map((district) => `<option value="${escapeHtml(district)}" ${district === this.crimeDistrict ? 'selected' : ''}>${escapeHtml(district)}</option>`).join('')}
                 </select>
               </label>
-              <label>Keyword <input type="search" value="${escapeHtml(this.crimeKeyword)}" placeholder="offense description" data-boston-crime-keyword></label>
+              <label>Search <input type="search" value="${escapeHtml(this.crimeKeyword)}" placeholder="Incident # / keyword" data-boston-crime-keyword></label>
               <button class="boston-btn" data-boston-refresh-dataset="crimeIncidents" ${this.refreshState.crimeIncidents ? 'disabled' : ''}>Refresh</button>
+            </div>
+            <div class="boston-range-pills">
+              ${renderRangePill('crime', 24, this.crimeWindowHours)}
+              ${renderRangePill('crime', 48, this.crimeWindowHours)}
+              ${renderRangePill('crime', 7 * 24, this.crimeWindowHours, '7d')}
+              ${renderRangePill('crime', 30 * 24, this.crimeWindowHours, '30d')}
             </div>
             <div class="boston-list-wrap">
               <table class="boston-table">
-                <thead><tr><th>Date</th><th>District</th><th>Description</th><th>Address</th></tr></thead>
+                <thead><tr><th>Incident #</th><th>Type Code</th><th>Address</th><th>District</th><th>Date/Time Reported</th></tr></thead>
                 <tbody>${crimeRows}</tbody>
               </table>
             </div>
@@ -308,18 +358,25 @@ export class BostonPanel extends Panel {
                   ${fireTypeOptions.map((type) => `<option value="${escapeHtml(type)}" ${type === this.fireType ? 'selected' : ''}>${escapeHtml(type)}</option>`).join('')}
                 </select>
               </label>
+              <label>Search <input type="search" value="${escapeHtml(this.fireKeyword)}" placeholder="Incident # / keyword" data-boston-fire-keyword></label>
               <button class="boston-btn" data-boston-refresh-dataset="fireIncidents" ${this.refreshState.fireIncidents ? 'disabled' : ''}>Refresh</button>
+            </div>
+            <div class="boston-range-pills">
+              ${renderRangePill('fire', 24, this.fireWindowHours)}
+              ${renderRangePill('fire', 48, this.fireWindowHours)}
+              ${renderRangePill('fire', 7 * 24, this.fireWindowHours, '7d')}
+              ${renderRangePill('fire', 30 * 24, this.fireWindowHours, '30d')}
             </div>
             <div class="boston-fire-chart">${renderTypeSummary(fireTypeSummary)}</div>
             <div class="boston-list-wrap">
               <table class="boston-table">
-                <thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Address</th></tr></thead>
+                <thead><tr><th>Incident #</th><th>Type Code</th><th>Address</th><th>District</th><th>Date/Time Reported</th></tr></thead>
                 <tbody>${fireRows}</tbody>
               </table>
             </div>
           </div>
 
-          <div class="boston-incident-summary">${activeIncidents.length} incidents shown on map as clusters.</div>
+          <div class="boston-incident-summary">${activeIncidents.length} incidents shown on map as clusters (table capped at first 200 rows).</div>
         </section>
 
         ${this.showProvenance ? renderProvenance(this.data.provenance) : ''}
@@ -329,6 +386,24 @@ export class BostonPanel extends Panel {
 
   private anyRefreshing(): boolean {
     return (Object.values(this.refreshState) as boolean[]).some(Boolean);
+  }
+
+  private applyRangeWindow(scope: 'crime' | 'fire', hours: number): void {
+    const now = new Date();
+    const from = new Date(now.getTime() - hours * 60 * 60 * 1000);
+    const fromDate = from.toISOString().slice(0, 10);
+    const toDate = now.toISOString().slice(0, 10);
+
+    if (scope === 'crime') {
+      this.crimeWindowHours = hours;
+      this.crimeDateFrom = fromDate;
+      this.crimeDateTo = toDate;
+      return;
+    }
+
+    this.fireWindowHours = hours;
+    this.fireDateFrom = fromDate;
+    this.fireDateTo = toDate;
   }
 }
 
@@ -347,20 +422,27 @@ function renderLayerToggle(label: string, layer: BostonLayerId, enabled: boolean
 
 function renderIncidentRows(incidents: BostonIncident[], selectedIncidentId: string | null): string {
   if (!incidents.length) {
-    return '<tr><td colspan="4" class="boston-empty">No incidents in current filter.</td></tr>';
+    return '<tr><td colspan="5" class="boston-empty">No incidents in current filter.</td></tr>';
   }
 
   return incidents.slice(0, 200).map((incident) => {
     const selected = selectedIncidentId === incident.id ? ' selected' : '';
     return `
       <tr class="boston-incident-row${selected}" data-boston-incident-id="${escapeHtml(incident.id)}">
-        <td>${escapeHtml(formatDate(incident.date))}</td>
-        <td>${escapeHtml(incident.district || incident.incidentType || 'Unknown')}</td>
-        <td>${escapeHtml(incident.description)}</td>
+        <td>${escapeHtml(incident.incidentNumber || 'N/A')}</td>
+        <td>${escapeHtml(incident.typeCode || 'N/A')}</td>
         <td>${escapeHtml(incident.address)}</td>
+        <td>${escapeHtml(incident.district || 'Unknown')}</td>
+        <td>${escapeHtml(formatDate(incident.dateTimeReported ?? incident.date))}</td>
       </tr>
     `;
   }).join('');
+}
+
+function renderRangePill(scope: 'crime' | 'fire', hours: number, currentHours: number, label?: string): string {
+  const text = label ?? `${hours}h`;
+  const active = currentHours === hours ? ' active' : '';
+  return `<button class="boston-pill${active}" data-boston-range-scope="${scope}" data-boston-range-hours="${hours}">${text}</button>`;
 }
 
 function renderProvenance(provenance: Partial<Record<BostonDatasetId, BostonProvenance>>): string {

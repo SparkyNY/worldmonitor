@@ -251,6 +251,8 @@ export class DataLoaderManager implements AppModule {
   }
 
   async loadAllData(): Promise<void> {
+    const isHeavyVariant = SITE_VARIANT === 'full' || SITE_VARIANT === 'tech' || SITE_VARIANT === 'finance';
+
     const runGuarded = async (name: string, fn: () => Promise<void>): Promise<void> => {
       if (this.ctx.isDestroyed || this.ctx.inFlight.has(name)) return;
       this.ctx.inFlight.add(name);
@@ -267,8 +269,8 @@ export class DataLoaderManager implements AppModule {
       { name: 'news', task: runGuarded('news', () => this.loadNews()) },
     ];
 
-    // Happy variant only loads news data -- skip all geopolitical/financial/military data
-    if (SITE_VARIANT !== 'happy') {
+    // Restrict expensive market/intelligence background fetches to full/tech/finance variants.
+    if (isHeavyVariant) {
       tasks.push({ name: 'markets', task: runGuarded('markets', () => this.loadMarkets()) });
       tasks.push({ name: 'predictions', task: runGuarded('predictions', () => this.loadPredictions()) });
       tasks.push({ name: 'pizzint', task: runGuarded('pizzint', () => this.loadPizzInt()) });
@@ -330,7 +332,7 @@ export class DataLoaderManager implements AppModule {
     });
 
     // Boston data stays manual on first boot; include it on subsequent global refreshes.
-    if (SITE_VARIANT === 'full' && this.ctx.initialLoadComplete && this.ctx.panels['boston']) {
+    if ((SITE_VARIANT === 'full' || SITE_VARIANT === 'local') && this.ctx.initialLoadComplete && this.ctx.panels['boston']) {
       tasks.push({ name: 'bostonAll', task: runGuarded('bostonAll', () => this.refreshBostonAllData()) });
     }
 

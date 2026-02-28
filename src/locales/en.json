@@ -78,6 +78,8 @@
   "header": {
     "world": "WORLD",
     "tech": "TECH",
+    "local": "LOCAL",
+    "osint": "OSINT",
     "live": "LIVE",
     "search": "Search",
     "settings": "SETTINGS",
@@ -121,6 +123,8 @@
     "sourceRegionDeals": "Deals & Corporate",
     "sourceRegionFinRegulation": "Financial Regulation",
     "sourceRegionGulfMena": "Gulf & MENA",
+    "sourceRegionLocal": "Local",
+    "sourceRegionOsint": "OSINT",
     "filterPanels": "Filter panels...",
     "panelCatCore": "Core",
     "panelCatIntelligence": "Intelligence",
@@ -138,13 +142,17 @@
     "panelCatCentralBanks": "Central Banks & Econ",
     "panelCatDeals": "Deals & Institutional",
     "panelCatGulfMena": "Gulf & MENA",
-    "panelCatTradePolicy": "Trade Policy"
+    "panelCatTradePolicy": "Trade Policy",
+    "panelCatLocal": "Local",
+    "panelCatOsint": "OSINT"
   },
   "panels": {
     "liveNews": "Live News",
     "markets": "Markets",
     "map": "Global Situation",
     "techMap": "Global Tech",
+    "localMap": "Boston & Regional Map",
+    "osintMap": "OSINT Situation Map",
     "techHubs": "Hot Tech Hubs",
     "status": "System Status",
     "insights": "AI Insights",
@@ -206,7 +214,8 @@
     "techReadiness": "Tech Readiness Index",
     "gccInvestments": "GCC Investments",
     "geoHubs": "Geopolitical Hubs",
-    "liveWebcams": "Live Webcams"
+    "liveWebcams": "Live Webcams",
+    "osintWorkbench": "OSINT Workbench"
   },
   "modals": {
     "search": {

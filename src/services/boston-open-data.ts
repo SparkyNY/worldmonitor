@@ -22,8 +22,11 @@ export interface BostonProvenance {
 export interface BostonIncident {
   id: string;
   dataset: 'crime' | 'fire';
+  incidentNumber: string;
+  typeCode: string;
   sourceCategory: string;
   date: string | null;
+  dateTimeReported: string | null;
   description: string;
   district: string;
   incidentType: string;
@@ -50,6 +53,8 @@ interface ArcGisDatasetConfig {
   mode: 'incident' | 'layer' | 'stub';
   queryParams?: Record<string, string | number | boolean>;
   pageSize?: number;
+  maxPages?: number;
+  maxRecords?: number;
   datasetTag?: 'crime' | 'fire';
   warning?: string;
 }
@@ -63,12 +68,15 @@ const DATASETS: Record<BostonDatasetId, ArcGisDatasetConfig> = {
     sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/Boston_Incidents_Public_v2_view/FeatureServer/0/query',
     mode: 'incident',
     datasetTag: 'crime',
-    pageSize: 1000,
+    pageSize: 500,
+    maxPages: 8,
+    maxRecords: 4000,
     queryParams: {
       where: '1=1',
       outFields: '*',
       returnGeometry: true,
       outSR: 4326,
+      orderByFields: 'occurred_on_date DESC, objectid DESC',
     },
   },
   fireIncidents: {
@@ -76,12 +84,15 @@ const DATASETS: Record<BostonDatasetId, ArcGisDatasetConfig> = {
     sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/Boston_Incidents_View/FeatureServer/0/query',
     mode: 'incident',
     datasetTag: 'fire',
-    pageSize: 1000,
+    pageSize: 500,
+    maxPages: 8,
+    maxRecords: 4000,
     queryParams: {
       where: '1=1',
       outFields: '*',
       returnGeometry: true,
       outSR: 4326,
+      orderByFields: 'incident_date DESC, objectid DESC',
     },
   },
   policeDistricts: {
@@ -236,17 +247,49 @@ function normalizeIncidentFeature(feature: GeoJSON.Feature, datasetTag: 'crime' 
     'incident_type_description',
   ]);
 
+  const incidentNumber = pickString(properties, [
+    'incident_number',
+    'INCIDENT_NUMBER',
+    'incidentnum',
+    'INCIDENTNUM',
+    'case_number',
+    'CASE_NUMBER',
+    'objectid',
+    'OBJECTID',
+  ]);
+
+  const typeCode = pickString(properties, [
+    'offense_code',
+    'OFFENSE_CODE',
+    'incident_type',
+    'INCIDENT_TYPE',
+    'nature_code',
+    'NATURE_CODE',
+  ]);
+
+  const dateTimeReported = pickDateString(properties, [
+    'occurred_on_date',
+    'incident_date',
+    'dispatch_date',
+    'report_date',
+    'open_dt',
+    'date',
+  ]);
+
   const district = pickString(properties, ['district', 'police_district', 'reporting_area', 'precinct']) || 'Unknown';
   const address = pickString(properties, ['street', 'streetname', 'location', 'address']) || 'Unknown location';
 
   const objectId = pickString(properties, ['objectid', 'OBJECTID', 'incident_number', 'INCIDENT_NUMBER']);
-  const id = objectId || `${datasetTag}-${address}-${date ?? 'no-date'}-${Math.random().toString(36).slice(2, 8)}`;
+  const id = incidentNumber || objectId || `${datasetTag}-${address}-${date ?? 'no-date'}-${typeCode || 'na'}`;
 
   return {
     id,
     dataset: datasetTag,
+    incidentNumber: incidentNumber || objectId || 'N/A',
+    typeCode: typeCode || 'N/A',
     sourceCategory: incidentType || 'Uncategorized',
     date,
+    dateTimeReported,
     description: description || incidentType || 'No description',
     district,
     incidentType: incidentType || 'Unknown',
@@ -324,6 +367,8 @@ async function fetchArcGisPage(
 
 async function fetchArcGisFeatureCollection(config: ArcGisDatasetConfig): Promise<{ layer: BostonLayerData; warnings: string[]; queryParams: Record<string, string | number | boolean> }> {
   const pageSize = config.pageSize ?? DEFAULT_PAGE_SIZE;
+  const maxPages = config.maxPages ?? 100;
+  const maxRecords = config.maxRecords ?? Number.POSITIVE_INFINITY;
   const queryParams = {
     where: '1=1',
     outFields: '*',
@@ -342,17 +387,20 @@ async function fetchArcGisFeatureCollection(config: ArcGisDatasetConfig): Promis
   const allFeatures: GeoJSON.Feature[] = [];
   let hasMore = true;
   let pageGuard = 0;
-  const maxPages = 100;
   let sawExceededTransferLimit = false;
 
   while (hasMore && pageGuard < maxPages) {
     pageGuard += 1;
     const page = await fetchArcGisPage(config.sourceUrl, queryParams, offset, pageSize);
     const featureCount = page.features.length;
-    allFeatures.push(...page.features);
+    const remaining = Math.max(0, maxRecords - allFeatures.length);
+    allFeatures.push(...page.features.slice(0, remaining));
     if (page.exceededTransferLimit) sawExceededTransferLimit = true;
 
-    if (featureCount < pageSize && !page.exceededTransferLimit) {
+    if (allFeatures.length >= maxRecords) {
+      warnings.push(`Record fetch bounded at ${maxRecords} records for responsive local usage.`);
+      hasMore = false;
+    } else if (featureCount < pageSize && !page.exceededTransferLimit) {
       hasMore = false;
     } else if (count != null && allFeatures.length >= count) {
       hasMore = false;
