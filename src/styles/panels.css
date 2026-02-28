@@ -226,12 +226,23 @@
 .boston-toolbar { display: flex; gap: 8px; align-items: center; }
 .boston-section { border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px; background: var(--overlay-subtle); }
 .boston-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px; font-weight: 700; }
+.boston-section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.boston-section-title-row .boston-section-title { margin-bottom: 0; }
 .boston-btn { background: color-mix(in srgb, var(--accent) 15%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); color: var(--accent); border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
 .boston-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .boston-btn-secondary { color: var(--text-secondary); border-color: var(--border-strong); background: transparent; }
 .boston-layer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .boston-layer-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px; background: var(--surface-hover); border-radius: 4px; }
 .boston-layer-item label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+.boston-transit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.boston-transit-card { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px; background: var(--surface); }
+.boston-transit-card strong { color: var(--text); font-size: 11px; }
+.boston-transit-card span { color: var(--text-muted); font-size: 10px; }
+.boston-transit-alerts { display: grid; gap: 6px; max-height: 170px; overflow: auto; }
+.boston-transit-alert { display: grid; gap: 3px; border: 1px solid var(--border-subtle); border-radius: 4px; padding: 6px; background: var(--surface); }
+.boston-transit-alert span { color: var(--text-secondary); font-size: 10px; line-height: 1.4; }
+.boston-transit-alert a { color: var(--accent); font-size: 10px; text-decoration: none; }
+.boston-transit-warning { margin-top: 6px; color: var(--semantic-high); font-size: 10px; }
 .boston-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
 .boston-tab { flex: 1; border: 1px solid var(--border); background: transparent; color: var(--text-muted); border-radius: 4px; padding: 5px 8px; cursor: pointer; font-size: 11px; }
 .boston-tab.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }

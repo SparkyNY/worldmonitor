@@ -40,3 +40,4 @@ export * from './cached-theater-posture';
 export * from './trade';
 export * from './supply-chain';
 export * from './boston-open-data';
+export * from './local-transit';

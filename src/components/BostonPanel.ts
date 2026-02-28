@@ -5,11 +5,21 @@ import type {
   BostonLayerId,
   BostonProvenance,
 } from '@/services/boston-open-data';
+import type {
+  LocalTransitAlert,
+  LocalTransitPayload,
+  LocalTransitProvenance,
+  LocalTransitSummary,
+} from '@/services/local-transit';
 import { escapeHtml } from '@/utils/sanitize';
+
+type PanelRefreshDatasetId = BostonDatasetId | 'transitStatus';
+type PanelProvenance = BostonProvenance | LocalTransitProvenance;
 
 interface BostonPanelCallbacks {
   onRefreshAll: () => Promise<void>;
   onRefreshDataset: (datasetId: BostonDatasetId) => Promise<void>;
+  onRefreshTransit: () => Promise<void>;
   onLayerToggle: (layerId: BostonLayerId, enabled: boolean) => void;
   onCrimeFilterChange: (incidents: BostonIncident[]) => void;
   onFireFilterChange: (incidents: BostonIncident[]) => void;
@@ -21,6 +31,7 @@ interface LayerToggleState {
   fireHydrants: boolean;
   fireDepartments: boolean;
   communityCenters: boolean;
+  transitVehicles: boolean;
 }
 
 interface DatasetRefreshState {
@@ -30,12 +41,14 @@ interface DatasetRefreshState {
   fireHydrants: boolean;
   fireDepartments: boolean;
   communityCenters: boolean;
+  transitStatus: boolean;
 }
 
 interface BostonPanelData {
   crimeIncidents: BostonIncident[];
   fireIncidents: BostonIncident[];
-  provenance: Partial<Record<BostonDatasetId, BostonProvenance>>;
+  transit: LocalTransitPayload | null;
+  provenance: Partial<Record<PanelRefreshDatasetId, PanelProvenance>>;
 }
 
 export class BostonPanel extends Panel {
@@ -43,6 +56,7 @@ export class BostonPanel extends Panel {
   private data: BostonPanelData = {
     crimeIncidents: [],
     fireIncidents: [],
+    transit: null,
     provenance: {},
   };
 
@@ -51,6 +65,7 @@ export class BostonPanel extends Panel {
     fireHydrants: false,
     fireDepartments: true,
     communityCenters: false,
+    transitVehicles: true,
   };
 
   private refreshState: DatasetRefreshState = {
@@ -60,6 +75,7 @@ export class BostonPanel extends Panel {
     fireHydrants: false,
     fireDepartments: false,
     communityCenters: false,
+    transitStatus: false,
   };
 
   private activeTab: 'crime' | 'fire' = 'crime';
@@ -114,6 +130,7 @@ export class BostonPanel extends Panel {
     this.data = {
       crimeIncidents: data.crimeIncidents ?? this.data.crimeIncidents,
       fireIncidents: data.fireIncidents ?? this.data.fireIncidents,
+      transit: data.transit ?? this.data.transit,
       provenance: data.provenance ?? this.data.provenance,
     };
 
@@ -122,13 +139,13 @@ export class BostonPanel extends Panel {
     this.renderPanel();
   }
 
-  public setDatasetRefreshing(datasetId: BostonDatasetId, refreshing: boolean): void {
+  public setDatasetRefreshing(datasetId: PanelRefreshDatasetId, refreshing: boolean): void {
     this.refreshState[datasetId] = refreshing;
     this.renderPanel();
   }
 
   public setAllRefreshing(refreshing: boolean): void {
-    (Object.keys(this.refreshState) as BostonDatasetId[]).forEach((id) => {
+    (Object.keys(this.refreshState) as PanelRefreshDatasetId[]).forEach((id) => {
       this.refreshState[id] = refreshing;
     });
     this.renderPanel();
@@ -165,8 +182,15 @@ export class BostonPanel extends Panel {
 
       const refreshDataset = target.closest<HTMLElement>('[data-boston-refresh-dataset]');
       if (refreshDataset?.dataset.bostonRefreshDataset) {
-        const datasetId = refreshDataset.dataset.bostonRefreshDataset as BostonDatasetId;
-        void this.callbacks.onRefreshDataset(datasetId);
+        const datasetId = refreshDataset.dataset.bostonRefreshDataset as PanelRefreshDatasetId;
+        if (datasetId === 'transitStatus') void this.callbacks.onRefreshTransit();
+        else void this.callbacks.onRefreshDataset(datasetId);
+        return;
+      }
+
+      const refreshTransit = target.closest<HTMLElement>('[data-boston-refresh-transit]');
+      if (refreshTransit) {
+        void this.callbacks.onRefreshTransit();
         return;
       }
 
@@ -295,6 +319,9 @@ export class BostonPanel extends Panel {
     const fireRows = renderIncidentRows(fireIncidents, this.selectedIncidentId);
 
     const activeIncidents = this.activeTab === 'crime' ? crimeIncidents : fireIncidents;
+    const transitSummary = this.data.transit?.summaries ?? [];
+    const transitAlerts = this.data.transit?.alerts ?? [];
+    const transitWarnings = this.data.transit?.provenance.warnings ?? [];
 
     this.setContent(`
       <div class="boston-panel-content">
@@ -312,7 +339,18 @@ export class BostonPanel extends Panel {
             ${renderLayerToggle('Fire Hydrants', 'fireHydrants', this.layerState.fireHydrants, this.refreshState.fireHydrants)}
             ${renderLayerToggle('Fire Departments', 'fireDepartments', this.layerState.fireDepartments, this.refreshState.fireDepartments)}
             ${renderLayerToggle('Community Centers', 'communityCenters', this.layerState.communityCenters, this.refreshState.communityCenters)}
+            ${renderLayerToggle('Transit Vehicles', 'transitVehicles', this.layerState.transitVehicles, this.refreshState.transitStatus, 'transitStatus')}
           </div>
+        </section>
+
+        <section class="boston-section">
+          <div class="boston-section-title-row">
+            <div class="boston-section-title">Transit Status</div>
+            <button class="boston-btn" data-boston-refresh-transit ${this.refreshState.transitStatus ? 'disabled' : ''}>Refresh Transit</button>
+          </div>
+          <div class="boston-transit-grid">${renderTransitSummary(transitSummary)}</div>
+          <div class="boston-transit-alerts">${renderTransitAlerts(transitAlerts)}</div>
+          ${transitWarnings.length > 0 ? `<div class="boston-transit-warning">${escapeHtml(transitWarnings.join(' | '))}</div>` : ''}
         </section>
 
         <section class="boston-section">
@@ -407,8 +445,14 @@ export class BostonPanel extends Panel {
   }
 }
 
-function renderLayerToggle(label: string, layer: BostonLayerId, enabled: boolean, refreshing: boolean): string {
-  const datasetId = layer as unknown as BostonDatasetId;
+function renderLayerToggle(
+  label: string,
+  layer: BostonLayerId,
+  enabled: boolean,
+  refreshing: boolean,
+  refreshDatasetId?: PanelRefreshDatasetId,
+): string {
+  const datasetId = refreshDatasetId ?? (layer as unknown as BostonDatasetId);
   return `
     <div class="boston-layer-item" data-boston-layer="${layer}">
       <label>
@@ -445,14 +489,44 @@ function renderRangePill(scope: 'crime' | 'fire', hours: number, currentHours: n
   return `<button class="boston-pill${active}" data-boston-range-scope="${scope}" data-boston-range-hours="${hours}">${text}</button>`;
 }
 
-function renderProvenance(provenance: Partial<Record<BostonDatasetId, BostonProvenance>>): string {
-  const datasets: BostonDatasetId[] = [
+function renderTransitSummary(items: LocalTransitSummary[]): string {
+  if (items.length === 0) {
+    return '<div class="boston-empty">No transit data fetched yet.</div>';
+  }
+
+  return items.map((item) => `
+    <div class="boston-transit-card">
+      <strong>${escapeHtml(item.label)}</strong>
+      <span>${item.vehicleCount} vehicles</span>
+      <span>${item.alertCount} alerts</span>
+      <span>${escapeHtml(item.status)}</span>
+    </div>
+  `).join('');
+}
+
+function renderTransitAlerts(alerts: LocalTransitAlert[]): string {
+  if (alerts.length === 0) {
+    return '<div class="boston-empty">No Boston-area transit alerts found.</div>';
+  }
+
+  return alerts.slice(0, 12).map((alert) => `
+    <div class="boston-transit-alert">
+      <span><strong>${escapeHtml(alert.source.toUpperCase())}</strong> ${escapeHtml(alert.title)}</span>
+      <span>${escapeHtml(formatDateTime(alert.updatedAt))}</span>
+      ${alert.url ? `<a href="${escapeHtml(alert.url)}" target="_blank" rel="noopener">Open</a>` : ''}
+    </div>
+  `).join('');
+}
+
+function renderProvenance(provenance: Partial<Record<PanelRefreshDatasetId, PanelProvenance>>): string {
+  const datasets: PanelRefreshDatasetId[] = [
     'crimeIncidents',
     'fireIncidents',
     'policeDistricts',
     'fireHydrants',
     'fireDepartments',
     'communityCenters',
+    'transitStatus',
   ];
 
   return `

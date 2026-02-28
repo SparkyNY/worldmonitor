@@ -116,6 +116,8 @@ import { fetchKindnessData } from '@/services/kindness-data';
 import { getPersistentCache, setPersistentCache } from '@/services/persistent-cache';
 import type { BostonDatasetId, BostonIncident, BostonLayerId, BostonProvenance } from '@/services/boston-open-data';
 import { getCachedBostonBundle, refreshBostonDataset } from '@/services/boston-open-data';
+import type { LocalTransitPayload, LocalTransitProvenance } from '@/services/local-transit';
+import { getCachedLocalTransit, refreshLocalTransit } from '@/services/local-transit';
 
 const CYBER_LAYER_ENABLED = import.meta.env.VITE_ENABLE_CYBER_LAYER === 'true';
 
@@ -129,9 +131,10 @@ export class DataLoaderManager implements AppModule {
 
   private mapFlashCache: Map<string, number> = new Map();
   private readonly MAP_FLASH_COOLDOWN_MS = 10 * 60 * 1000;
-  private bostonProvenance: Partial<Record<BostonDatasetId, BostonProvenance>> = {};
+  private bostonProvenance: Partial<Record<BostonDatasetId | 'transitStatus', BostonProvenance | LocalTransitProvenance>> = {};
   private bostonCrimeIncidents: BostonIncident[] = [];
   private bostonFireIncidents: BostonIncident[] = [];
+  private localTransit: LocalTransitPayload | null = null;
   private readonly applyTimeRangeFilterToNewsPanelsDebounced = debounce(() => {
     this.applyTimeRangeFilterToNewsPanels();
   }, 120);
@@ -156,6 +159,9 @@ export class DataLoaderManager implements AppModule {
       if (!payload) continue;
       this.ingestBostonPayload(payload.provenance.datasetId, payload);
     }
+
+    const transit = await getCachedLocalTransit();
+    if (transit) this.ingestTransitPayload(transit);
     this.pushBostonStateToUi();
   }
 
@@ -172,13 +178,22 @@ export class DataLoaderManager implements AppModule {
         'communityCenters',
       ];
 
-      const results = await Promise.allSettled(
-        datasets.map(async (datasetId) => ({ datasetId, payload: await refreshBostonDataset(datasetId) })),
-      );
+      const results = await Promise.allSettled([
+        ...datasets.map(async (datasetId) => ({
+          kind: 'boston' as const,
+          datasetId,
+          payload: await refreshBostonDataset(datasetId),
+        })),
+        (async () => ({
+          kind: 'transit' as const,
+          payload: await refreshLocalTransit(),
+        }))(),
+      ]);
 
       for (const result of results) {
         if (result.status === 'fulfilled') {
-          this.ingestBostonPayload(result.value.datasetId, result.value.payload);
+          if (result.value.kind === 'boston') this.ingestBostonPayload(result.value.datasetId, result.value.payload);
+          else this.ingestTransitPayload(result.value.payload);
           continue;
         }
 
@@ -201,6 +216,20 @@ export class DataLoaderManager implements AppModule {
       console.warn(`[Boston] Dataset refresh failed: ${datasetId}`, error);
     } finally {
       panel?.setDatasetRefreshing(datasetId, false);
+    }
+  }
+
+  async refreshLocalTransitData(): Promise<void> {
+    const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
+    panel?.setDatasetRefreshing('transitStatus', true);
+    try {
+      const payload = await refreshLocalTransit();
+      this.ingestTransitPayload(payload);
+      this.pushBostonStateToUi();
+    } catch (error) {
+      console.warn('[Boston] Transit refresh failed', error);
+    } finally {
+      panel?.setDatasetRefreshing('transitStatus', false);
     }
   }
 
@@ -234,16 +263,24 @@ export class DataLoaderManager implements AppModule {
     }
   }
 
+  private ingestTransitPayload(payload: LocalTransitPayload): void {
+    this.localTransit = payload;
+    this.bostonProvenance[payload.provenance.datasetId] = payload.provenance;
+    this.ctx.map?.setBostonTransitVehicles(payload.vehicles);
+  }
+
   private pushBostonStateToUi(): void {
     const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
     panel?.setData({
       crimeIncidents: this.bostonCrimeIncidents,
       fireIncidents: this.bostonFireIncidents,
+      transit: this.localTransit,
       provenance: this.bostonProvenance,
     });
 
     this.ctx.map?.setBostonCrimeIncidents(this.bostonCrimeIncidents);
     this.ctx.map?.setBostonFireIncidents(this.bostonFireIncidents);
+    this.ctx.map?.setBostonTransitVehicles(this.localTransit?.vehicles ?? []);
   }
 
   private shouldShowIntelligenceNotifications(): boolean {

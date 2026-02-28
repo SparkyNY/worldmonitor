@@ -267,6 +267,7 @@ export class App {
       loadBostonCached: () => this.dataLoader.loadBostonCached(),
       refreshBostonAll: () => this.dataLoader.refreshBostonAllData(),
       refreshBostonDataset: (datasetId) => this.dataLoader.refreshBostonSingleDataset(datasetId),
+      refreshBostonTransit: () => this.dataLoader.refreshLocalTransitData(),
       setBostonLayerEnabled: (layerId, enabled) => this.dataLoader.setBostonLayerEnabled(layerId, enabled),
       setBostonCrimeFilter: (incidents) => this.dataLoader.setBostonCrimeFilter(incidents),
       setBostonFireFilter: (incidents) => this.dataLoader.setBostonFireFilter(incidents),

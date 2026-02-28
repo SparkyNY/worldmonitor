@@ -37,6 +37,7 @@ import type { HappinessData } from '@/services/happiness-data';
 import type { SpeciesRecovery } from '@/services/conservation-data';
 import type { RenewableInstallation } from '@/services/renewable-installations';
 import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
+import type { LocalTransitVehicle } from '@/services/local-transit';
 
 export type TimeRange = '1h' | '6h' | '24h' | '48h' | '7d' | 'all';
 export type MapView = 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
@@ -402,6 +403,11 @@ export class MapContainer {
   public setBostonFireIncidents(incidents: BostonIncident[]): void {
     if (this.useDeckGL) this.deckGLMap?.setBostonFireIncidents(incidents);
     else this.svgMap?.setBostonFireIncidents(incidents);
+  }
+
+  public setBostonTransitVehicles(vehicles: LocalTransitVehicle[]): void {
+    if (this.useDeckGL) this.deckGLMap?.setBostonTransitVehicles(vehicles);
+    else this.svgMap?.setBostonTransitVehicles(vehicles);
   }
 
   public setBostonLayerEnabled(layerId: BostonLayerId, enabled: boolean): void {

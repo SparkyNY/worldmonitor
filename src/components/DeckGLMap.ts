@@ -91,6 +91,7 @@ import type { SpeciesRecovery } from '@/services/conservation-data';
 import { getCountriesGeoJson, getCountryAtCoordinates } from '@/services/country-geometry';
 import type { FeatureCollection, Geometry } from 'geojson';
 import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
+import type { LocalTransitVehicle } from '@/services/local-transit';
 
 export type TimeRange = '1h' | '6h' | '24h' | '48h' | '7d' | 'all';
 export type DeckMapView = 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
@@ -297,11 +298,13 @@ export class DeckGLMap {
   private bostonCommunityCenters: BostonLayerData = { type: 'FeatureCollection', features: [] };
   private bostonCrimeIncidents: BostonIncident[] = [];
   private bostonFireIncidents: BostonIncident[] = [];
+  private bostonTransitVehicles: LocalTransitVehicle[] = [];
   private bostonLayersEnabled: Record<BostonLayerId, boolean> = {
     policeDistricts: true,
     fireHydrants: false,
     fireDepartments: true,
     communityCenters: false,
+    transitVehicles: true,
   };
   private countriesGeoJsonData: FeatureCollection<Geometry> | null = null;
 
@@ -1191,7 +1194,7 @@ export class DeckGLMap {
     }
 
     // Boston local overlays (panel-driven, manual refresh only)
-    if (SITE_VARIANT === 'full') {
+    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'local') {
       if (this.bostonLayersEnabled.policeDistricts && this.bostonPoliceDistricts.features.length > 0) {
         layers.push(this.createBostonPolygonLayer('boston-police-districts-layer', this.bostonPoliceDistricts, [70, 130, 255, 45], [70, 130, 255, 180]));
       }
@@ -1203,6 +1206,9 @@ export class DeckGLMap {
       }
       if (this.bostonLayersEnabled.communityCenters && this.bostonCommunityCenters.features.length > 0) {
         layers.push(this.createBostonPointLayer('boston-community-centers-layer', this.bostonCommunityCenters, [50, 200, 130, 220], 4));
+      }
+      if (this.bostonLayersEnabled.transitVehicles && this.bostonTransitVehicles.length > 0) {
+        layers.push(this.createBostonTransitVehiclesLayer());
       }
 
       if (this.bostonCrimeIncidents.length > 0) {
@@ -3602,6 +3608,35 @@ export class DeckGLMap {
     });
   }
 
+  private createBostonTransitVehiclesLayer(): ScatterplotLayer<LocalTransitVehicle> {
+    const colorForMode = (mode: LocalTransitVehicle['mode']): [number, number, number, number] => {
+      if (mode === 'subway') return [60, 160, 255, 230];
+      if (mode === 'commuter_rail') return [180, 120, 255, 230];
+      if (mode === 'ferry') return [40, 200, 190, 230];
+      return [255, 190, 70, 230];
+    };
+
+    return new ScatterplotLayer<LocalTransitVehicle>({
+      id: 'boston-transit-vehicles-layer',
+      data: this.bostonTransitVehicles,
+      getPosition: (d) => [d.lon, d.lat],
+      getFillColor: (d) => colorForMode(d.mode),
+      getLineColor: [255, 255, 255, 210],
+      stroked: true,
+      lineWidthMinPixels: 1,
+      radiusUnits: 'pixels',
+      getRadius: (d) => (d.mode === 'subway' || d.mode === 'commuter_rail' ? 6 : 5),
+      radiusMinPixels: 4,
+      radiusMaxPixels: 8,
+      pickable: true,
+      onClick: (info) => {
+        const vehicle = info.object;
+        if (!vehicle) return;
+        this.setCenter(vehicle.lat, vehicle.lon, Math.max(11, this.state.zoom));
+      },
+    });
+  }
+
   private createBostonIncidentClusterLayers(
     idPrefix: string,
     incidents: BostonIncident[],
@@ -3899,6 +3934,11 @@ export class DeckGLMap {
 
   public setBostonFireIncidents(incidents: BostonIncident[]): void {
     this.bostonFireIncidents = incidents;
+    this.render();
+  }
+
+  public setBostonTransitVehicles(vehicles: LocalTransitVehicle[]): void {
+    this.bostonTransitVehicles = vehicles;
     this.render();
   }
 

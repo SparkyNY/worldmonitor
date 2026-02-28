@@ -8,7 +8,12 @@ export type BostonDatasetId =
   | 'fireDepartments'
   | 'communityCenters';
 
-export type BostonLayerId = 'policeDistricts' | 'fireHydrants' | 'fireDepartments' | 'communityCenters';
+export type BostonLayerId =
+  | 'policeDistricts'
+  | 'fireHydrants'
+  | 'fireDepartments'
+  | 'communityCenters'
+  | 'transitVehicles';
 
 export interface BostonProvenance {
   datasetId: BostonDatasetId;

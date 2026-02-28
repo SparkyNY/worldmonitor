@@ -205,6 +205,7 @@ const ALLOWED_DOMAINS = [
   'www.who.int',
   'www.cisa.gov',
   'www.crisisgroup.org',
+  'www.amtrak.com',
   // Think Tanks & Research (Added 2026-01-29)
   'rusi.org',
   'warontherocks.com',

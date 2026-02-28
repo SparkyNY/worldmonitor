@@ -71,6 +71,7 @@ export interface PanelLayoutCallbacks {
   loadBostonCached?: () => Promise<void>;
   refreshBostonAll?: () => Promise<void>;
   refreshBostonDataset?: (datasetId: BostonDatasetId) => Promise<void>;
+  refreshBostonTransit?: () => Promise<void>;
   setBostonLayerEnabled?: (layerId: BostonLayerId, enabled: boolean) => void;
   setBostonCrimeFilter?: (incidents: BostonIncident[]) => void;
   setBostonFireFilter?: (incidents: BostonIncident[]) => void;
@@ -345,6 +346,15 @@ export class PanelLayoutManager implements AppModule {
 
     this.ctx.map.initEscalationGetters();
     this.ctx.currentTimeRange = this.ctx.map.getTimeRange();
+    if (
+      SITE_VARIANT === 'local'
+      && !this.ctx.initialUrlState?.view
+      && this.ctx.initialUrlState?.lat == null
+      && this.ctx.initialUrlState?.lon == null
+    ) {
+      // Fit the default local view to Boston city bounds on startup.
+      this.ctx.map.setCenter(42.3601, -71.0589, 10.6);
+    }
 
     const politicsPanel = new NewsPanel('politics', t('panels.politics'));
     this.attachRelatedAssetHandlers(politicsPanel);
@@ -593,6 +603,9 @@ export class PanelLayoutManager implements AppModule {
         },
         onRefreshDataset: async (datasetId) => {
           await this.callbacks.refreshBostonDataset?.(datasetId);
+        },
+        onRefreshTransit: async () => {
+          await this.callbacks.refreshBostonTransit?.();
         },
         onLayerToggle: (layerId, enabled) => {
           this.callbacks.setBostonLayerEnabled?.(layerId, enabled);
