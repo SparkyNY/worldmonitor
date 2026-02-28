@@ -37,7 +37,8 @@
       "displaced": "displaced",
       "climate": "Climate stress",
       "conflictEvents": "conflict events",
-      "activeStrikes": "active strikes"
+      "activeStrikes": "active strikes",
+      "aviationDisruptions": "airport disruptions"
     },
     "timeAgo": {
       "m": "{{count}}m ago",
@@ -457,7 +458,8 @@
         "displaced": "displaced",
         "climate": "Climate stress",
         "conflictEvents": "conflict events",
-        "activeStrikes": "active strikes"
+        "activeStrikes": "active strikes",
+        "aviationDisruptions": "airport disruptions"
       },
       "timeAgo": {
         "m": "{{count}}m ago",

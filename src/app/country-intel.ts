@@ -384,6 +384,14 @@ export class CountryIntelManager implements AppModule {
 
     const activeStrikes = this.getCountryStrikes(code, hasGeoShape).length;
 
+    let aviationDisruptions = 0;
+    if (this.ctx.intelligenceCache.flightDelays) {
+      aviationDisruptions = this.ctx.intelligenceCache.flightDelays.filter(d =>
+        (d.severity === 'major' || d.severity === 'severe' || d.delayType === 'closure') &&
+        d.country?.toLowerCase() === countryLower
+      ).length;
+    }
+
     const ciiData = getCountryData(code);
     const isTier1 = !!TIER1_COUNTRIES[code];
 
@@ -406,6 +414,7 @@ export class CountryIntelManager implements AppModule {
       activeStrikes,
       orefSirens,
       orefHistory24h,
+      aviationDisruptions,
       isTier1,
     };
   }

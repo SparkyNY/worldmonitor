@@ -1,4 +1,5 @@
 import type { SocialUnrestEvent, MilitaryFlight, MilitaryVessel, ClusteredEvent, InternetOutage } from '@/types';
+import type { AirportDelayAlert } from '@/services/aviation';
 import { tokenizeForMatch, matchKeyword } from '@/utils/keyword-match';
 import { INTEL_HOTSPOTS, CONFLICT_ZONES, STRATEGIC_WATERWAYS } from '@/config/geo';
 import { CURATED_COUNTRIES, DEFAULT_BASELINE_RISK, DEFAULT_EVENT_MULTIPLIER, getHotspotCountries } from '@/config/countries';
@@ -36,6 +37,7 @@ interface CountryData {
   newsEvents: ClusteredEvent[];
   outages: InternetOutage[];
   strikes: Array<{ severity: string; timestamp: number; lat: number; lon: number; title: string; id: string }>;
+  aviationDisruptions: AirportDelayAlert[];
   displacementOutflow: number;
   climateStress: number;
   orefAlertCount: number;
@@ -121,7 +123,7 @@ const countryDataMap = new Map<string, CountryData>();
 const previousScores = new Map<string, number>();
 
 function initCountryData(): CountryData {
-  return { protests: [], conflicts: [], ucdpStatus: null, hapiSummary: null, militaryFlights: [], militaryVessels: [], newsEvents: [], outages: [], strikes: [], displacementOutflow: 0, climateStress: 0, orefAlertCount: 0, orefHistoryCount24h: 0 };
+  return { protests: [], conflicts: [], ucdpStatus: null, hapiSummary: null, militaryFlights: [], militaryVessels: [], newsEvents: [], outages: [], strikes: [], aviationDisruptions: [], displacementOutflow: 0, climateStress: 0, orefAlertCount: 0, orefHistoryCount24h: 0 };
 }
 
 const newsEventIndexMap = new Map<string, Map<string, number>>();
@@ -443,6 +445,16 @@ function getOrefBlendBoost(code: string, data: CountryData): number {
   return (data.orefAlertCount > 0 ? 15 : 0) + (data.orefHistoryCount24h >= 10 ? 10 : data.orefHistoryCount24h >= 3 ? 5 : 0);
 }
 
+export function ingestAviationForCII(alerts: AirportDelayAlert[]): void {
+  for (const a of alerts) {
+    processedCount++;
+    const code = normalizeCountryName(a.country);
+    if (!code) { unmappedCount++; continue; }
+    if (!countryDataMap.has(code)) countryDataMap.set(code, initCountryData());
+    countryDataMap.get(code)!.aviationDisruptions.push(a);
+  }
+}
+
 function calcUnrestScore(data: CountryData, countryCode: string): number {
   const protestCount = data.protests.length;
   const multiplier = CURATED_COUNTRIES[countryCode]?.eventMultiplier ?? DEFAULT_EVENT_MULTIPLIER;
@@ -568,7 +580,17 @@ function calcSecurityScore(data: CountryData): number {
   const vessels = data.militaryVessels.length;
   const flightScore = Math.min(50, flights * 3);
   const vesselScore = Math.min(30, vessels * 5);
-  return Math.min(100, flightScore + vesselScore);
+
+  let aviationScore = 0;
+  for (const a of data.aviationDisruptions) {
+    if (a.delayType === 'closure') aviationScore += 20;
+    else if (a.severity === 'severe') aviationScore += 15;
+    else if (a.severity === 'major') aviationScore += 10;
+    else if (a.severity === 'moderate') aviationScore += 5;
+  }
+  aviationScore = Math.min(40, aviationScore);
+
+  return Math.min(100, flightScore + vesselScore + aviationScore);
 }
 
 function calcInformationScore(data: CountryData, countryCode: string): number {
