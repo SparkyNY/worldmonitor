@@ -74,8 +74,8 @@ const DATASETS: Record<BostonDatasetId, ArcGisDatasetConfig> = {
     mode: 'incident',
     datasetTag: 'crime',
     pageSize: 500,
-    maxPages: 8,
-    maxRecords: 4000,
+    maxPages: 6,
+    maxRecords: 2000,
     queryParams: {
       where: '1=1',
       outFields: '*',
@@ -90,8 +90,8 @@ const DATASETS: Record<BostonDatasetId, ArcGisDatasetConfig> = {
     mode: 'incident',
     datasetTag: 'fire',
     pageSize: 500,
-    maxPages: 8,
-    maxRecords: 4000,
+    maxPages: 6,
+    maxRecords: 2000,
     queryParams: {
       where: '1=1',
       outFields: '*',

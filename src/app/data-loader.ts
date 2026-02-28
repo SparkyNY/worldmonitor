@@ -135,6 +135,9 @@ export class DataLoaderManager implements AppModule {
   private bostonCrimeIncidents: BostonIncident[] = [];
   private bostonFireIncidents: BostonIncident[] = [];
   private localTransit: LocalTransitPayload | null = null;
+  private localTransitLiveIntervalId: ReturnType<typeof setInterval> | null = null;
+  private localTransitRefreshInFlight = false;
+  private readonly LOCAL_TRANSIT_LIVE_REFRESH_MS = 30 * 1000;
   private readonly applyTimeRangeFilterToNewsPanelsDebounced = debounce(() => {
     this.applyTimeRangeFilterToNewsPanels();
   }, 120);
@@ -148,7 +151,12 @@ export class DataLoaderManager implements AppModule {
 
   init(): void {}
 
-  destroy(): void {}
+  destroy(): void {
+    if (this.localTransitLiveIntervalId) {
+      clearInterval(this.localTransitLiveIntervalId);
+      this.localTransitLiveIntervalId = null;
+    }
+  }
 
   async loadBostonCached(): Promise<void> {
     const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
@@ -163,6 +171,7 @@ export class DataLoaderManager implements AppModule {
     const transit = await getCachedLocalTransit();
     if (transit) this.ingestTransitPayload(transit);
     this.pushBostonStateToUi();
+    this.ensureLocalTransitLiveUpdates();
   }
 
   async refreshBostonAllData(): Promise<void> {
@@ -178,28 +187,40 @@ export class DataLoaderManager implements AppModule {
         'communityCenters',
       ];
 
+      const transitTask = this.localTransitRefreshInFlight
+        ? Promise.resolve({ kind: 'transit-skipped' as const })
+        : (async () => {
+            this.localTransitRefreshInFlight = true;
+            try {
+              return {
+                kind: 'transit' as const,
+                payload: await refreshLocalTransit(),
+              };
+            } finally {
+              this.localTransitRefreshInFlight = false;
+            }
+          })();
+
       const results = await Promise.allSettled([
         ...datasets.map(async (datasetId) => ({
           kind: 'boston' as const,
           datasetId,
           payload: await refreshBostonDataset(datasetId),
         })),
-        (async () => ({
-          kind: 'transit' as const,
-          payload: await refreshLocalTransit(),
-        }))(),
+        transitTask,
       ]);
 
       for (const result of results) {
         if (result.status === 'fulfilled') {
           if (result.value.kind === 'boston') this.ingestBostonPayload(result.value.datasetId, result.value.payload);
-          else this.ingestTransitPayload(result.value.payload);
+          else if (result.value.kind === 'transit') this.ingestTransitPayload(result.value.payload);
           continue;
         }
 
         console.warn('[Boston] Refresh failed', result.reason);
       }
       this.pushBostonStateToUi();
+      this.ensureLocalTransitLiveUpdates();
     } finally {
       panel?.setAllRefreshing(false);
     }
@@ -219,9 +240,12 @@ export class DataLoaderManager implements AppModule {
     }
   }
 
-  async refreshLocalTransitData(): Promise<void> {
+  async refreshLocalTransitData(options: { silent?: boolean } = {}): Promise<void> {
+    if (this.localTransitRefreshInFlight) return;
+    this.localTransitRefreshInFlight = true;
+    const silent = options.silent === true;
     const panel = this.ctx.panels['boston'] as BostonPanel | undefined;
-    panel?.setDatasetRefreshing('transitStatus', true);
+    if (!silent) panel?.setDatasetRefreshing('transitStatus', true);
     try {
       const payload = await refreshLocalTransit();
       this.ingestTransitPayload(payload);
@@ -229,7 +253,8 @@ export class DataLoaderManager implements AppModule {
     } catch (error) {
       console.warn('[Boston] Transit refresh failed', error);
     } finally {
-      panel?.setDatasetRefreshing('transitStatus', false);
+      this.localTransitRefreshInFlight = false;
+      if (!silent) panel?.setDatasetRefreshing('transitStatus', false);
     }
   }
 
@@ -278,9 +303,28 @@ export class DataLoaderManager implements AppModule {
       provenance: this.bostonProvenance,
     });
 
-    this.ctx.map?.setBostonCrimeIncidents(this.bostonCrimeIncidents);
-    this.ctx.map?.setBostonFireIncidents(this.bostonFireIncidents);
+    if (!panel) {
+      this.ctx.map?.setBostonCrimeIncidents(this.bostonCrimeIncidents);
+      this.ctx.map?.setBostonFireIncidents(this.bostonFireIncidents);
+    }
     this.ctx.map?.setBostonTransitVehicles(this.localTransit?.vehicles ?? []);
+  }
+
+  private ensureLocalTransitLiveUpdates(): void {
+    if (SITE_VARIANT !== 'local') return;
+    if (!this.ctx.panels['boston']) return;
+    if (this.localTransitLiveIntervalId) return;
+
+    this.localTransitLiveIntervalId = setInterval(() => {
+      if (this.ctx.isDestroyed || this.localTransitRefreshInFlight) return;
+      void this.refreshLocalTransitData({ silent: true });
+    }, this.LOCAL_TRANSIT_LIVE_REFRESH_MS);
+
+    const lastFetchedAt = this.localTransit?.provenance?.fetchedAt ? Date.parse(this.localTransit.provenance.fetchedAt) : Number.NaN;
+    const isStale = !Number.isFinite(lastFetchedAt) || Date.now() - lastFetchedAt > this.LOCAL_TRANSIT_LIVE_REFRESH_MS;
+    if (isStale) {
+      void this.refreshLocalTransitData({ silent: true });
+    }
   }
 
   private shouldShowIntelligenceNotifications(): boolean {

@@ -357,15 +357,6 @@ export class PanelLayoutManager implements AppModule {
 
     this.ctx.map.initEscalationGetters();
     this.ctx.currentTimeRange = this.ctx.map.getTimeRange();
-    if (
-      SITE_VARIANT === 'local'
-      && !this.ctx.initialUrlState?.view
-      && this.ctx.initialUrlState?.lat == null
-      && this.ctx.initialUrlState?.lon == null
-    ) {
-      // Fit the default local view to Boston city bounds on startup.
-      this.ctx.map.setCenter(42.3601, -71.0589, 10.6);
-    }
 
     const politicsPanel = new NewsPanel('politics', t('panels.politics'));
     this.attachRelatedAssetHandlers(politicsPanel);
@@ -768,6 +759,7 @@ export class PanelLayoutManager implements AppModule {
 
     this.applyPanelSettings();
     this.applyInitialUrlState();
+    this.applyLocalVariantDefaultViewport();
     void this.callbacks.loadBostonCached?.();
   }
 
@@ -840,6 +832,20 @@ export class PanelLayoutManager implements AppModule {
     if (regionSelect && currentView) {
       regionSelect.value = currentView;
     }
+  }
+
+  private applyLocalVariantDefaultViewport(): void {
+    if (SITE_VARIANT !== 'local' || !this.ctx.map) return;
+    const urlState = this.ctx.initialUrlState;
+    const hasExplicitCoords = urlState?.lat != null
+      && urlState?.lon != null
+      && Number.isFinite(urlState.zoom ?? Number.NaN)
+      && (urlState.zoom ?? 0) >= 8;
+    if (hasExplicitCoords) return;
+
+    // Local variant defaults to Boston metro view unless user deep-linked
+    // directly to a specific coordinate/zoom.
+    this.ctx.map.setCenter(42.3601, -71.0589, 10.6);
   }
 
   private getSavedPanelOrder(): string[] {

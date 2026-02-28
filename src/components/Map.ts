@@ -2977,6 +2977,11 @@ export class MapComponent {
   }
 
   public reset(): void {
+    if (SITE_VARIANT === 'local') {
+      this.state.zoom = 10.6;
+      this.setCenter(42.3601, -71.0589);
+      return;
+    }
     this.state.zoom = 1;
     this.state.pan = { x: 0, y: 0 };
     if (this.state.view !== 'global') {

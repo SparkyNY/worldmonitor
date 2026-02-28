@@ -3506,6 +3506,10 @@ export class DeckGLMap {
   }
 
   private resetView(): void {
+    if (SITE_VARIANT === 'local') {
+      this.setCenter(42.3601, -71.0589, 10.6);
+      return;
+    }
     this.setView('global');
   }
 

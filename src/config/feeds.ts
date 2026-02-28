@@ -987,10 +987,14 @@ const FINANCE_FEEDS: Record<string, Feed[]> = {
 // Local variant feeds (Boston/Regional)
 const LOCAL_FEEDS: Record<string, Feed[]> = {
   local: [
+    { name: 'Boston Globe', url: rss('https://news.google.com/rss/search?q=site:bostonglobe.com+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'WBUR News', url: rss('https://rss.wbur.org/wbur/news') },
+    { name: 'GBH News', url: rss('https://news.google.com/rss/search?q=site:wgbh.org+OR+site:gbhnews.org+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'WBZ Boston', url: rss('https://news.google.com/rss/search?q=site:cbsnews.com+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'Universal Hub', url: rss('https://www.universalhub.com/rss.xml') },
     { name: 'WCVB Boston', url: rss('https://www.wcvb.com/topstories-rss') },
     { name: 'Boston 25 News', url: rss('https://www.boston25news.com/arc/outboundfeeds/rss/') },
+    { name: 'Boston Herald', url: rss('https://news.google.com/rss/search?q=site:bostonherald.com+when:2d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'Boston.com', url: rss('https://www.boston.com/feed/') },
   ],
   city: [
@@ -1009,10 +1013,14 @@ const LOCAL_FEEDS: Record<string, Feed[]> = {
   ],
   outages: [
     { name: 'DownDetector US', url: rss('https://news.google.com/rss/search?q=Downdetector+US+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Internet Outages (US)', url: rss('https://news.google.com/rss/search?q=(internet+outage+OR+ISP+outage)+United+States+when:1d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'Comcast/Xfinity Outages', url: rss('https://news.google.com/rss/search?q=(Comcast+OR+Xfinity)+outage+Boston+when:1d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'Verizon Outages', url: rss('https://news.google.com/rss/search?q=Verizon+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'AT&T Outages', url: rss('https://news.google.com/rss/search?q=AT%26T+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'T-Mobile Outages', url: rss('https://news.google.com/rss/search?q=T-Mobile+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Spectrum Outages', url: rss('https://news.google.com/rss/search?q=Spectrum+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Cox Outages', url: rss('https://news.google.com/rss/search?q=Cox+Communications+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'US Cellular Outages', url: rss('https://news.google.com/rss/search?q=US+Cellular+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
   ],
 };
 

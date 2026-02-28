@@ -73,7 +73,7 @@ const MBTA_GTFS_VEHICLES_ENHANCED_URL = 'https://cdn.mbta.com/realtime/VehiclePo
 const MBTA_GTFS_ALERTS_ENHANCED_URL = 'https://cdn.mbta.com/realtime/Alerts_enhanced.json';
 const BOSTON_LAT = 42.3601;
 const BOSTON_LON = -71.0589;
-const BOSTON_RADIUS_KM = 20;
+const BOSTON_RADIUS_KM = 45;
 const ROUTE_TYPES = '0,1,2,3,4';
 const MBTA_API_KEY = import.meta.env.VITE_MBTA_API_KEY?.trim() || '';
 const AMTRAK_FEED_OVERRIDE = import.meta.env.VITE_AMTRAK_ALERTS_RSS_URL?.trim() || '';
@@ -384,15 +384,16 @@ async function fetchMbtaVehicles(warnings: string[]): Promise<LocalTransitVehicl
     'page[limit]': 1000,
     ...(MBTA_API_KEY ? { api_key: MBTA_API_KEY } : {}),
   };
+  const attemptNotes: string[] = [];
 
   for (const [label, query] of [['filtered', primaryQuery], ['fallback', fallbackQuery]] as const) {
     try {
       const payload = await fetchMbtaJson(MBTA_VEHICLES_URL, query);
       const vehicles = filterBostonVehicles(normalizeVehiclesFromMbtaV3(payload)).sort(sortByModeThenRoute);
       if (vehicles.length > 0) return vehicles;
-      warnings.push(`MBTA ${label} vehicle query returned zero Boston-area vehicles.`);
+      attemptNotes.push(`MBTA ${label} vehicle query returned zero Boston-area vehicles.`);
     } catch (error) {
-      warnings.push(`MBTA ${label} vehicle query failed (${error instanceof Error ? error.message : String(error)}).`);
+      attemptNotes.push(`MBTA ${label} vehicle query failed (${error instanceof Error ? error.message : String(error)}).`);
     }
   }
 
@@ -400,11 +401,12 @@ async function fetchMbtaVehicles(warnings: string[]): Promise<LocalTransitVehicl
     const gtfs = await fetchJson(MBTA_GTFS_VEHICLES_ENHANCED_URL);
     const vehicles = filterBostonVehicles(normalizeVehiclesFromGtfsEnhanced(gtfs)).sort(sortByModeThenRoute);
     if (vehicles.length > 0) return vehicles;
-    warnings.push('MBTA GTFS vehicle fallback returned zero Boston-area vehicles.');
+    attemptNotes.push('MBTA GTFS vehicle fallback returned zero Boston-area vehicles.');
   } catch (error) {
-    warnings.push(`MBTA GTFS vehicle fallback failed (${error instanceof Error ? error.message : String(error)}).`);
+    attemptNotes.push(`MBTA GTFS vehicle fallback failed (${error instanceof Error ? error.message : String(error)}).`);
   }
 
+  if (attemptNotes.length > 0) warnings.push(attemptNotes.join(' | '));
   return [];
 }
 
@@ -510,23 +512,30 @@ async function fetchMbtaAlerts(warnings: string[]): Promise<LocalTransitAlert[]>
     sort: '-updated_at',
     ...(MBTA_API_KEY ? { api_key: MBTA_API_KEY } : {}),
   };
+  const attemptNotes: string[] = [];
 
   for (const [label, query] of [['filtered', primaryQuery], ['fallback', fallbackQuery]] as const) {
     try {
       const payload = await fetchMbtaJson(MBTA_ALERTS_URL, query);
-      return normalizeAlertsFromMbtaV3(payload);
+      const alerts = normalizeAlertsFromMbtaV3(payload);
+      if (alerts.length > 0) return alerts;
+      attemptNotes.push(`MBTA ${label} alert query returned zero alerts.`);
     } catch (error) {
-      warnings.push(`MBTA ${label} alert query failed (${error instanceof Error ? error.message : String(error)}).`);
+      attemptNotes.push(`MBTA ${label} alert query failed (${error instanceof Error ? error.message : String(error)}).`);
     }
   }
 
   try {
     const gtfs = await fetchJson(MBTA_GTFS_ALERTS_ENHANCED_URL);
-    return normalizeAlertsFromGtfsEnhanced(gtfs);
+    const alerts = normalizeAlertsFromGtfsEnhanced(gtfs);
+    if (alerts.length > 0) return alerts;
+    attemptNotes.push('MBTA GTFS alert fallback returned zero alerts.');
   } catch (error) {
-    warnings.push(`MBTA GTFS alert fallback failed (${error instanceof Error ? error.message : String(error)}).`);
-    return [];
+    attemptNotes.push(`MBTA GTFS alert fallback failed (${error instanceof Error ? error.message : String(error)}).`);
   }
+
+  if (attemptNotes.length > 0) warnings.push(attemptNotes.join(' | '));
+  return [];
 }
 
 function parseAmtrakFeed(xml: string): LocalTransitAlert[] {

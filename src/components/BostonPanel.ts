@@ -272,7 +272,9 @@ export class BostonPanel extends Panel {
 
   private getFilteredCrimeIncidents(): BostonIncident[] {
     return this.data.crimeIncidents
-      .filter((incident) => inDateRange(incident.dateTimeReported ?? incident.date, this.crimeDateFrom, this.crimeDateTo))
+      .filter((incident) => this.crimeWindowHours > 0
+        ? isWithinRollingWindow(incident.dateTimeReported ?? incident.date, this.crimeWindowHours)
+        : inDateRange(incident.dateTimeReported ?? incident.date, this.crimeDateFrom, this.crimeDateTo))
       .filter((incident) => this.crimeDistrict === 'all' || incident.district === this.crimeDistrict)
       .filter((incident) => {
         if (!this.crimeKeyword.trim()) return true;
@@ -287,7 +289,9 @@ export class BostonPanel extends Panel {
 
   private getFilteredFireIncidents(): BostonIncident[] {
     return this.data.fireIncidents
-      .filter((incident) => inDateRange(incident.dateTimeReported ?? incident.date, this.fireDateFrom, this.fireDateTo))
+      .filter((incident) => this.fireWindowHours > 0
+        ? isWithinRollingWindow(incident.dateTimeReported ?? incident.date, this.fireWindowHours)
+        : inDateRange(incident.dateTimeReported ?? incident.date, this.fireDateFrom, this.fireDateTo))
       .filter((incident) => this.fireType === 'all' || incident.incidentType === this.fireType)
       .filter((incident) => {
         if (!this.fireKeyword.trim()) return true;
@@ -322,6 +326,7 @@ export class BostonPanel extends Panel {
     const transitSummary = this.data.transit?.summaries ?? [];
     const transitAlerts = this.data.transit?.alerts ?? [];
     const transitWarnings = this.data.transit?.provenance.warnings ?? [];
+    const transitFetchedAt = this.data.transit?.provenance.fetchedAt ?? null;
 
     this.setContent(`
       <div class="boston-panel-content">
@@ -347,6 +352,9 @@ export class BostonPanel extends Panel {
           <div class="boston-section-title-row">
             <div class="boston-section-title">Transit Status</div>
             <button class="boston-btn" data-boston-refresh-transit ${this.refreshState.transitStatus ? 'disabled' : ''}>Refresh Transit</button>
+          </div>
+          <div class="boston-transit-meta">
+            ${transitFetchedAt ? `Last updated: ${escapeHtml(formatDateTime(transitFetchedAt))}` : 'Waiting for first transit fetch'}
           </div>
           <div class="boston-transit-grid">${renderTransitSummary(transitSummary)}</div>
           <div class="boston-transit-alerts">${renderTransitAlerts(transitAlerts)}</div>
@@ -564,9 +572,17 @@ function inDateRange(value: string | null, from: string, to: string): boolean {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return false;
 
-  const fromTs = Date.parse(`${from}T00:00:00Z`);
-  const toTs = Date.parse(`${to}T23:59:59Z`);
+  const fromTs = Date.parse(`${from}T00:00:00`);
+  const toTs = Date.parse(`${to}T23:59:59`);
   return timestamp >= fromTs && timestamp <= toTs;
+}
+
+function isWithinRollingWindow(value: string | null, hours: number): boolean {
+  if (!value || !Number.isFinite(hours) || hours <= 0) return false;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return false;
+  const cutoff = Date.now() - hours * 60 * 60 * 1000;
+  return timestamp >= cutoff;
 }
 
 function formatDate(value: string | null): string {
