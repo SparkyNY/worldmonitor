@@ -13,6 +13,19 @@ export interface LocalTransitVehicle {
   lat: number;
   lon: number;
   bearing: number | null;
+  directionId: number | null;
+  directionLabel: 'Inbound' | 'Outbound' | 'Unknown';
+  currentStopId: string | null;
+  currentStopName: string | null;
+  tripId: string | null;
+  vehicleLabel: string | null;
+  scheduleStatus: string | null;
+  nextStopId: string | null;
+  nextStopName: string | null;
+  nextArrivalTime: string | null;
+  nextDepartureTime: string | null;
+  nextStopSequence: number | null;
+  asOf: string | null;
   updatedAt: string | null;
 }
 
@@ -82,6 +95,7 @@ const MBTA_BASE_URL = 'https://api-v3.mbta.com';
 const MBTA_VEHICLES_URL = `${MBTA_BASE_URL}/vehicles`;
 const MBTA_ROUTES_URL = `${MBTA_BASE_URL}/routes`;
 const MBTA_SHAPES_URL = `${MBTA_BASE_URL}/shapes`;
+const MBTA_PREDICTIONS_URL = `${MBTA_BASE_URL}/predictions`;
 const MBTA_ALERTS_URL = `${MBTA_BASE_URL}/alerts`;
 const MBTA_GTFS_VEHICLES_ENHANCED_URL = 'https://cdn.mbta.com/realtime/VehiclePositions_enhanced.json';
 const MBTA_GTFS_ALERTS_ENHANCED_URL = 'https://cdn.mbta.com/realtime/Alerts_enhanced.json';
@@ -111,6 +125,9 @@ const AMTRAK_FEED_CANDIDATES = Array.from(new Set([
   ...(AMTRAK_FEED_OVERRIDE ? [AMTRAK_FEED_OVERRIDE] : []),
   ...AMTRAK_DEFAULT_FEEDS,
 ]));
+const TRANSIT_LINE_CACHE_TTL_MS = 15 * 60 * 1000;
+
+let cachedMbtaLines: { key: string; fetchedAt: number; lines: LocalTransitLine[] } | null = null;
 
 function toStringParams(params: Record<string, string | number | boolean | undefined>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -187,6 +204,12 @@ function modeLabel(mode: LocalTransitMode): string {
     case 'amtrak':
       return 'Amtrak';
   }
+}
+
+function directionLabelFromId(directionId: number | null): 'Inbound' | 'Outbound' | 'Unknown' {
+  if (directionId === 0) return 'Outbound';
+  if (directionId === 1) return 'Inbound';
+  return 'Unknown';
 }
 
 function modeColor(mode: Exclude<LocalTransitMode, 'amtrak'>): string {
@@ -373,8 +396,12 @@ async function fetchJson(url: string): Promise<JsonRecord> {
 
 function normalizeVehiclesFromMbtaV3(payload: MbtaResponse): LocalTransitVehicle[] {
   const routeById = new Map<string, MbtaResource>();
+  const stopById = new Map<string, MbtaResource>();
+  const tripById = new Map<string, MbtaResource>();
   for (const included of payload.included ?? []) {
     if (included.type === 'route') routeById.set(included.id, included);
+    if (included.type === 'stop') stopById.set(included.id, included);
+    if (included.type === 'trip') tripById.set(included.id, included);
   }
 
   const vehicles: LocalTransitVehicle[] = [];
@@ -396,6 +423,13 @@ function normalizeVehiclesFromMbtaV3(payload: MbtaResponse): LocalTransitVehicle
     const routeLabelValue = routeAttrs.short_name ?? routeAttrs.long_name;
     const routeLabel = String(routeLabelValue || routeId || 'Unknown route');
     const status = String(attrs.current_status ?? attrs.current_stop_sequence ?? 'IN_TRANSIT_TO');
+    const tripId = row.relationships?.trip?.data?.id ?? null;
+    const tripAttrs = tripId ? (tripById.get(tripId)?.attributes ?? {}) : {};
+    const directionId = toNumber(attrs.direction_id ?? tripAttrs.direction_id);
+    const stopId = row.relationships?.stop?.data?.id ?? null;
+    const stopAttrs = stopId ? (stopById.get(stopId)?.attributes ?? {}) : {};
+    const stopName = textOrEmpty(stopAttrs.name) || null;
+    const updatedAt = toIsoDate(attrs.updated_at);
 
     vehicles.push({
       id: row.id,
@@ -406,7 +440,20 @@ function normalizeVehiclesFromMbtaV3(payload: MbtaResponse): LocalTransitVehicle
       lat,
       lon,
       bearing: toNumber(attrs.bearing),
-      updatedAt: toIsoDate(attrs.updated_at),
+      directionId,
+      directionLabel: directionLabelFromId(directionId),
+      currentStopId: stopId,
+      currentStopName: stopName,
+      tripId,
+      vehicleLabel: textOrEmpty(attrs.label) || null,
+      scheduleStatus: null,
+      nextStopId: null,
+      nextStopName: null,
+      nextArrivalTime: null,
+      nextDepartureTime: null,
+      nextStopSequence: null,
+      asOf: updatedAt,
+      updatedAt,
     });
   }
 
@@ -444,6 +491,19 @@ function normalizeVehiclesFromGtfsEnhanced(payload: JsonRecord): LocalTransitVeh
       lat,
       lon,
       bearing: toNumber(position?.bearing ?? vehicle.bearing),
+      directionId: toNumber(trip?.direction_id ?? vehicle.direction_id),
+      directionLabel: directionLabelFromId(toNumber(trip?.direction_id ?? vehicle.direction_id)),
+      currentStopId: textOrEmpty(vehicle.stop_id) || null,
+      currentStopName: null,
+      tripId: textOrEmpty(trip?.trip_id) || null,
+      vehicleLabel: textOrEmpty(vehicle.label) || null,
+      scheduleStatus: null,
+      nextStopId: null,
+      nextStopName: null,
+      nextArrivalTime: null,
+      nextDepartureTime: null,
+      nextStopSequence: null,
+      asOf: toIsoDate(timestamp),
       updatedAt: toIsoDate(timestamp),
     });
   }
@@ -453,6 +513,110 @@ function normalizeVehiclesFromGtfsEnhanced(payload: JsonRecord): LocalTransitVeh
 
 function filterBostonVehicles(vehicles: LocalTransitVehicle[]): LocalTransitVehicle[] {
   return vehicles.filter((vehicle) => isWithinBostonRadius(vehicle.lat, vehicle.lon));
+}
+
+interface VehiclePredictionSummary {
+  directionId: number | null;
+  scheduleStatus: string | null;
+  nextStopId: string | null;
+  nextStopName: string | null;
+  nextArrivalTime: string | null;
+  nextDepartureTime: string | null;
+  nextStopSequence: number | null;
+}
+
+function predictionTimeScore(arrival: string | null, departure: string | null): number {
+  const raw = arrival ?? departure;
+  if (!raw) return Number.POSITIVE_INFINITY;
+  const ts = Date.parse(raw);
+  if (!Number.isFinite(ts)) return Number.POSITIVE_INFINITY;
+  return ts;
+}
+
+function pickVehiclePrediction(existing: VehiclePredictionSummary | undefined, candidate: VehiclePredictionSummary): VehiclePredictionSummary {
+  if (!existing) return candidate;
+  const existingScore = predictionTimeScore(existing.nextArrivalTime, existing.nextDepartureTime);
+  const candidateScore = predictionTimeScore(candidate.nextArrivalTime, candidate.nextDepartureTime);
+  return candidateScore < existingScore ? candidate : existing;
+}
+
+async function fetchVehiclePredictions(
+  vehicles: LocalTransitVehicle[],
+  warnings: string[],
+): Promise<Map<string, VehiclePredictionSummary>> {
+  const vehicleIds = Array.from(new Set(vehicles.map((vehicle) => vehicle.id).filter(Boolean)));
+  if (vehicleIds.length === 0) return new Map();
+
+  const summaries = new Map<string, VehiclePredictionSummary>();
+  for (const vehicleChunk of chunk(vehicleIds, 40)) {
+    try {
+      const payload = await fetchMbtaJson(MBTA_PREDICTIONS_URL, {
+        include: 'stop',
+        'filter[vehicle]': vehicleChunk.join(','),
+        'page[limit]': 1000,
+        sort: 'departure_time,arrival_time',
+        ...(MBTA_API_KEY ? { api_key: MBTA_API_KEY } : {}),
+      });
+
+      const stopNames = new Map<string, string>();
+      for (const included of payload.included ?? []) {
+        if (included.type !== 'stop') continue;
+        const name = textOrEmpty(included.attributes?.name);
+        if (name) stopNames.set(included.id, name);
+      }
+
+      for (const row of payload.data ?? []) {
+        if (row.type !== 'prediction') continue;
+        const attrs = row.attributes ?? {};
+        const vehicleId = row.relationships?.vehicle?.data?.id;
+        if (!vehicleId) continue;
+
+        const nextArrivalTime = toIsoDate(attrs.arrival_time);
+        const nextDepartureTime = toIsoDate(attrs.departure_time);
+        const stopId = row.relationships?.stop?.data?.id ?? null;
+        const candidate: VehiclePredictionSummary = {
+          directionId: toNumber(attrs.direction_id),
+          scheduleStatus: textOrEmpty(attrs.status) || null,
+          nextStopId: stopId,
+          nextStopName: (stopId ? stopNames.get(stopId) : null) ?? null,
+          nextArrivalTime,
+          nextDepartureTime,
+          nextStopSequence: toNumber(attrs.stop_sequence),
+        };
+
+        summaries.set(vehicleId, pickVehiclePrediction(summaries.get(vehicleId), candidate));
+      }
+    } catch (error) {
+      warnings.push(`MBTA prediction query failed (${error instanceof Error ? error.message : String(error)}).`);
+    }
+  }
+
+  return summaries;
+}
+
+function enrichVehiclesWithPredictions(
+  vehicles: LocalTransitVehicle[],
+  predictions: Map<string, VehiclePredictionSummary>,
+  asOfIso: string,
+): LocalTransitVehicle[] {
+  return vehicles.map((vehicle) => {
+    const summary = predictions.get(vehicle.id);
+    const directionId = summary?.directionId ?? vehicle.directionId;
+    const directionLabel = directionLabelFromId(directionId);
+
+    return {
+      ...vehicle,
+      directionId,
+      directionLabel,
+      scheduleStatus: summary?.scheduleStatus ?? vehicle.scheduleStatus,
+      nextStopId: summary?.nextStopId ?? vehicle.nextStopId,
+      nextStopName: summary?.nextStopName ?? vehicle.currentStopName ?? vehicle.nextStopName,
+      nextArrivalTime: summary?.nextArrivalTime ?? vehicle.nextArrivalTime,
+      nextDepartureTime: summary?.nextDepartureTime ?? vehicle.nextDepartureTime,
+      nextStopSequence: summary?.nextStopSequence ?? vehicle.nextStopSequence,
+      asOf: asOfIso,
+    };
+  });
 }
 
 function buildSyntheticLinesFromVehicles(vehicles: LocalTransitVehicle[]): LocalTransitLine[] {
@@ -490,6 +654,10 @@ function buildSyntheticLinesFromVehicles(vehicles: LocalTransitVehicle[]): Local
 async function fetchMbtaLines(vehicles: LocalTransitVehicle[], warnings: string[]): Promise<LocalTransitLine[]> {
   const routeIds = Array.from(new Set(vehicles.map((v) => v.routeId).filter(Boolean)));
   if (routeIds.length === 0) return [];
+  const key = routeIds.slice().sort().join(',');
+  if (cachedMbtaLines && cachedMbtaLines.key === key && (Date.now() - cachedMbtaLines.fetchedAt) < TRANSIT_LINE_CACHE_TTL_MS) {
+    return cachedMbtaLines.lines;
+  }
 
   const routeMeta = new Map<string, {
     mode: Exclude<LocalTransitMode, 'amtrak'>;
@@ -570,25 +738,28 @@ async function fetchMbtaLines(vehicles: LocalTransitVehicle[], warnings: string[
 
   const lines = Array.from(bestByRoute.values());
   if (lines.length > 0) {
-    return lines.sort((a, b) => a.routeLabel.localeCompare(b.routeLabel));
+    const sorted = lines.sort((a, b) => a.routeLabel.localeCompare(b.routeLabel));
+    cachedMbtaLines = { key, fetchedAt: Date.now(), lines: sorted };
+    return sorted;
   }
 
   const synthetic = buildSyntheticLinesFromVehicles(vehicles);
   if (synthetic.length > 0) {
     warnings.push('Falling back to synthetic transit lines from live vehicle positions.');
   }
+  cachedMbtaLines = { key, fetchedAt: Date.now(), lines: synthetic };
   return synthetic;
 }
 
 async function fetchMbtaVehicles(warnings: string[]): Promise<LocalTransitVehicle[]> {
   const primaryQuery = {
-    include: 'route',
+    include: 'route,trip,stop',
     'filter[route_type]': ROUTE_TYPES,
     'page[limit]': 1000,
     ...(MBTA_API_KEY ? { api_key: MBTA_API_KEY } : {}),
   };
   const fallbackQuery = {
-    include: 'route',
+    include: 'route,trip,stop',
     'page[limit]': 1000,
     ...(MBTA_API_KEY ? { api_key: MBTA_API_KEY } : {}),
   };
@@ -856,9 +1027,18 @@ export async function refreshLocalTransit(): Promise<LocalTransitPayload> {
     fetchAmtrakAlerts(warnings),
   ]);
 
-  const vehicles = vehiclesResult.status === 'fulfilled' ? vehiclesResult.value : [];
+  let vehicles = vehiclesResult.status === 'fulfilled' ? vehiclesResult.value : [];
   if (vehiclesResult.status === 'rejected') {
     warnings.push(`MBTA vehicle refresh failed (${vehiclesResult.reason instanceof Error ? vehiclesResult.reason.message : String(vehiclesResult.reason)}).`);
+  }
+
+  if (vehicles.length > 0) {
+    try {
+      const predictions = await fetchVehiclePredictions(vehicles, warnings);
+      vehicles = enrichVehiclesWithPredictions(vehicles, predictions, fetchedAt);
+    } catch (error) {
+      warnings.push(`MBTA prediction enrichment failed (${error instanceof Error ? error.message : String(error)}).`);
+    }
   }
 
   let lines: LocalTransitLine[] = [];
@@ -906,6 +1086,7 @@ export async function refreshLocalTransit(): Promise<LocalTransitPayload> {
         bostonRadiusKm: BOSTON_RADIUS_KM,
         mbtaApiKeyUsed: Boolean(MBTA_API_KEY),
         mbtaAlertsEndpoint: MBTA_ALERTS_URL,
+        mbtaPredictionsEndpoint: MBTA_PREDICTIONS_URL,
         mbtaVehiclesGtfsFallback: MBTA_GTFS_VEHICLES_ENHANCED_URL,
         mbtaAlertsGtfsFallback: MBTA_GTFS_ALERTS_ENHANCED_URL,
         amtrakSource: amtrak.sourceUrl,

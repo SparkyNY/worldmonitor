@@ -2729,6 +2729,12 @@ export class DeckGLMap {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const obj = info.object as any;
     const text = (value: unknown): string => escapeHtml(String(value ?? ''));
+    const timeText = (value: unknown): string => {
+      if (typeof value !== 'string' || !value) return 'N/A';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return text(value);
+      return escapeHtml(date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    };
 
     switch (layerId) {
       case 'boston-police-districts-layer': {
@@ -2747,8 +2753,24 @@ export class DeckGLMap {
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.incidentType || obj.sourceCategory || 'Incident')}</strong><br/>${text(obj.address || 'Boston')}<br/>${text(obj.dateTimeReported || obj.date || '')}</div>` };
       case 'boston-transit-lines-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.routeLabel || obj.routeId || 'Transit Route')}</strong><br/>${text(obj.mode || '')} line</div>` };
-      case 'boston-transit-vehicles-layer':
-        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.routeLabel || obj.routeId || 'Transit Vehicle')}</strong><br/>${text(obj.status || '')}</div>` };
+      case 'boston-transit-vehicles-layer': {
+        const direction = obj.directionLabel || 'Unknown';
+        const stopName = obj.nextStopName || obj.currentStopName || 'Stop unavailable';
+        const status = obj.scheduleStatus || obj.status || 'Status unavailable';
+        const eta = obj.nextArrivalTime || obj.nextDepartureTime;
+        const asOf = obj.asOf || obj.updatedAt;
+        const vehicleLabel = obj.vehicleLabel ? `<br/>Vehicle: ${text(obj.vehicleLabel)}` : '';
+        return {
+          html: `<div class="deckgl-tooltip">
+            <strong>${text(obj.routeLabel || obj.routeId || 'Transit Vehicle')}</strong><br/>
+            ${text(direction)} · ${text(obj.mode || '')}${vehicleLabel}<br/>
+            Next: ${text(stopName)}${obj.nextStopSequence != null ? ` (Stop #${text(obj.nextStopSequence)})` : ''}<br/>
+            ETA: ${timeText(eta)}<br/>
+            Service: ${text(status)}<br/>
+            As of: ${timeText(asOf)}
+          </div>`,
+        };
+      }
       case 'hotspots-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name)}</strong><br/>${text(obj.subtext)}</div>` };
       case 'earthquakes-layer':

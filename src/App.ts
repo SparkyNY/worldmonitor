@@ -731,6 +731,7 @@ export class App {
 
     if (SITE_VARIANT === 'local') {
       this.refreshScheduler.scheduleRefresh('boston-local', () => this.refreshBostonAll(), 5 * 60 * 1000);
+      this.refreshScheduler.scheduleRefresh('boston-local-transit-live', () => this.refreshBostonTransit(), 30 * 1000);
     }
     if (SITE_VARIANT === 'osint') {
       this.refreshScheduler.scheduleRefresh('boston-osint-districts', () => this.refreshSingleBostonDataset('policeDistricts'), 15 * 60 * 1000);
