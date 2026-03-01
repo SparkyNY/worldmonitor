@@ -92,6 +92,14 @@ interface ToolbarWeatherHour {
   windMph: number | null;
 }
 
+interface ToolbarWeatherLocation {
+  latitude: number;
+  longitude: number;
+  label: string;
+  countryCode?: string;
+  timezone?: string;
+}
+
 interface ToolbarWeatherAlert {
   id: string;
   event: string;
@@ -157,10 +165,45 @@ interface NwsPointAlertResponse {
   features?: NwsPointAlertFeature[];
 }
 
+interface OpenMeteoGeocodeResult {
+  name?: string;
+  latitude?: number;
+  longitude?: number;
+  country?: string;
+  country_code?: string;
+  admin1?: string;
+  timezone?: string;
+}
+
+interface OpenMeteoGeocodeResponse {
+  results?: OpenMeteoGeocodeResult[];
+}
+
+interface ZippopotamPlace {
+  'place name'?: string;
+  state?: string;
+  'state abbreviation'?: string;
+  latitude?: string;
+  longitude?: string;
+}
+
+interface ZippopotamResponse {
+  country?: string;
+  'country abbreviation'?: string;
+  places?: ZippopotamPlace[];
+}
+
 const CALENDAR_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const BACK_BAY_LAT = 42.3493;
 const BACK_BAY_LON = -71.0810;
 const WEATHER_CACHE_MS = 10 * 60 * 1000;
+const DEFAULT_WEATHER_LOCATION: ToolbarWeatherLocation = {
+  latitude: BACK_BAY_LAT,
+  longitude: BACK_BAY_LON,
+  label: 'Back Bay, Boston, MA',
+  countryCode: 'US',
+  timezone: 'America/New_York',
+};
 
 function escapeHtml(value: string): string {
   return value
@@ -225,10 +268,67 @@ function isMajorNwsAlert(event: string, severity: string): boolean {
   return /\b(warning|emergency|evacuation)\b/i.test(event);
 }
 
-async function fetchToolbarWeatherData(): Promise<ToolbarWeatherData> {
+async function resolveWeatherLocation(query: string): Promise<ToolbarWeatherLocation> {
+  const normalized = query.trim();
+  if (!normalized) {
+    throw new Error('Enter a ZIP code or City, State.');
+  }
+
+  if (/^\d{5}$/.test(normalized)) {
+    const zipRes = await fetch(`https://api.zippopotam.us/us/${encodeURIComponent(normalized)}`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!zipRes.ok) throw new Error('ZIP not found. Try a valid US ZIP code.');
+    const zipData = await zipRes.json() as ZippopotamResponse;
+    const place = zipData.places?.[0];
+    const latitude = Number(place?.latitude);
+    const longitude = Number(place?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw new Error('ZIP location coordinates unavailable.');
+    }
+    const city = place?.['place name']?.trim() || 'ZIP Area';
+    const state = place?.['state abbreviation']?.trim() || place?.state?.trim() || 'US';
+    return {
+      latitude,
+      longitude,
+      label: `${city}, ${state} (${normalized})`,
+      countryCode: zipData['country abbreviation'] || 'US',
+      timezone: 'auto',
+    };
+  }
+
+  const geocodeUrl = new URL('https://geocoding-api.open-meteo.com/v1/search');
+  geocodeUrl.searchParams.set('name', normalized);
+  geocodeUrl.searchParams.set('count', '1');
+  geocodeUrl.searchParams.set('language', 'en');
+  geocodeUrl.searchParams.set('format', 'json');
+  const geocodeRes = await fetch(geocodeUrl.toString(), { headers: { Accept: 'application/json' } });
+  if (!geocodeRes.ok) throw new Error('Location search unavailable.');
+  const geocodeData = await geocodeRes.json() as OpenMeteoGeocodeResponse;
+  const match = geocodeData.results?.find((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+  if (!match || match.latitude == null || match.longitude == null) {
+    throw new Error('Location not found. Try "City, ST" or ZIP.');
+  }
+  const locationParts = [match.name, match.admin1, match.country_code || match.country]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part && part.length > 0));
+  return {
+    latitude: match.latitude,
+    longitude: match.longitude,
+    label: locationParts.join(', '),
+    countryCode: match.country_code,
+    timezone: match.timezone || 'auto',
+  };
+}
+
+function getWeatherLocationKey(location: ToolbarWeatherLocation): string {
+  return `${location.latitude.toFixed(4)},${location.longitude.toFixed(4)}`;
+}
+
+async function fetchToolbarWeatherData(location: ToolbarWeatherLocation): Promise<ToolbarWeatherData> {
   const forecastUrl = new URL('https://api.open-meteo.com/v1/forecast');
-  forecastUrl.searchParams.set('latitude', String(BACK_BAY_LAT));
-  forecastUrl.searchParams.set('longitude', String(BACK_BAY_LON));
+  forecastUrl.searchParams.set('latitude', String(location.latitude));
+  forecastUrl.searchParams.set('longitude', String(location.longitude));
   forecastUrl.searchParams.set('current', 'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code');
   forecastUrl.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,wind_speed_10m_max,snowfall_sum');
   forecastUrl.searchParams.set('hourly', 'weather_code,temperature_2m,apparent_temperature,precipitation_probability,precipitation,snowfall,wind_speed_10m');
@@ -236,7 +336,7 @@ async function fetchToolbarWeatherData(): Promise<ToolbarWeatherData> {
   forecastUrl.searchParams.set('temperature_unit', 'fahrenheit');
   forecastUrl.searchParams.set('precipitation_unit', 'inch');
   forecastUrl.searchParams.set('wind_speed_unit', 'mph');
-  forecastUrl.searchParams.set('timezone', 'America/New_York');
+  forecastUrl.searchParams.set('timezone', location.timezone || 'auto');
 
   const forecastRes = await fetch(forecastUrl.toString(), { headers: { Accept: 'application/json' } });
   if (!forecastRes.ok) throw new Error(`Weather forecast unavailable (HTTP ${forecastRes.status})`);
@@ -297,44 +397,46 @@ async function fetchToolbarWeatherData(): Promise<ToolbarWeatherData> {
 
   let alerts: ToolbarWeatherAlert[] = [];
   let alertFetchError: string | undefined;
-  const nwsUrl = `https://api.weather.gov/alerts/active?point=${BACK_BAY_LAT},${BACK_BAY_LON}`;
-
-  try {
-    const nwsRes = await fetch(nwsUrl, {
-      headers: {
-        Accept: 'application/geo+json, application/json',
-        'User-Agent': 'WorldMonitor/1.0 (Boston local weather widget)',
-      },
-    });
-    if (!nwsRes.ok) {
-      alertFetchError = `NWS alerts unavailable (HTTP ${nwsRes.status})`;
-    } else {
-      const nws = await nwsRes.json() as NwsPointAlertResponse;
-      alerts = (nws.features ?? []).map((feature, index) => {
-        const event = feature.properties?.event || 'Weather Alert';
-        const severity = feature.properties?.severity || 'Unknown';
-        const headline = feature.properties?.headline || event;
-        const expires = feature.properties?.expires || '';
-        return {
-          id: feature.id || `nws-alert-${index}`,
-          event,
-          severity,
-          headline,
-          expires,
-          isMajor: isMajorNwsAlert(event, severity),
-        };
-      }).sort((a, b) => {
-        if (a.isMajor !== b.isMajor) return a.isMajor ? -1 : 1;
-        return a.event.localeCompare(b.event);
+  const isUsLocation = (location.countryCode || '').toUpperCase() === 'US';
+  if (isUsLocation) {
+    const nwsUrl = `https://api.weather.gov/alerts/active?point=${location.latitude},${location.longitude}`;
+    try {
+      const nwsRes = await fetch(nwsUrl, {
+        headers: {
+          Accept: 'application/geo+json, application/json',
+          'User-Agent': 'WorldMonitor/1.0 (Local weather widget)',
+        },
       });
+      if (!nwsRes.ok) {
+        alertFetchError = `NWS alerts unavailable (HTTP ${nwsRes.status})`;
+      } else {
+        const nws = await nwsRes.json() as NwsPointAlertResponse;
+        alerts = (nws.features ?? []).map((feature, index) => {
+          const event = feature.properties?.event || 'Weather Alert';
+          const severity = feature.properties?.severity || 'Unknown';
+          const headline = feature.properties?.headline || event;
+          const expires = feature.properties?.expires || '';
+          return {
+            id: feature.id || `nws-alert-${index}`,
+            event,
+            severity,
+            headline,
+            expires,
+            isMajor: isMajorNwsAlert(event, severity),
+          };
+        }).sort((a, b) => {
+          if (a.isMajor !== b.isMajor) return a.isMajor ? -1 : 1;
+          return a.event.localeCompare(b.event);
+        });
+      }
+    } catch (error) {
+      alertFetchError = `NWS alerts unavailable (${error instanceof Error ? error.message : String(error)})`;
     }
-  } catch (error) {
-    alertFetchError = `NWS alerts unavailable (${error instanceof Error ? error.message : String(error)})`;
   }
 
   return {
-    locationLabel: 'Back Bay, Boston, MA',
-    sourceLabel: 'Open-Meteo + National Weather Service',
+    locationLabel: location.label,
+    sourceLabel: isUsLocation ? 'Open-Meteo + National Weather Service' : 'Open-Meteo',
     fetchedAt: Date.now(),
     current,
     days,
@@ -522,9 +624,15 @@ export class EventHandlerManager implements AppModule {
   private calendarView: CalendarView = 'month';
   private weatherActiveTab: WeatherTab = 'today';
   private weatherSelectedDayIso: string | null = null;
+  private weatherLocation: ToolbarWeatherLocation = { ...DEFAULT_WEATHER_LOCATION };
+  private weatherSearchQuery = DEFAULT_WEATHER_LOCATION.label;
+  private weatherSearchError: string | null = null;
+  private weatherSearchLoading = false;
   private weatherDataCache: ToolbarWeatherData | null = null;
+  private weatherDataCacheKey: string | null = null;
   private weatherDataFetchedAt = 0;
   private weatherLoadingPromise: Promise<ToolbarWeatherData> | null = null;
+  private weatherLoadingKey: string | null = null;
   private readonly IDLE_PAUSE_MS = 2 * 60 * 1000;
   private debouncedUrlSync = debounce(() => {
     const shareUrl = this.getShareUrl();
@@ -1109,6 +1217,11 @@ export class EventHandlerManager implements AppModule {
     dropdown.addEventListener('click', (event) => {
       event.stopPropagation();
       const target = event.target instanceof HTMLElement ? event.target : null;
+      const resetBtn = target?.closest<HTMLElement>('[data-weather-search-reset]');
+      if (resetBtn) {
+        void this.applyWeatherLocationPreset({ ...DEFAULT_WEATHER_LOCATION });
+        return;
+      }
       const tabBtn = target?.closest<HTMLElement>('[data-weather-tab]');
       if (tabBtn?.dataset.weatherTab) {
         const requested = tabBtn.dataset.weatherTab as WeatherTab;
@@ -1138,6 +1251,22 @@ export class EventHandlerManager implements AppModule {
         this.renderWeatherLoading(dropdown);
         void this.refreshToolbarWeather({ force: true, renderIfOpen: true });
       }
+    });
+
+    dropdown.addEventListener('submit', (event) => {
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (form.dataset.weatherSearchForm !== '1') return;
+      event.preventDefault();
+      event.stopPropagation();
+      const input = form.querySelector<HTMLInputElement>('[data-weather-search-input]');
+      const query = input?.value?.trim() ?? '';
+      if (!query) {
+        this.weatherSearchError = 'Enter a ZIP code or City, State.';
+        if (this.weatherDataCache) this.renderHeaderWeather(dropdown, this.weatherDataCache);
+        return;
+      }
+      void this.applyWeatherLocationSearch(query);
     });
 
     this.boundWeatherOutsideClickHandler = (event: MouseEvent) => {
@@ -1172,7 +1301,7 @@ export class EventHandlerManager implements AppModule {
   private renderWeatherLoading(container: HTMLElement): void {
     container.innerHTML = `
       <div class="weather-popover">
-        <div class="weather-loading">Loading Back Bay weather...</div>
+        <div class="weather-loading">Loading weather for ${escapeHtml(this.weatherLocation.label)}...</div>
       </div>
     `;
   }
@@ -1312,6 +1441,9 @@ export class EventHandlerManager implements AppModule {
       </div>
     ` : '';
 
+    const noAlertsMessage = data.sourceLabel.includes('National Weather Service')
+      ? 'No local active NWS alerts.'
+      : 'No integrated alert feed for this location.';
     const alertsMarkup = data.alerts.length > 0
       ? data.alerts.slice(0, 3).map((alert) => `
         <li class="weather-alert-row ${alert.isMajor ? 'major' : ''}">
@@ -1319,13 +1451,31 @@ export class EventHandlerManager implements AppModule {
           <span class="weather-alert-event">${escapeHtml(alert.event)}</span>
         </li>
       `).join('')
-      : '<li class="weather-alert-empty">No local active NWS alerts.</li>';
+      : `<li class="weather-alert-empty">${escapeHtml(noAlertsMessage)}</li>`;
 
     container.innerHTML = `
       <div class="weather-popover">
         <div class="weather-head">
-          <div class="weather-title">Boston Weather</div>
-          <div class="weather-subtitle">${escapeHtml(data.locationLabel)}</div>
+          <div class="weather-head-top">
+            <div>
+              <div class="weather-title">Local Weather</div>
+              <div class="weather-subtitle">${escapeHtml(data.locationLabel)}</div>
+            </div>
+            <form class="weather-search" data-weather-search-form="1">
+              <input
+                class="weather-search-input"
+                data-weather-search-input
+                type="text"
+                value="${escapeHtml(this.weatherSearchQuery)}"
+                placeholder="ZIP or City, State"
+                aria-label="Search weather location"
+                ${this.weatherSearchLoading ? 'disabled' : ''}
+              />
+              <button class="weather-search-go" type="submit" ${this.weatherSearchLoading ? 'disabled' : ''}>${this.weatherSearchLoading ? '...' : 'Go'}</button>
+              <button class="weather-search-reset" type="button" data-weather-search-reset ${this.weatherSearchLoading ? 'disabled' : ''}>Boston</button>
+            </form>
+          </div>
+          ${this.weatherSearchError ? `<div class="weather-search-error">${escapeHtml(this.weatherSearchError)}</div>` : ''}
         </div>
         <div class="weather-toolbar">
           ${tabs.map((tab) => `<button class="weather-tab ${this.weatherActiveTab === tab.id ? 'active' : ''}" data-weather-tab="${tab.id}">${tab.label}</button>`).join('')}
@@ -1344,6 +1494,74 @@ export class EventHandlerManager implements AppModule {
     `;
   }
 
+  private async applyWeatherLocationPreset(location: ToolbarWeatherLocation): Promise<void> {
+    this.weatherSearchLoading = true;
+    this.weatherSearchError = null;
+    this.weatherSearchQuery = location.label;
+    this.weatherLocation = { ...location };
+    this.weatherSelectedDayIso = null;
+
+    const dropdown = document.getElementById('weatherDropdown');
+    const menu = document.getElementById('weatherMenu');
+    const isOpen = menu instanceof HTMLElement && menu.classList.contains('open');
+    if (isOpen && dropdown instanceof HTMLElement) {
+      this.renderWeatherLoading(dropdown);
+    }
+
+    try {
+      const data = await this.loadToolbarWeather(true);
+      if (isOpen && dropdown instanceof HTMLElement) {
+        this.renderHeaderWeather(dropdown, data);
+      }
+    } catch (error) {
+      this.weatherSearchError = error instanceof Error ? error.message : String(error);
+      if (isOpen && dropdown instanceof HTMLElement) {
+        this.renderWeatherError(dropdown, this.weatherSearchError);
+      }
+    } finally {
+      this.weatherSearchLoading = false;
+      if (isOpen && dropdown instanceof HTMLElement && this.weatherDataCache) {
+        this.renderHeaderWeather(dropdown, this.weatherDataCache);
+      }
+    }
+  }
+
+  private async applyWeatherLocationSearch(query: string): Promise<void> {
+    this.weatherSearchLoading = true;
+    this.weatherSearchError = null;
+    this.weatherSearchQuery = query;
+
+    const dropdown = document.getElementById('weatherDropdown');
+    const menu = document.getElementById('weatherMenu');
+    const isOpen = menu instanceof HTMLElement && menu.classList.contains('open');
+    if (isOpen && dropdown instanceof HTMLElement) {
+      if (this.weatherDataCache) this.renderHeaderWeather(dropdown, this.weatherDataCache);
+      else this.renderWeatherLoading(dropdown);
+    }
+
+    try {
+      const resolved = await resolveWeatherLocation(query);
+      this.weatherLocation = resolved;
+      this.weatherSearchQuery = resolved.label;
+      this.weatherSelectedDayIso = null;
+      const data = await this.loadToolbarWeather(true);
+      if (isOpen && dropdown instanceof HTMLElement) {
+        this.renderHeaderWeather(dropdown, data);
+      }
+    } catch (error) {
+      this.weatherSearchError = error instanceof Error ? error.message : String(error);
+      if (isOpen && dropdown instanceof HTMLElement) {
+        if (this.weatherDataCache) this.renderHeaderWeather(dropdown, this.weatherDataCache);
+        else this.renderWeatherError(dropdown, this.weatherSearchError);
+      }
+    } finally {
+      this.weatherSearchLoading = false;
+      if (isOpen && dropdown instanceof HTMLElement && this.weatherDataCache) {
+        this.renderHeaderWeather(dropdown, this.weatherDataCache);
+      }
+    }
+  }
+
   private updateWeatherBadge(data: ToolbarWeatherData | null): void {
     const badge = document.getElementById('weatherAlertBadge');
     const button = document.getElementById('weatherBtn');
@@ -1351,39 +1569,55 @@ export class EventHandlerManager implements AppModule {
     if (!(badge instanceof HTMLElement) || !(button instanceof HTMLButtonElement) || !(menu instanceof HTMLElement)) return;
 
     const majorCount = data ? data.alerts.filter((alert) => alert.isMajor).length : 0;
+    const locationLabel = data?.locationLabel || this.weatherLocation.label;
     if (majorCount > 0) {
       badge.hidden = false;
       badge.textContent = '⚠';
-      button.title = `Boston Weather (${majorCount} major alert${majorCount === 1 ? '' : 's'})`;
+      button.title = `${locationLabel} (${majorCount} major alert${majorCount === 1 ? '' : 's'})`;
       menu.classList.add('has-alert');
     } else {
       badge.hidden = true;
-      button.title = 'Boston Weather';
+      button.title = locationLabel;
       menu.classList.remove('has-alert');
     }
   }
 
   private async loadToolbarWeather(force: boolean): Promise<ToolbarWeatherData> {
-    if (!force && this.weatherDataCache && (Date.now() - this.weatherDataFetchedAt) < WEATHER_CACHE_MS) {
+    const requestLocation = { ...this.weatherLocation };
+    const requestKey = getWeatherLocationKey(requestLocation);
+    if (
+      !force
+      && this.weatherDataCache
+      && this.weatherDataCacheKey === requestKey
+      && (Date.now() - this.weatherDataFetchedAt) < WEATHER_CACHE_MS
+    ) {
       return this.weatherDataCache;
     }
 
-    if (this.weatherLoadingPromise) {
+    if (this.weatherLoadingPromise && this.weatherLoadingKey === requestKey) {
       return this.weatherLoadingPromise;
     }
 
-    this.weatherLoadingPromise = fetchToolbarWeatherData()
+    const requestPromise = fetchToolbarWeatherData(requestLocation)
       .then((data) => {
-        this.weatherDataCache = data;
-        this.weatherDataFetchedAt = Date.now();
-        this.updateWeatherBadge(data);
+        if (getWeatherLocationKey(this.weatherLocation) === requestKey) {
+          this.weatherDataCache = data;
+          this.weatherDataCacheKey = requestKey;
+          this.weatherDataFetchedAt = Date.now();
+          this.updateWeatherBadge(data);
+        }
         return data;
       })
       .finally(() => {
-        this.weatherLoadingPromise = null;
+        if (this.weatherLoadingPromise === requestPromise) {
+          this.weatherLoadingPromise = null;
+          this.weatherLoadingKey = null;
+        }
       });
 
-    return this.weatherLoadingPromise;
+    this.weatherLoadingPromise = requestPromise;
+    this.weatherLoadingKey = requestKey;
+    return requestPromise;
   }
 
   private async refreshToolbarWeather(options: { force: boolean; renderIfOpen: boolean }): Promise<void> {
