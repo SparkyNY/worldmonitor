@@ -6,7 +6,7 @@ export const config = { runtime: 'edge' };
 const BOOTSTRAP_CACHE_KEYS = {
   earthquakes:      'seismology:earthquakes:v1',
   outages:          'infra:outages:v1',
-  serviceStatuses:  'infra:service-statuses:v1',
+  serviceStatuses:  'infra:service-statuses:v2',
   sectors:          'market:sectors:v1',
   etfFlows:         'market:etf-flows:v1',
   macroSignals:     'economic:macro-signals:v1',

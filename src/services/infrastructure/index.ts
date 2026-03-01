@@ -21,7 +21,7 @@ import { isFeatureAvailable } from '../runtime-config';
 
 const client = new InfrastructureServiceClient('', { fetch: (...args) => globalThis.fetch(...args) });
 const outageBreaker = createCircuitBreaker<ListInternetOutagesResponse>({ name: 'Internet Outages', cacheTtlMs: 30 * 60 * 1000, persistCache: true });
-const statusBreaker = createCircuitBreaker<ListServiceStatusesResponse>({ name: 'Service Statuses', cacheTtlMs: 30 * 60 * 1000, persistCache: true });
+const statusBreaker = createCircuitBreaker<ListServiceStatusesResponse>({ name: 'Service Statuses v2', cacheTtlMs: 30 * 60 * 1000, persistCache: true });
 
 const emptyOutageFallback: ListInternetOutagesResponse = { outages: [], pagination: undefined };
 const emptyStatusFallback: ListServiceStatusesResponse = { statuses: [] };
@@ -138,6 +138,7 @@ const CATEGORY_MAP: Record<string, string> = {
   github: 'dev', gitlab: 'dev', npm: 'dev', docker: 'dev', bitbucket: 'dev',
   circleci: 'dev', jira: 'dev', confluence: 'dev', linear: 'dev',
   slack: 'comm', discord: 'comm', zoom: 'comm', notion: 'comm',
+  'verizon-wireless': 'comm', 'att-wireless': 'comm', 'tmobile-wireless': 'comm', 'uscellular-wireless': 'comm',
   openai: 'ai', anthropic: 'ai', replicate: 'ai',
   stripe: 'saas', twilio: 'saas', datadog: 'saas', sentry: 'saas', supabase: 'saas',
 };

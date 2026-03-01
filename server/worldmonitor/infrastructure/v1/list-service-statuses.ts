@@ -48,6 +48,10 @@ const SERVICES: ServiceDef[] = [
   { id: 'discord', name: 'Discord', statusPage: 'https://discordstatus.com/api/v2/status.json', category: 'comm' },
   { id: 'zoom', name: 'Zoom', statusPage: 'https://www.zoomstatus.com/api/v2/status.json', category: 'comm' },
   { id: 'notion', name: 'Notion', statusPage: 'https://www.notion-status.com/api/v2/status.json', category: 'comm' },
+  { id: 'verizon-wireless', name: 'Verizon Wireless', statusPage: 'https://isdown.app/status/verizon', customParser: 'isdown', category: 'comm' },
+  { id: 'att-wireless', name: 'AT&T Wireless', statusPage: 'https://isdown.app/status/att', customParser: 'isdown', category: 'comm' },
+  { id: 'tmobile-wireless', name: 'T-Mobile', statusPage: 'https://isdown.app/status/t-mobile', customParser: 'isdown', category: 'comm' },
+  { id: 'uscellular-wireless', name: 'UScellular', statusPage: 'https://isdown.app/status/us-cellular', customParser: 'isdown', category: 'comm' },
   // AI Services
   { id: 'openai', name: 'OpenAI', statusPage: 'https://status.openai.com/api/v2/status.json', customParser: 'incidentio', category: 'ai' },
   { id: 'anthropic', name: 'Anthropic', statusPage: 'https://status.claude.com/api/v2/status.json', customParser: 'incidentio', category: 'ai' },
@@ -240,6 +244,21 @@ async function checkServiceStatus(service: ServiceDef): Promise<ServiceStatus> {
       }
     }
 
+    if (service.customParser === 'isdown') {
+      const text = (await response.text()).replace(/\s+/g, ' ').toLowerCase();
+
+      if (/is currently operational|isn't down|no ongoing official outage|working normally/.test(text)) {
+        return { ...base, status: 'SERVICE_OPERATIONAL_STATUS_OPERATIONAL', description: 'Operational (IsDown)', checkedAt: now, latencyMs };
+      }
+      if (/major outage|confirmed outage|is down|service disruption/.test(text)) {
+        return { ...base, status: 'SERVICE_OPERATIONAL_STATUS_MAJOR_OUTAGE', description: 'Major outage reported (IsDown)', checkedAt: now, latencyMs };
+      }
+      if (/possible outage|possible incident|degraded|issues reported/.test(text)) {
+        return { ...base, status: 'SERVICE_OPERATIONAL_STATUS_DEGRADED', description: 'Potential issues reported (IsDown)', checkedAt: now, latencyMs };
+      }
+      return unknown('Could not parse carrier status');
+    }
+
     // Default: Statuspage.io JSON format
     const text = await response.text();
     if (text.startsWith('<!') || text.startsWith('<html')) {
@@ -284,7 +303,7 @@ async function checkServiceStatus(service: ServiceDef): Promise<ServiceStatus> {
 // RPC implementation
 // ========================================================================
 
-const INFRA_CACHE_KEY = 'infra:service-statuses:v1';
+const INFRA_CACHE_KEY = 'infra:service-statuses:v2';
 const INFRA_CACHE_TTL = 1800; // 30 minutes
 
 export async function listServiceStatuses(
