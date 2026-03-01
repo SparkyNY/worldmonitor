@@ -48,6 +48,432 @@ import { UnifiedSettings } from '@/components/UnifiedSettings';
 import { t } from '@/services/i18n';
 import { TvModeController } from '@/services/tv-mode';
 
+type CalendarMilestoneCategory = 'holiday' | 'dst' | 'season';
+type CalendarView = 'month' | 'week' | 'quarter';
+type WeatherTab = 'today' | 'seven' | 'ten';
+
+interface CalendarMilestone {
+  date: Date;
+  label: string;
+  category: CalendarMilestoneCategory;
+}
+
+interface ToolbarWeatherCurrent {
+  temperatureF: number | null;
+  feelsLikeF: number | null;
+  humidityPct: number | null;
+  windMph: number | null;
+  weatherCode: number | null;
+}
+
+interface ToolbarWeatherDay {
+  dateIso: string;
+  dayLabel: string;
+  weatherCode: number | null;
+  highF: number | null;
+  lowF: number | null;
+  feelsHighF: number | null;
+  feelsLowF: number | null;
+  precipChancePct: number | null;
+  windMaxMph: number | null;
+  snowTotalIn: number | null;
+}
+
+interface ToolbarWeatherHour {
+  dateIso: string;
+  timeIso: string;
+  timeLabel: string;
+  weatherCode: number | null;
+  temperatureF: number | null;
+  feelsLikeF: number | null;
+  precipChancePct: number | null;
+  precipIn: number | null;
+  snowIn: number | null;
+  windMph: number | null;
+}
+
+interface ToolbarWeatherAlert {
+  id: string;
+  event: string;
+  severity: string;
+  headline: string;
+  expires: string;
+  isMajor: boolean;
+}
+
+interface ToolbarWeatherData {
+  locationLabel: string;
+  sourceLabel: string;
+  fetchedAt: number;
+  current: ToolbarWeatherCurrent;
+  days: ToolbarWeatherDay[];
+  hourlyByDate: Record<string, ToolbarWeatherHour[]>;
+  alerts: ToolbarWeatherAlert[];
+  alertFetchError?: string;
+}
+
+interface OpenMeteoForecastResponse {
+  current?: {
+    temperature_2m?: number;
+    apparent_temperature?: number;
+    relative_humidity_2m?: number;
+    wind_speed_10m?: number;
+    weather_code?: number;
+  };
+  daily?: {
+    time?: string[];
+    weather_code?: number[];
+    temperature_2m_max?: number[];
+    temperature_2m_min?: number[];
+    apparent_temperature_max?: number[];
+    apparent_temperature_min?: number[];
+    precipitation_probability_max?: number[];
+    wind_speed_10m_max?: number[];
+    snowfall_sum?: number[];
+  };
+  hourly?: {
+    time?: string[];
+    weather_code?: number[];
+    temperature_2m?: number[];
+    apparent_temperature?: number[];
+    precipitation_probability?: number[];
+    precipitation?: number[];
+    snowfall?: number[];
+    wind_speed_10m?: number[];
+  };
+}
+
+interface NwsPointAlertFeature {
+  id?: string;
+  properties?: {
+    event?: string;
+    severity?: string;
+    headline?: string;
+    expires?: string;
+  };
+}
+
+interface NwsPointAlertResponse {
+  features?: NwsPointAlertFeature[];
+}
+
+const CALENDAR_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const BACK_BAY_LAT = 42.3493;
+const BACK_BAY_LON = -71.0810;
+const WEATHER_CACHE_MS = 10 * 60 * 1000;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function toRounded(value: number | undefined, precision = 0): number | null {
+  if (!Number.isFinite(value)) return null;
+  const scale = 10 ** precision;
+  return Math.round((value as number) * scale) / scale;
+}
+
+function parseDateLabel(dateIso: string): string {
+  const date = new Date(`${dateIso}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return dateIso;
+  return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function weatherCodeToText(code: number | null): string {
+  if (code == null) return 'Unknown';
+  if (code === 0) return 'Clear';
+  if (code >= 1 && code <= 2) return 'Partly cloudy';
+  if (code === 3) return 'Cloudy';
+  if (code >= 45 && code <= 48) return 'Fog';
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return 'Rain';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'Snow';
+  if (code >= 95) return 'Thunderstorm';
+  return 'Mixed';
+}
+
+function weatherCodeToIcon(code: number | null): string {
+  if (code == null) return '•';
+  if (code === 0) return '☀';
+  if (code >= 1 && code <= 2) return '⛅';
+  if (code === 3) return '☁';
+  if (code >= 45 && code <= 48) return '🌫';
+  if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return '🌧';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return '❄';
+  if (code >= 95) return '⛈';
+  return '•';
+}
+
+function isSnowWeatherCode(code: number | null): boolean {
+  if (code == null) return false;
+  return (code >= 71 && code <= 77) || code === 85 || code === 86;
+}
+
+function estimateSnowRangeIn(totalIn: number): { lowIn: number; highIn: number } {
+  const spread = Math.max(0.2, totalIn * 0.25);
+  const lowIn = Math.max(0, toRounded(totalIn - spread, 1) ?? 0);
+  const highIn = Math.max(lowIn, toRounded(totalIn + spread, 1) ?? lowIn);
+  return { lowIn, highIn };
+}
+
+function isMajorNwsAlert(event: string, severity: string): boolean {
+  const s = severity.toLowerCase();
+  if (s === 'extreme' || s === 'severe') return true;
+  return /\b(warning|emergency|evacuation)\b/i.test(event);
+}
+
+async function fetchToolbarWeatherData(): Promise<ToolbarWeatherData> {
+  const forecastUrl = new URL('https://api.open-meteo.com/v1/forecast');
+  forecastUrl.searchParams.set('latitude', String(BACK_BAY_LAT));
+  forecastUrl.searchParams.set('longitude', String(BACK_BAY_LON));
+  forecastUrl.searchParams.set('current', 'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code');
+  forecastUrl.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_probability_max,wind_speed_10m_max,snowfall_sum');
+  forecastUrl.searchParams.set('hourly', 'weather_code,temperature_2m,apparent_temperature,precipitation_probability,precipitation,snowfall,wind_speed_10m');
+  forecastUrl.searchParams.set('forecast_days', '10');
+  forecastUrl.searchParams.set('temperature_unit', 'fahrenheit');
+  forecastUrl.searchParams.set('precipitation_unit', 'inch');
+  forecastUrl.searchParams.set('wind_speed_unit', 'mph');
+  forecastUrl.searchParams.set('timezone', 'America/New_York');
+
+  const forecastRes = await fetch(forecastUrl.toString(), { headers: { Accept: 'application/json' } });
+  if (!forecastRes.ok) throw new Error(`Weather forecast unavailable (HTTP ${forecastRes.status})`);
+  const forecast = await forecastRes.json() as OpenMeteoForecastResponse;
+
+  const daily = forecast.daily;
+  const dates = daily?.time ?? [];
+  if (dates.length === 0) throw new Error('Weather forecast returned no daily data');
+
+  const hourly = forecast.hourly;
+  const hourlyTimes = hourly?.time ?? [];
+  const hourlyByDate: Record<string, ToolbarWeatherHour[]> = {};
+  for (let index = 0; index < hourlyTimes.length; index += 1) {
+    const timeIso = hourlyTimes[index];
+    if (!timeIso) continue;
+    const dateIso = timeIso.split('T')[0];
+    if (!dateIso) continue;
+    const time = new Date(timeIso);
+    const entry: ToolbarWeatherHour = {
+      dateIso,
+      timeIso,
+      timeLabel: Number.isNaN(time.getTime())
+        ? timeIso
+        : time.toLocaleTimeString(undefined, { hour: 'numeric' }),
+      weatherCode: hourly?.weather_code?.[index] ?? null,
+      temperatureF: toRounded(hourly?.temperature_2m?.[index]),
+      feelsLikeF: toRounded(hourly?.apparent_temperature?.[index]),
+      precipChancePct: toRounded(hourly?.precipitation_probability?.[index]),
+      precipIn: toRounded(hourly?.precipitation?.[index], 2),
+      snowIn: toRounded(hourly?.snowfall?.[index], 2),
+      windMph: toRounded(hourly?.wind_speed_10m?.[index]),
+    };
+    const rows = hourlyByDate[dateIso] ?? [];
+    rows.push(entry);
+    hourlyByDate[dateIso] = rows;
+  }
+
+  const days: ToolbarWeatherDay[] = dates.slice(0, 10).map((dateIso, index) => ({
+    dateIso,
+    dayLabel: parseDateLabel(dateIso),
+    weatherCode: daily?.weather_code?.[index] ?? null,
+    highF: toRounded(daily?.temperature_2m_max?.[index]),
+    lowF: toRounded(daily?.temperature_2m_min?.[index]),
+    feelsHighF: toRounded(daily?.apparent_temperature_max?.[index]),
+    feelsLowF: toRounded(daily?.apparent_temperature_min?.[index]),
+    precipChancePct: toRounded(daily?.precipitation_probability_max?.[index]),
+    windMaxMph: toRounded(daily?.wind_speed_10m_max?.[index]),
+    snowTotalIn: toRounded(daily?.snowfall_sum?.[index], 2),
+  }));
+
+  const current: ToolbarWeatherCurrent = {
+    temperatureF: toRounded(forecast.current?.temperature_2m),
+    feelsLikeF: toRounded(forecast.current?.apparent_temperature),
+    humidityPct: toRounded(forecast.current?.relative_humidity_2m),
+    windMph: toRounded(forecast.current?.wind_speed_10m),
+    weatherCode: forecast.current?.weather_code ?? days[0]?.weatherCode ?? null,
+  };
+
+  let alerts: ToolbarWeatherAlert[] = [];
+  let alertFetchError: string | undefined;
+  const nwsUrl = `https://api.weather.gov/alerts/active?point=${BACK_BAY_LAT},${BACK_BAY_LON}`;
+
+  try {
+    const nwsRes = await fetch(nwsUrl, {
+      headers: {
+        Accept: 'application/geo+json, application/json',
+        'User-Agent': 'WorldMonitor/1.0 (Boston local weather widget)',
+      },
+    });
+    if (!nwsRes.ok) {
+      alertFetchError = `NWS alerts unavailable (HTTP ${nwsRes.status})`;
+    } else {
+      const nws = await nwsRes.json() as NwsPointAlertResponse;
+      alerts = (nws.features ?? []).map((feature, index) => {
+        const event = feature.properties?.event || 'Weather Alert';
+        const severity = feature.properties?.severity || 'Unknown';
+        const headline = feature.properties?.headline || event;
+        const expires = feature.properties?.expires || '';
+        return {
+          id: feature.id || `nws-alert-${index}`,
+          event,
+          severity,
+          headline,
+          expires,
+          isMajor: isMajorNwsAlert(event, severity),
+        };
+      }).sort((a, b) => {
+        if (a.isMajor !== b.isMajor) return a.isMajor ? -1 : 1;
+        return a.event.localeCompare(b.event);
+      });
+    }
+  } catch (error) {
+    alertFetchError = `NWS alerts unavailable (${error instanceof Error ? error.message : String(error)})`;
+  }
+
+  return {
+    locationLabel: 'Back Bay, Boston, MA',
+    sourceLabel: 'Open-Meteo + National Weather Service',
+    fetchedAt: Date.now(),
+    current,
+    days,
+    hourlyByDate,
+    alerts,
+    alertFetchError,
+  };
+}
+
+function localNoonDate(year: number, month: number, day: number): Date {
+  return new Date(year, month, day, 12, 0, 0, 0);
+}
+
+function getNthWeekdayOfMonth(year: number, month: number, weekday: number, nth: number): Date {
+  const first = localNoonDate(year, month, 1);
+  const offset = (weekday - first.getDay() + 7) % 7;
+  return localNoonDate(year, month, 1 + offset + (nth - 1) * 7);
+}
+
+function getLastWeekdayOfMonth(year: number, month: number, weekday: number): Date {
+  const last = localNoonDate(year, month + 1, 0);
+  const offset = (last.getDay() - weekday + 7) % 7;
+  return localNoonDate(year, month, last.getDate() - offset);
+}
+
+function getObservedFederalHoliday(date: Date): Date {
+  const observed = new Date(date);
+  const day = observed.getDay();
+  if (day === 6) observed.setDate(observed.getDate() - 1); // Saturday -> Friday
+  if (day === 0) observed.setDate(observed.getDate() + 1); // Sunday -> Monday
+  return localNoonDate(observed.getFullYear(), observed.getMonth(), observed.getDate());
+}
+
+function getCalendarDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function startOfWeek(date: Date): Date {
+  const d = localNoonDate(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - d.getDay());
+  return localNoonDate(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function endOfWeek(date: Date): Date {
+  const start = startOfWeek(date);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return localNoonDate(end.getFullYear(), end.getMonth(), end.getDate());
+}
+
+function startOfQuarter(date: Date): Date {
+  const month = date.getMonth();
+  const quarterStartMonth = month - (month % 3);
+  return localNoonDate(date.getFullYear(), quarterStartMonth, 1);
+}
+
+function endOfQuarter(date: Date): Date {
+  const start = startOfQuarter(date);
+  return localNoonDate(start.getFullYear(), start.getMonth() + 3, 0);
+}
+
+function buildHolidayMilestonesForYear(year: number): CalendarMilestone[] {
+  const milestones: CalendarMilestone[] = [];
+  const pushFixedHoliday = (month: number, day: number, label: string): void => {
+    const official = localNoonDate(year, month, day);
+    const observed = getObservedFederalHoliday(official);
+    const observedOnly = observed.getTime() !== official.getTime();
+    milestones.push({
+      date: observed,
+      label: observedOnly ? `${label} (Observed)` : label,
+      category: 'holiday',
+    });
+  };
+
+  pushFixedHoliday(0, 1, "New Year's Day");
+  milestones.push({ date: getNthWeekdayOfMonth(year, 0, 1, 3), label: 'Martin Luther King Jr. Day', category: 'holiday' });
+  milestones.push({ date: getNthWeekdayOfMonth(year, 1, 1, 3), label: "Presidents' Day", category: 'holiday' });
+  milestones.push({ date: getLastWeekdayOfMonth(year, 4, 1), label: 'Memorial Day', category: 'holiday' });
+  pushFixedHoliday(5, 19, 'Juneteenth');
+  pushFixedHoliday(6, 4, 'Independence Day');
+  milestones.push({ date: getNthWeekdayOfMonth(year, 8, 1, 1), label: 'Labor Day', category: 'holiday' });
+  milestones.push({ date: getNthWeekdayOfMonth(year, 9, 1, 2), label: 'Indigenous Peoples / Columbus Day', category: 'holiday' });
+  pushFixedHoliday(10, 11, 'Veterans Day');
+  milestones.push({ date: getNthWeekdayOfMonth(year, 10, 4, 4), label: 'Thanksgiving', category: 'holiday' });
+  pushFixedHoliday(11, 25, 'Christmas Day');
+  if (year % 4 === 1) {
+    let inauguration = localNoonDate(year, 0, 20);
+    if (inauguration.getDay() === 0) inauguration = localNoonDate(year, 0, 21);
+    milestones.push({ date: inauguration, label: 'Inauguration Day', category: 'holiday' });
+  }
+
+  return milestones;
+}
+
+function buildDstMilestonesForYear(year: number): CalendarMilestone[] {
+  return [
+    { date: getNthWeekdayOfMonth(year, 2, 0, 2), label: 'Daylight Saving Time Starts', category: 'dst' },
+    { date: getNthWeekdayOfMonth(year, 10, 0, 1), label: 'Daylight Saving Time Ends', category: 'dst' },
+  ];
+}
+
+function buildSeasonMilestonesForYear(year: number): CalendarMilestone[] {
+  return [
+    { date: localNoonDate(year, 2, 20), label: 'Spring Begins', category: 'season' },
+    { date: localNoonDate(year, 5, 20), label: 'Summer Begins', category: 'season' },
+    { date: localNoonDate(year, 8, 22), label: 'Fall Begins', category: 'season' },
+    { date: localNoonDate(year, 11, 21), label: 'Winter Begins', category: 'season' },
+  ];
+}
+
+function buildCalendarMilestonesForYear(year: number): CalendarMilestone[] {
+  return [
+    ...buildHolidayMilestonesForYear(year),
+    ...buildDstMilestonesForYear(year),
+    ...buildSeasonMilestonesForYear(year),
+  ];
+}
+
+function getCalendarMilestonesForRange(start: Date, end: Date, limit = 8): CalendarMilestone[] {
+  const startYear = start.getFullYear();
+  const endYear = end.getFullYear();
+  const years: number[] = [];
+  for (let year = startYear; year <= endYear; year += 1) {
+    years.push(year);
+  }
+
+  const all = years.flatMap((year) => [
+    ...buildCalendarMilestonesForYear(year),
+  ]);
+
+  return all
+    .filter((item) => item.date.getTime() >= start.getTime() && item.date.getTime() <= end.getTime())
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .slice(0, limit);
+}
+
 export interface EventHandlerCallbacks {
   updateSearchIndex: () => void;
   loadAllData: () => Promise<void>;
@@ -79,6 +505,10 @@ export class EventHandlerManager implements AppModule {
   private boundResizeHandler: (() => void) | null = null;
   private boundVisibilityHandler: (() => void) | null = null;
   private boundDesktopExternalLinkHandler: ((e: MouseEvent) => void) | null = null;
+  private boundCalendarOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+  private boundCalendarKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
+  private boundWeatherOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+  private boundWeatherKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
   private boundIdleResetHandler: (() => void) | null = null;
   private boundKonamiHandler: ((e: KeyboardEvent) => void) | null = null;
   private konamiProgress = 0;
@@ -87,6 +517,14 @@ export class EventHandlerManager implements AppModule {
   private idleTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private snapshotIntervalId: ReturnType<typeof setInterval> | null = null;
   private clockIntervalId: ReturnType<typeof setInterval> | null = null;
+  private weatherRefreshIntervalId: ReturnType<typeof setInterval> | null = null;
+  private calendarDisplayDate: Date = localNoonDate(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+  private calendarView: CalendarView = 'month';
+  private weatherActiveTab: WeatherTab = 'today';
+  private weatherSelectedDayIso: string | null = null;
+  private weatherDataCache: ToolbarWeatherData | null = null;
+  private weatherDataFetchedAt = 0;
+  private weatherLoadingPromise: Promise<ToolbarWeatherData> | null = null;
   private readonly IDLE_PAUSE_MS = 2 * 60 * 1000;
   private debouncedUrlSync = debounce(() => {
     const shareUrl = this.getShareUrl();
@@ -163,6 +601,26 @@ export class EventHandlerManager implements AppModule {
       document.removeEventListener('click', this.boundDesktopExternalLinkHandler, true);
       this.boundDesktopExternalLinkHandler = null;
     }
+    if (this.boundCalendarOutsideClickHandler) {
+      document.removeEventListener('click', this.boundCalendarOutsideClickHandler);
+      this.boundCalendarOutsideClickHandler = null;
+    }
+    if (this.boundCalendarKeydownHandler) {
+      document.removeEventListener('keydown', this.boundCalendarKeydownHandler);
+      this.boundCalendarKeydownHandler = null;
+    }
+    if (this.boundWeatherOutsideClickHandler) {
+      document.removeEventListener('click', this.boundWeatherOutsideClickHandler);
+      this.boundWeatherOutsideClickHandler = null;
+    }
+    if (this.boundWeatherKeydownHandler) {
+      document.removeEventListener('keydown', this.boundWeatherKeydownHandler);
+      this.boundWeatherKeydownHandler = null;
+    }
+    if (this.weatherRefreshIntervalId) {
+      clearInterval(this.weatherRefreshIntervalId);
+      this.weatherRefreshIntervalId = null;
+    }
     if (this.idleTimeoutId) {
       clearTimeout(this.idleTimeoutId);
       this.idleTimeoutId = null;
@@ -237,6 +695,8 @@ export class EventHandlerManager implements AppModule {
       this.updateHeaderThemeIcon();
       trackThemeChanged(next);
     });
+    this.setupHeaderCalendar();
+    this.setupHeaderWeather();
 
     const isLocalDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     if (this.ctx.isDesktopApp || isLocalDev) {
@@ -322,6 +782,627 @@ export class EventHandlerManager implements AppModule {
     }
 
     this.setupKonamiCode();
+  }
+
+  private setupHeaderCalendar(): void {
+    const menu = document.getElementById('calendarMenu');
+    const button = document.getElementById('calendarBtn');
+    const dropdown = document.getElementById('calendarDropdown');
+    if (!(menu instanceof HTMLElement) || !(button instanceof HTMLButtonElement) || !(dropdown instanceof HTMLElement)) {
+      return;
+    }
+
+    const openMenu = (): void => {
+      this.closeHeaderWeather();
+      this.renderHeaderCalendar(dropdown);
+      menu.classList.add('open');
+      dropdown.hidden = false;
+      button.setAttribute('aria-expanded', 'true');
+    };
+
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (menu.classList.contains('open')) {
+        this.closeHeaderCalendar();
+      } else {
+        openMenu();
+      }
+    });
+
+    dropdown.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const todayBtn = target?.closest<HTMLElement>('[data-calendar-today]');
+      if (todayBtn) {
+        const now = new Date();
+        this.calendarDisplayDate = localNoonDate(now.getFullYear(), now.getMonth(), now.getDate());
+        this.renderHeaderCalendar(dropdown);
+        return;
+      }
+      const viewBtn = target?.closest<HTMLElement>('[data-calendar-view]');
+      if (viewBtn?.dataset.calendarView) {
+        const requested = viewBtn.dataset.calendarView as CalendarView;
+        if (requested === 'month' || requested === 'week' || requested === 'quarter') {
+          this.calendarView = requested;
+          if (requested === 'month') {
+            this.calendarDisplayDate = localNoonDate(this.calendarDisplayDate.getFullYear(), this.calendarDisplayDate.getMonth(), 1);
+          } else if (requested === 'quarter') {
+            this.calendarDisplayDate = startOfQuarter(this.calendarDisplayDate);
+          }
+          this.renderHeaderCalendar(dropdown);
+        }
+        return;
+      }
+      const navBtn = target?.closest<HTMLElement>('[data-calendar-nav]');
+      if (!navBtn) return;
+      const delta = Number(navBtn.dataset.calendarNav);
+      if (!Number.isFinite(delta) || delta === 0) return;
+      if (this.calendarView === 'week') {
+        this.calendarDisplayDate = localNoonDate(
+          this.calendarDisplayDate.getFullYear(),
+          this.calendarDisplayDate.getMonth(),
+          this.calendarDisplayDate.getDate() + (7 * delta),
+        );
+      } else if (this.calendarView === 'quarter') {
+        this.calendarDisplayDate = localNoonDate(
+          this.calendarDisplayDate.getFullYear(),
+          this.calendarDisplayDate.getMonth() + (3 * delta),
+          1,
+        );
+      } else {
+        this.calendarDisplayDate = localNoonDate(
+          this.calendarDisplayDate.getFullYear(),
+          this.calendarDisplayDate.getMonth() + delta,
+          1,
+        );
+      }
+      this.renderHeaderCalendar(dropdown);
+    });
+
+    this.boundCalendarOutsideClickHandler = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!menu.contains(target)) {
+        this.closeHeaderCalendar();
+      }
+    };
+    document.addEventListener('click', this.boundCalendarOutsideClickHandler);
+
+    this.boundCalendarKeydownHandler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        this.closeHeaderCalendar();
+      }
+    };
+    document.addEventListener('keydown', this.boundCalendarKeydownHandler);
+  }
+
+  private closeHeaderCalendar(): void {
+    const menu = document.getElementById('calendarMenu');
+    const button = document.getElementById('calendarBtn');
+    const dropdown = document.getElementById('calendarDropdown');
+    if (menu) menu.classList.remove('open');
+    if (dropdown) dropdown.hidden = true;
+    if (button instanceof HTMLButtonElement) {
+      button.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  private renderCalendarMonthGrid(
+    monthStart: Date,
+    todayKey: string,
+    milestonesByDate: Map<string, CalendarMilestone[]>,
+    compact = false,
+  ): string {
+    const isPrideMonth = monthStart.getMonth() === 5;
+    const shellClasses = ['calendar-grid-shell'];
+    if (compact) shellClasses.push('compact');
+    if (isPrideMonth) shellClasses.push('pride-month');
+    const firstWeekday = monthStart.getDay();
+    const daysInMonth = localNoonDate(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+    const dayCells: string[] = [];
+    for (let i = 0; i < firstWeekday; i += 1) {
+      dayCells.push('<div class="calendar-day empty"></div>');
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = localNoonDate(monthStart.getFullYear(), monthStart.getMonth(), day);
+      const dateKey = getCalendarDateKey(date);
+      const milestones = milestonesByDate.get(dateKey) ?? [];
+      const classes = ['calendar-day'];
+      if (dateKey === todayKey) classes.push('today');
+      if (milestones.length > 0) classes.push('has-event');
+      const tooltip = milestones.map((m) => m.label).join(' | ');
+      dayCells.push(`<div class="${classes.join(' ')}"${tooltip ? ` title="${escapeHtml(tooltip)}"` : ''}>${day}</div>`);
+    }
+    return `
+      <div class="${shellClasses.join(' ')}">
+        ${isPrideMonth ? '<div class="calendar-pride-banner">Pride Month</div>' : ''}
+        <div class="calendar-weekdays">
+          ${CALENDAR_WEEKDAYS.map((day) => `<span>${day}</span>`).join('')}
+        </div>
+        <div class="calendar-days">${dayCells.join('')}</div>
+      </div>
+    `;
+  }
+
+  private renderCalendarWeekGrid(
+    weekStart: Date,
+    todayKey: string,
+    milestonesByDate: Map<string, CalendarMilestone[]>,
+  ): string {
+    const dayCells: string[] = [];
+    for (let offset = 0; offset < 7; offset += 1) {
+      const date = localNoonDate(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + offset);
+      const dateKey = getCalendarDateKey(date);
+      const milestones = milestonesByDate.get(dateKey) ?? [];
+      const classes = ['calendar-day'];
+      if (dateKey === todayKey) classes.push('today');
+      if (milestones.length > 0) classes.push('has-event');
+      const tooltip = milestones.map((m) => m.label).join(' | ');
+      dayCells.push(`
+        <div class="${classes.join(' ')}"${tooltip ? ` title="${escapeHtml(tooltip)}"` : ''}>
+          <span class="calendar-day-num">${date.getDate()}</span>
+          <span class="calendar-day-sub">${escapeHtml(date.toLocaleDateString(undefined, { month: 'short' }))}</span>
+        </div>
+      `);
+    }
+    return `
+      <div class="calendar-grid-shell">
+        <div class="calendar-weekdays">
+          ${CALENDAR_WEEKDAYS.map((day) => `<span>${day}</span>`).join('')}
+        </div>
+        <div class="calendar-days calendar-days-week">${dayCells.join('')}</div>
+      </div>
+    `;
+  }
+
+  private renderHeaderCalendar(container: HTMLElement): void {
+    const today = localNoonDate(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+    const todayKey = getCalendarDateKey(today);
+    let periodStart: Date;
+    let periodEnd: Date;
+    let periodLabel: string;
+    let prevLabel: string;
+    let nextLabel: string;
+    let periodGridMarkup: string;
+    let milestonesTitle = 'Key Dates This Month';
+
+    if (this.calendarView === 'week') {
+      const weekStart = startOfWeek(this.calendarDisplayDate);
+      const weekEnd = endOfWeek(this.calendarDisplayDate);
+      periodStart = weekStart;
+      periodEnd = weekEnd;
+      periodLabel = `${weekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      prevLabel = 'Previous week';
+      nextLabel = 'Next week';
+      milestonesTitle = 'Key Dates This Week';
+      const milestones = getCalendarMilestonesForRange(periodStart, periodEnd, 24);
+      const milestoneMap = new Map<string, CalendarMilestone[]>();
+      for (const milestone of milestones) {
+        const key = getCalendarDateKey(milestone.date);
+        const list = milestoneMap.get(key) ?? [];
+        list.push(milestone);
+        milestoneMap.set(key, list);
+      }
+      periodGridMarkup = this.renderCalendarWeekGrid(weekStart, todayKey, milestoneMap);
+    } else if (this.calendarView === 'quarter') {
+      const quarterStart = startOfQuarter(this.calendarDisplayDate);
+      const quarterEnd = endOfQuarter(this.calendarDisplayDate);
+      periodStart = quarterStart;
+      periodEnd = quarterEnd;
+      const quarterNumber = Math.floor(quarterStart.getMonth() / 3) + 1;
+      periodLabel = `Q${quarterNumber} ${quarterStart.getFullYear()} (${quarterStart.toLocaleDateString(undefined, { month: 'short' })} - ${quarterEnd.toLocaleDateString(undefined, { month: 'short' })})`;
+      prevLabel = 'Previous quarter';
+      nextLabel = 'Next quarter';
+      milestonesTitle = 'Key Dates This Quarter';
+      const milestones = getCalendarMilestonesForRange(periodStart, periodEnd, 96);
+      const milestoneMap = new Map<string, CalendarMilestone[]>();
+      for (const milestone of milestones) {
+        const key = getCalendarDateKey(milestone.date);
+        const list = milestoneMap.get(key) ?? [];
+        list.push(milestone);
+        milestoneMap.set(key, list);
+      }
+      const monthCards = [0, 1, 2].map((offset) => {
+        const monthStart = localNoonDate(quarterStart.getFullYear(), quarterStart.getMonth() + offset, 1);
+        const isPrideMonth = monthStart.getMonth() === 5;
+        return `
+          <section class="calendar-quarter-month ${isPrideMonth ? 'pride-month' : ''}">
+            <h4 class="calendar-quarter-month-title">${escapeHtml(monthStart.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}</h4>
+            ${this.renderCalendarMonthGrid(monthStart, todayKey, milestoneMap, true)}
+          </section>
+        `;
+      }).join('');
+      periodGridMarkup = `<div class="calendar-quarter-list">${monthCards}</div>`;
+    } else {
+      const monthStart = localNoonDate(this.calendarDisplayDate.getFullYear(), this.calendarDisplayDate.getMonth(), 1);
+      const monthEnd = localNoonDate(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+      periodStart = monthStart;
+      periodEnd = monthEnd;
+      periodLabel = monthStart.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      prevLabel = 'Previous month';
+      nextLabel = 'Next month';
+      milestonesTitle = 'Key Dates This Month';
+      const milestones = getCalendarMilestonesForRange(periodStart, periodEnd, 48);
+      const milestoneMap = new Map<string, CalendarMilestone[]>();
+      for (const milestone of milestones) {
+        const key = getCalendarDateKey(milestone.date);
+        const list = milestoneMap.get(key) ?? [];
+        list.push(milestone);
+        milestoneMap.set(key, list);
+      }
+      periodGridMarkup = this.renderCalendarMonthGrid(monthStart, todayKey, milestoneMap);
+    }
+
+    const categoryLabels: Record<CalendarMilestoneCategory, string> = {
+      holiday: 'Holiday',
+      dst: 'DST',
+      season: 'Season',
+    };
+    const periodMilestones = getCalendarMilestonesForRange(periodStart, periodEnd, 12);
+    const milestoneRows = periodMilestones.length > 0
+      ? periodMilestones.map((item) => {
+        const shortDate = item.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return `
+          <li class="calendar-milestone ${item.category}">
+            <span class="calendar-milestone-date">${escapeHtml(shortDate)}</span>
+            <span class="calendar-milestone-label">${escapeHtml(item.label)}</span>
+            <span class="calendar-milestone-tag">${categoryLabels[item.category]}</span>
+          </li>
+        `;
+      }).join('')
+      : '<li class="calendar-milestone-empty">No highlighted dates in this view.</li>';
+    const todayInCurrentView = today.getTime() >= periodStart.getTime() && today.getTime() <= periodEnd.getTime();
+
+    container.innerHTML = `
+      <div class="calendar-popover">
+        <div class="calendar-head">
+          <button class="calendar-nav-btn" data-calendar-nav="-1" title="${escapeHtml(prevLabel)}" aria-label="${escapeHtml(prevLabel)}">‹</button>
+          <div class="calendar-month">${escapeHtml(periodLabel)}</div>
+          <button class="calendar-nav-btn" data-calendar-nav="1" title="${escapeHtml(nextLabel)}" aria-label="${escapeHtml(nextLabel)}">›</button>
+        </div>
+        <div class="calendar-head-sub">
+          <div class="calendar-today">${today.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}</div>
+          <button class="calendar-today-btn ${todayInCurrentView ? 'is-current' : ''}" data-calendar-today title="Jump to today">Today</button>
+        </div>
+        <div class="calendar-view-tabs">
+          <button class="calendar-view-tab ${this.calendarView === 'week' ? 'active' : ''}" data-calendar-view="week">Week</button>
+          <button class="calendar-view-tab ${this.calendarView === 'month' ? 'active' : ''}" data-calendar-view="month">Month</button>
+          <button class="calendar-view-tab ${this.calendarView === 'quarter' ? 'active' : ''}" data-calendar-view="quarter">Quarter</button>
+        </div>
+        ${periodGridMarkup}
+        <div class="calendar-milestones">
+          <div class="calendar-milestones-title">${milestonesTitle}</div>
+          <ul>${milestoneRows}</ul>
+        </div>
+      </div>
+    `;
+  }
+
+  private setupHeaderWeather(): void {
+    const menu = document.getElementById('weatherMenu');
+    const button = document.getElementById('weatherBtn');
+    const dropdown = document.getElementById('weatherDropdown');
+    if (!(menu instanceof HTMLElement) || !(button instanceof HTMLButtonElement) || !(dropdown instanceof HTMLElement)) {
+      return;
+    }
+
+    const openMenu = async (): Promise<void> => {
+      this.closeHeaderCalendar();
+      menu.classList.add('open');
+      dropdown.hidden = false;
+      button.setAttribute('aria-expanded', 'true');
+      this.renderWeatherLoading(dropdown);
+      await this.refreshToolbarWeather({ force: false, renderIfOpen: true });
+    };
+
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (menu.classList.contains('open')) {
+        this.closeHeaderWeather();
+      } else {
+        void openMenu();
+      }
+    });
+
+    dropdown.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const tabBtn = target?.closest<HTMLElement>('[data-weather-tab]');
+      if (tabBtn?.dataset.weatherTab) {
+        const requested = tabBtn.dataset.weatherTab as WeatherTab;
+        if (requested === 'today' || requested === 'seven' || requested === 'ten') {
+          this.weatherActiveTab = requested;
+          if (this.weatherDataCache) {
+            const count = requested === 'seven' ? 7 : requested === 'ten' ? 10 : 1;
+            const visibleDays = this.weatherDataCache.days.slice(0, count);
+            if (requested === 'today') {
+              this.weatherSelectedDayIso = visibleDays[0]?.dateIso ?? null;
+            } else if (!this.weatherSelectedDayIso || !visibleDays.some((day) => day.dateIso === this.weatherSelectedDayIso)) {
+              this.weatherSelectedDayIso = visibleDays[0]?.dateIso ?? null;
+            }
+            this.renderHeaderWeather(dropdown, this.weatherDataCache);
+          }
+        }
+        return;
+      }
+      const dayBtn = target?.closest<HTMLElement>('[data-weather-day]');
+      if (dayBtn?.dataset.weatherDay && this.weatherDataCache) {
+        this.weatherSelectedDayIso = dayBtn.dataset.weatherDay;
+        this.renderHeaderWeather(dropdown, this.weatherDataCache);
+        return;
+      }
+      const refreshBtn = target?.closest<HTMLElement>('[data-weather-refresh]');
+      if (refreshBtn) {
+        this.renderWeatherLoading(dropdown);
+        void this.refreshToolbarWeather({ force: true, renderIfOpen: true });
+      }
+    });
+
+    this.boundWeatherOutsideClickHandler = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!menu.contains(target)) this.closeHeaderWeather();
+    };
+    document.addEventListener('click', this.boundWeatherOutsideClickHandler);
+
+    this.boundWeatherKeydownHandler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') this.closeHeaderWeather();
+    };
+    document.addEventListener('keydown', this.boundWeatherKeydownHandler);
+
+    void this.refreshToolbarWeather({ force: false, renderIfOpen: false });
+    this.weatherRefreshIntervalId = setInterval(() => {
+      void this.refreshToolbarWeather({ force: true, renderIfOpen: menu.classList.contains('open') });
+    }, WEATHER_CACHE_MS);
+  }
+
+  private closeHeaderWeather(): void {
+    const menu = document.getElementById('weatherMenu');
+    const button = document.getElementById('weatherBtn');
+    const dropdown = document.getElementById('weatherDropdown');
+    if (menu) menu.classList.remove('open');
+    if (dropdown) dropdown.hidden = true;
+    if (button instanceof HTMLButtonElement) {
+      button.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  private renderWeatherLoading(container: HTMLElement): void {
+    container.innerHTML = `
+      <div class="weather-popover">
+        <div class="weather-loading">Loading Back Bay weather...</div>
+      </div>
+    `;
+  }
+
+  private renderWeatherError(container: HTMLElement, message: string): void {
+    container.innerHTML = `
+      <div class="weather-popover">
+        <div class="weather-error">${escapeHtml(message)}</div>
+        <button class="weather-refresh-btn" data-weather-refresh>Retry</button>
+      </div>
+    `;
+  }
+
+  private renderHeaderWeather(container: HTMLElement, data: ToolbarWeatherData): void {
+    const current = data.current;
+    const today = data.days[0];
+    const tabs: Array<{ id: WeatherTab; label: string }> = [
+      { id: 'today', label: 'Today' },
+      { id: 'seven', label: '7-Day' },
+      { id: 'ten', label: '10-Day' },
+    ];
+    const dayCount = this.weatherActiveTab === 'seven' ? 7 : this.weatherActiveTab === 'ten' ? 10 : 1;
+    const rows = data.days.slice(0, dayCount);
+    if (rows.length > 0 && (!this.weatherSelectedDayIso || !rows.some((day) => day.dateIso === this.weatherSelectedDayIso))) {
+      this.weatherSelectedDayIso = rows[0]?.dateIso ?? null;
+    }
+    const selectedDay = rows.find((day) => day.dateIso === this.weatherSelectedDayIso) ?? rows[0];
+    const selectedDayHours = selectedDay
+      ? (data.hourlyByDate[selectedDay.dateIso] ?? []).filter((_, index) => index % 3 === 0)
+      : [];
+    const computedSnowIn = selectedDay
+      ? toRounded((data.hourlyByDate[selectedDay.dateIso] ?? []).reduce((sum, hour) => sum + (hour.snowIn ?? 0), 0), 2)
+      : null;
+    const selectedDaySnowIn = selectedDay?.snowTotalIn ?? computedSnowIn ?? null;
+    const hasSnowSignal = Boolean(
+      selectedDay && ((selectedDaySnowIn ?? 0) > 0 || isSnowWeatherCode(selectedDay.weatherCode)),
+    );
+    const selectedDayDate = selectedDay ? new Date(`${selectedDay.dateIso}T12:00:00`) : null;
+    const springStart = selectedDayDate
+      ? localNoonDate(selectedDayDate.getFullYear(), 2, 20)
+      : null;
+    const showSnowPrompt = Boolean(
+      hasSnowSignal
+      && selectedDay
+      && selectedDayDate
+      && springStart
+      && selectedDayDate.getTime() < springStart.getTime(),
+    );
+    const daysUntilSpring = (selectedDayDate && springStart)
+      ? Math.max(0, Math.ceil((springStart.getTime() - selectedDayDate.getTime()) / (24 * 60 * 60 * 1000)))
+      : null;
+    const snowRange = (selectedDaySnowIn != null && selectedDaySnowIn > 0)
+      ? estimateSnowRangeIn(selectedDaySnowIn)
+      : null;
+    const majorCount = data.alerts.filter((a) => a.isMajor).length;
+    const fetchedStamp = new Date(data.fetchedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+    const todayMarkup = `
+      <div class="weather-now">
+        <div class="weather-now-top">
+          <span class="weather-now-icon">${weatherCodeToIcon(current.weatherCode)}</span>
+          <div class="weather-now-main">
+            <div class="weather-now-temp">${current.temperatureF != null ? `${current.temperatureF}°F` : '--'}</div>
+            <div class="weather-now-text">${escapeHtml(weatherCodeToText(current.weatherCode))}</div>
+          </div>
+        </div>
+        <div class="weather-metrics">
+          <span>Feels ${current.feelsLikeF != null ? `${current.feelsLikeF}°F` : '--'}</span>
+          <span>Humidity ${current.humidityPct != null ? `${current.humidityPct}%` : '--'}</span>
+          <span>Wind ${current.windMph != null ? `${current.windMph} mph` : '--'}</span>
+          <span>Precip ${today?.precipChancePct != null ? `${today.precipChancePct}%` : '--'}</span>
+          <span>Snow ${today?.snowTotalIn != null ? `${today.snowTotalIn} in` : '0 in'}</span>
+          <span>High/Low ${today?.highF != null ? `${today.highF}°` : '--'}/${today?.lowF != null ? `${today.lowF}°` : '--'}</span>
+        </div>
+      </div>
+    `;
+
+    const listMarkup = rows.map((day) => `
+      <li class="weather-day-row ${day.dateIso === this.weatherSelectedDayIso ? 'selected' : ''}">
+        <button class="weather-day-btn" data-weather-day="${escapeHtml(day.dateIso)}">
+          <span class="weather-day-name">${escapeHtml(day.dayLabel)}</span>
+          <span class="weather-day-icon">${weatherCodeToIcon(day.weatherCode)}</span>
+          <span class="weather-day-desc">${escapeHtml(weatherCodeToText(day.weatherCode))}</span>
+          <span class="weather-day-temp">
+            ${day.highF != null ? `${day.highF}°` : '--'}/${day.lowF != null ? `${day.lowF}°` : '--'}
+            <small>
+              Feels ${day.feelsHighF != null ? `${day.feelsHighF}°` : '--'}/${day.feelsLowF != null ? `${day.feelsLowF}°` : '--'}
+              · Precip ${day.precipChancePct != null ? `${day.precipChancePct}%` : '--'}
+            </small>
+          </span>
+        </button>
+      </li>
+    `).join('');
+
+    const hourlyMarkup = selectedDayHours.length > 0
+      ? `
+        <div class="weather-hourly">
+          <div class="weather-hourly-title">Hourly Breakdown</div>
+          <ul class="weather-hourly-list">
+            ${selectedDayHours.map((hour) => `
+              <li class="weather-hourly-row">
+                <span class="weather-hourly-time">${escapeHtml(hour.timeLabel)}</span>
+                <span class="weather-hourly-cond">${weatherCodeToIcon(hour.weatherCode)} ${escapeHtml(weatherCodeToText(hour.weatherCode))}</span>
+                <span class="weather-hourly-temp">${hour.temperatureF != null ? `${hour.temperatureF}°F` : '--'}</span>
+                <span class="weather-hourly-metrics">
+                  Feels ${hour.feelsLikeF != null ? `${hour.feelsLikeF}°` : '--'} · Precip ${hour.precipChancePct != null ? `${hour.precipChancePct}%` : '--'} (${hour.precipIn != null ? `${hour.precipIn} in` : '--'}) · Snow ${hour.snowIn != null ? `${hour.snowIn} in` : '0 in'}
+                </span>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      `
+      : '<div class="weather-hourly-empty">Hourly details unavailable for this day.</div>';
+
+    const selectedDayDetailMarkup = selectedDay ? `
+      <div class="weather-day-detail">
+        <div class="weather-day-detail-head">
+          <div class="weather-day-detail-title">${this.weatherActiveTab === 'today' ? 'Today Detail' : 'Selected Day Detail'}</div>
+          <div class="weather-day-detail-date">${escapeHtml(selectedDay.dayLabel)}</div>
+        </div>
+        <div class="weather-day-detail-condition">${weatherCodeToIcon(selectedDay.weatherCode)} ${escapeHtml(weatherCodeToText(selectedDay.weatherCode))}</div>
+        <div class="weather-day-detail-grid">
+          <span>High/Low ${selectedDay.highF != null ? `${selectedDay.highF}°` : '--'}/${selectedDay.lowF != null ? `${selectedDay.lowF}°` : '--'}</span>
+          <span>Feels ${selectedDay.feelsHighF != null ? `${selectedDay.feelsHighF}°` : '--'}/${selectedDay.feelsLowF != null ? `${selectedDay.feelsLowF}°` : '--'}</span>
+          <span>Precip ${selectedDay.precipChancePct != null ? `${selectedDay.precipChancePct}%` : '--'}</span>
+          <span>Wind ${selectedDay.windMaxMph != null ? `${selectedDay.windMaxMph} mph` : '--'}</span>
+          <span>Snowfall ${snowRange ? `${snowRange.lowIn}-${snowRange.highIn} in` : (selectedDaySnowIn != null ? `${selectedDaySnowIn} in` : '0 in')}</span>
+        </div>
+        ${showSnowPrompt
+          ? `
+            <div class="weather-snow-note">
+              <div class="weather-spring-countdown">Days until Spring: ${daysUntilSpring ?? '--'}</div>
+            </div>
+          `
+          : ''}
+        ${hourlyMarkup}
+      </div>
+    ` : '';
+
+    const alertsMarkup = data.alerts.length > 0
+      ? data.alerts.slice(0, 3).map((alert) => `
+        <li class="weather-alert-row ${alert.isMajor ? 'major' : ''}">
+          <span class="weather-alert-severity">${escapeHtml(alert.severity)}</span>
+          <span class="weather-alert-event">${escapeHtml(alert.event)}</span>
+        </li>
+      `).join('')
+      : '<li class="weather-alert-empty">No local active NWS alerts.</li>';
+
+    container.innerHTML = `
+      <div class="weather-popover">
+        <div class="weather-head">
+          <div class="weather-title">Boston Weather</div>
+          <div class="weather-subtitle">${escapeHtml(data.locationLabel)}</div>
+        </div>
+        <div class="weather-toolbar">
+          ${tabs.map((tab) => `<button class="weather-tab ${this.weatherActiveTab === tab.id ? 'active' : ''}" data-weather-tab="${tab.id}">${tab.label}</button>`).join('')}
+          <button class="weather-refresh-btn" data-weather-refresh>Refresh</button>
+        </div>
+        ${this.weatherActiveTab === 'today'
+          ? `${todayMarkup}${selectedDayDetailMarkup}`
+          : `<ul class="weather-day-list">${listMarkup}</ul>${selectedDayDetailMarkup}`}
+        <div class="weather-alerts ${majorCount > 0 ? 'has-major' : ''}">
+          <div class="weather-alerts-title">${majorCount > 0 ? '⚠ Active Weather Alerts' : 'Local Alerts'}${majorCount > 0 ? ` (${majorCount} major)` : ''}</div>
+          <ul>${alertsMarkup}</ul>
+          ${data.alertFetchError ? `<div class="weather-alert-note">${escapeHtml(data.alertFetchError)}</div>` : ''}
+        </div>
+        <div class="weather-foot">Updated ${escapeHtml(fetchedStamp)} · ${escapeHtml(data.sourceLabel)}</div>
+      </div>
+    `;
+  }
+
+  private updateWeatherBadge(data: ToolbarWeatherData | null): void {
+    const badge = document.getElementById('weatherAlertBadge');
+    const button = document.getElementById('weatherBtn');
+    const menu = document.getElementById('weatherMenu');
+    if (!(badge instanceof HTMLElement) || !(button instanceof HTMLButtonElement) || !(menu instanceof HTMLElement)) return;
+
+    const majorCount = data ? data.alerts.filter((alert) => alert.isMajor).length : 0;
+    if (majorCount > 0) {
+      badge.hidden = false;
+      badge.textContent = '⚠';
+      button.title = `Boston Weather (${majorCount} major alert${majorCount === 1 ? '' : 's'})`;
+      menu.classList.add('has-alert');
+    } else {
+      badge.hidden = true;
+      button.title = 'Boston Weather';
+      menu.classList.remove('has-alert');
+    }
+  }
+
+  private async loadToolbarWeather(force: boolean): Promise<ToolbarWeatherData> {
+    if (!force && this.weatherDataCache && (Date.now() - this.weatherDataFetchedAt) < WEATHER_CACHE_MS) {
+      return this.weatherDataCache;
+    }
+
+    if (this.weatherLoadingPromise) {
+      return this.weatherLoadingPromise;
+    }
+
+    this.weatherLoadingPromise = fetchToolbarWeatherData()
+      .then((data) => {
+        this.weatherDataCache = data;
+        this.weatherDataFetchedAt = Date.now();
+        this.updateWeatherBadge(data);
+        return data;
+      })
+      .finally(() => {
+        this.weatherLoadingPromise = null;
+      });
+
+    return this.weatherLoadingPromise;
+  }
+
+  private async refreshToolbarWeather(options: { force: boolean; renderIfOpen: boolean }): Promise<void> {
+    const dropdown = document.getElementById('weatherDropdown');
+    const menu = document.getElementById('weatherMenu');
+    const shouldRender = options.renderIfOpen && menu instanceof HTMLElement && menu.classList.contains('open');
+    if (shouldRender && dropdown instanceof HTMLElement) {
+      this.renderWeatherLoading(dropdown);
+    }
+    try {
+      const data = await this.loadToolbarWeather(options.force);
+      if (shouldRender && dropdown instanceof HTMLElement) {
+        this.renderHeaderWeather(dropdown, data);
+      }
+    } catch (error) {
+      if (shouldRender && dropdown instanceof HTMLElement) {
+        this.renderWeatherError(dropdown, error instanceof Error ? error.message : String(error));
+      }
+    }
   }
 
   private setupKonamiCode(): void {
