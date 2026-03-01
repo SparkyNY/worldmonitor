@@ -326,7 +326,6 @@ export class BostonPanel extends Panel {
     const transitSummary = this.data.transit?.summaries ?? [];
     const transitAlerts = this.data.transit?.alerts ?? [];
     const transitLines = this.data.transit?.lines ?? [];
-    const transitWarnings = this.data.transit?.provenance.warnings ?? [];
     const transitFetchedAt = this.data.transit?.provenance.fetchedAt ?? null;
 
     this.setContent(`
@@ -361,7 +360,6 @@ export class BostonPanel extends Panel {
           </div>
           <div class="boston-transit-grid">${renderTransitSummary(transitSummary)}</div>
           <div class="boston-transit-alerts">${renderTransitAlerts(transitAlerts)}</div>
-          ${transitWarnings.length > 0 ? `<div class="boston-transit-warning">${escapeHtml(transitWarnings.join(' | '))}</div>` : ''}
         </section>
 
         <section class="boston-section">
