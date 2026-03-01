@@ -13,10 +13,14 @@ import { mlWorker } from '@/services/ml-worker';
 import { getAiFlowSettings, subscribeAiFlowChange } from '@/services/ai-flow-settings';
 import { startLearning } from '@/services/country-instability';
 import { dataFreshness } from '@/services/data-freshness';
+import type { BostonDatasetId, BostonDatasetPayload, BostonLayerData } from '@/services/boston-open-data';
+import { getCachedBostonBundle, refreshAllBostonDatasets, refreshBostonDataset } from '@/services/boston-open-data';
+import { getCachedLocalTransit, refreshLocalTransit } from '@/services/local-transit';
 import { loadFromStorage, parseMapUrlState, saveToStorage, isMobileDevice } from '@/utils';
 import type { ParsedMapUrlState } from '@/utils';
 import { SignalModal, IntelligenceGapBadge, BreakingNewsBanner } from '@/components';
 import { initBreakingNewsAlerts, destroyBreakingNewsAlerts } from '@/services/breaking-news-alerts';
+import type { BostonPanel } from '@/components/BostonPanel';
 import type { ServiceStatusPanel } from '@/components/ServiceStatusPanel';
 import type { StablecoinPanel } from '@/components/StablecoinPanel';
 import type { ETFFlowsPanel } from '@/components/ETFFlowsPanel';
@@ -40,6 +44,7 @@ import { EventHandlerManager } from '@/app/event-handlers';
 import { resolveUserRegion } from '@/utils/user-location';
 
 const CYBER_LAYER_ENABLED = import.meta.env.VITE_ENABLE_CYBER_LAYER === 'true';
+const EMPTY_BOSTON_LAYER: BostonLayerData = { type: 'FeatureCollection', features: [] };
 
 export type { CountryBriefSignals } from '@/app/app-context';
 
@@ -275,6 +280,12 @@ export class App {
       loadAllData: () => this.dataLoader.loadAllData(),
       updateMonitorResults: () => this.dataLoader.updateMonitorResults(),
       loadSecurityAdvisories: () => this.dataLoader.loadSecurityAdvisories(),
+      refreshBostonAll: () => this.refreshBostonAll(),
+      refreshBostonDataset: (datasetId) => this.refreshSingleBostonDataset(datasetId),
+      refreshBostonTransit: () => this.refreshBostonTransit(),
+      setBostonLayerEnabled: (layerId, enabled) => this.state.map?.setBostonLayerEnabled(layerId, enabled),
+      setBostonCrimeFilter: (incidents) => this.state.map?.setBostonCrimeIncidents(incidents),
+      setBostonFireFilter: (incidents) => this.state.map?.setBostonFireIncidents(incidents),
     });
 
     this.eventHandlers = new EventHandlerManager(this.state, {
@@ -338,6 +349,7 @@ export class App {
 
     // Phase 1: Layout (creates map + panels — they'll find hydrated data)
     this.panelLayout.init();
+    await this.hydrateBostonFromCache();
 
     // Happy variant: pre-populate panels from persistent cache for instant render
     if (SITE_VARIANT === 'happy') {
@@ -495,6 +507,115 @@ export class App {
         }
       };
       setTimeout(checkAndOpenBrief, DEEP_LINK_INITIAL_DELAY_MS);
+    }
+  }
+
+  private getBostonPanel(): BostonPanel | null {
+    const panel = this.state.panels['boston'];
+    return panel ? panel as BostonPanel : null;
+  }
+
+  private applyBostonDataset(datasetId: BostonDatasetId, payload: BostonDatasetPayload): void {
+    const panel = this.getBostonPanel();
+    switch (datasetId) {
+      case 'crimeIncidents': {
+        const incidents = payload.incidents ?? [];
+        panel?.setData({ crimeIncidents: incidents });
+        this.state.map?.setBostonCrimeIncidents(incidents);
+        break;
+      }
+      case 'fireIncidents': {
+        const incidents = payload.incidents ?? [];
+        panel?.setData({ fireIncidents: incidents });
+        this.state.map?.setBostonFireIncidents(incidents);
+        break;
+      }
+      case 'policeDistricts':
+        this.state.map?.setBostonPoliceDistricts(payload.layer ?? EMPTY_BOSTON_LAYER);
+        break;
+      case 'fireHydrants':
+        this.state.map?.setBostonFireHydrants(payload.layer ?? EMPTY_BOSTON_LAYER);
+        break;
+      case 'fireDepartments':
+        this.state.map?.setBostonFireDepartments(payload.layer ?? EMPTY_BOSTON_LAYER);
+        break;
+      case 'communityCenters':
+        this.state.map?.setBostonCommunityCenters(payload.layer ?? EMPTY_BOSTON_LAYER);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private async hydrateBostonFromCache(): Promise<void> {
+    if (SITE_VARIANT !== 'full' && SITE_VARIANT !== 'local') return;
+
+    try {
+      const [bundle, transit] = await Promise.all([
+        getCachedBostonBundle(),
+        getCachedLocalTransit(),
+      ]);
+
+      for (const [datasetId, payload] of Object.entries(bundle) as Array<[BostonDatasetId, BostonDatasetPayload | undefined]>) {
+        if (!payload) continue;
+        this.applyBostonDataset(datasetId, payload);
+      }
+
+      if (transit) {
+        this.getBostonPanel()?.setData({ transit });
+        this.state.map?.setBostonTransitVehicles(transit.vehicles);
+      }
+    } catch (error) {
+      console.warn('[Boston] Cache hydrate failed:', error);
+    }
+  }
+
+  private async refreshBostonAll(): Promise<void> {
+    const panel = this.getBostonPanel();
+    panel?.setAllRefreshing(true);
+    try {
+      const [datasets, transit] = await Promise.all([
+        refreshAllBostonDatasets(),
+        refreshLocalTransit(),
+      ]);
+
+      for (const [datasetId, payload] of Object.entries(datasets) as Array<[BostonDatasetId, BostonDatasetPayload]>) {
+        this.applyBostonDataset(datasetId, payload);
+      }
+
+      panel?.setData({ transit });
+      this.state.map?.setBostonTransitVehicles(transit.vehicles);
+    } catch (error) {
+      console.error('[Boston] Refresh all failed:', error);
+    } finally {
+      panel?.setAllRefreshing(false);
+    }
+  }
+
+  private async refreshSingleBostonDataset(datasetId: BostonDatasetId): Promise<void> {
+    const panel = this.getBostonPanel();
+    panel?.setDatasetRefreshing(datasetId, true);
+    try {
+      const payload = await refreshBostonDataset(datasetId);
+      this.applyBostonDataset(datasetId, payload);
+    } catch (error) {
+      console.error(`[Boston] Refresh dataset failed: ${datasetId}`, error);
+    } finally {
+      panel?.setDatasetRefreshing(datasetId, false);
+    }
+  }
+
+  private async refreshBostonTransit(): Promise<void> {
+    const panel = this.getBostonPanel();
+    panel?.setDatasetRefreshing('transitStatus', true);
+    try {
+      const transit = await refreshLocalTransit();
+      panel?.setData({ transit });
+      this.state.map?.setBostonTransitVehicles(transit.vehicles);
+    } catch (error) {
+      console.error('[Boston] Transit refresh failed:', error);
+    } finally {
+      panel?.setDatasetRefreshing('transitStatus', false);
     }
   }
 

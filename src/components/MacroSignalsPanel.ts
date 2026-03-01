@@ -138,7 +138,7 @@ export class MacroSignalsPanel extends Panel {
     }
   }
 
-  private async fetchData(): Promise<void> {
+  public async fetchData(): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const res = await economicClient.getMacroSignals({});

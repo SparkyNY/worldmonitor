@@ -44,7 +44,7 @@ export class StablecoinPanel extends Panel {
     }
   }
 
-  private async fetchData(): Promise<void> {
+  public async fetchData(): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const client = new MarketServiceClient('', { fetch: (...args) => globalThis.fetch(...args) });

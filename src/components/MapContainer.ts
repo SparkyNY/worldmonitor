@@ -31,6 +31,8 @@ import type { DisplacementFlow } from '@/services/displacement';
 import type { Earthquake } from '@/services/earthquakes';
 import type { ClimateAnomaly } from '@/services/climate';
 import type { WeatherAlert } from '@/services/weather';
+import type { IranEvent } from '@/services/conflict';
+import type { GpsJamHex } from '@/services/gps-interference';
 import type { PositiveGeoEvent } from '@/services/positive-events-geo';
 import type { KindnessPoint } from '@/services/kindness-data';
 import type { HappinessData } from '@/services/happiness-data';
@@ -337,6 +339,20 @@ export class MapContainer {
       this.deckGLMap?.setCyberThreats(threats);
     } else {
       this.svgMap?.setCyberThreats(threats);
+    }
+  }
+
+  public setIranEvents(events: IranEvent[]): void {
+    if (this.useDeckGL) {
+      this.deckGLMap?.setIranEvents(events);
+    } else {
+      this.svgMap?.setIranEvents(events);
+    }
+  }
+
+  public setGpsJamming(hexes: GpsJamHex[]): void {
+    if (this.useDeckGL) {
+      this.deckGLMap?.setGpsJamming(hexes);
     }
   }
 

@@ -298,8 +298,8 @@ export class StrategicPosturePanel extends Panel {
     }
   }
 
-  public refresh(): void {
-    this.fetchAndRender();
+  public refresh(): Promise<void> {
+    return this.fetchAndRender();
   }
 
   private showNoData(): void {

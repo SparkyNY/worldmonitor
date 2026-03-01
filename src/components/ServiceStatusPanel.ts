@@ -56,7 +56,7 @@ export class ServiceStatusPanel extends Panel {
     super.destroy();
   }
 
-  private async fetchStatus(): Promise<void> {
+  public async fetchStatus(): Promise<void> {
     try {
       const data = await fetchServiceStatuses();
       if (!data.success) throw new Error('Failed to load status');

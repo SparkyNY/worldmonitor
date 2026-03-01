@@ -39,6 +39,8 @@ import { fetchMilitaryBases, type MilitaryBaseCluster as ServerBaseCluster } fro
 import type { AirportDelayAlert } from '@/services/aviation';
 import type { IranEvent } from '@/services/conflict';
 import type { GpsJamHex } from '@/services/gps-interference';
+import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
+import type { LocalTransitVehicle } from '@/services/local-transit';
 import type { DisplacementFlow } from '@/services/displacement';
 import type { Earthquake } from '@/services/earthquakes';
 import type { ClimateAnomaly } from '@/services/climate';
@@ -4001,6 +4003,38 @@ export class DeckGLMap {
   public setRenewableInstallations(installations: RenewableInstallation[]): void {
     this.renewableInstallations = installations;
     this.render();
+  }
+
+  public setBostonPoliceDistricts(_data: BostonLayerData): void {
+    // DeckGL Boston overlays are not implemented yet.
+  }
+
+  public setBostonFireHydrants(_data: BostonLayerData): void {
+    // DeckGL Boston overlays are not implemented yet.
+  }
+
+  public setBostonFireDepartments(_data: BostonLayerData): void {
+    // DeckGL Boston overlays are not implemented yet.
+  }
+
+  public setBostonCommunityCenters(_data: BostonLayerData): void {
+    // DeckGL Boston overlays are not implemented yet.
+  }
+
+  public setBostonCrimeIncidents(_incidents: BostonIncident[]): void {
+    // DeckGL Boston overlays are not implemented yet.
+  }
+
+  public setBostonFireIncidents(_incidents: BostonIncident[]): void {
+    // DeckGL Boston overlays are not implemented yet.
+  }
+
+  public setBostonTransitVehicles(_vehicles: LocalTransitVehicle[]): void {
+    // DeckGL Boston overlays are not implemented yet.
+  }
+
+  public setBostonLayerEnabled(_layerId: BostonLayerId, _enabled: boolean): void {
+    // DeckGL Boston overlays are not implemented yet.
   }
 
   public updateHotspotActivity(news: NewsItem[]): void {

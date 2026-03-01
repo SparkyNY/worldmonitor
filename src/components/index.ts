@@ -44,3 +44,6 @@ export * from './SupplyChainPanel';
 export * from './SecurityAdvisoriesPanel';
 export * from './BostonPanel';
 export * from './OsintWorkbenchPanel';
+export * from './BreakingNewsBanner';
+export * from './OrefSirensPanel';
+export * from './TelegramIntelPanel';
