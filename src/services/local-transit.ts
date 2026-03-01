@@ -16,6 +16,17 @@ export interface LocalTransitVehicle {
   updatedAt: string | null;
 }
 
+export interface LocalTransitLine {
+  id: string;
+  mode: Exclude<LocalTransitMode, 'amtrak'>;
+  routeId: string;
+  routeLabel: string;
+  color: string;
+  textColor: string;
+  path: Array<[number, number]>;
+  source: 'mbta_shape' | 'vehicle_synthetic';
+}
+
 export interface LocalTransitAlert {
   id: string;
   source: 'mbta' | 'amtrak';
@@ -46,6 +57,7 @@ export interface LocalTransitProvenance {
 
 export interface LocalTransitPayload {
   vehicles: LocalTransitVehicle[];
+  lines: LocalTransitLine[];
   alerts: LocalTransitAlert[];
   summaries: LocalTransitSummary[];
   provenance: LocalTransitProvenance;
@@ -68,6 +80,8 @@ type JsonRecord = Record<string, unknown>;
 const CACHE_KEY = 'local-transit:status';
 const MBTA_BASE_URL = 'https://api-v3.mbta.com';
 const MBTA_VEHICLES_URL = `${MBTA_BASE_URL}/vehicles`;
+const MBTA_ROUTES_URL = `${MBTA_BASE_URL}/routes`;
+const MBTA_SHAPES_URL = `${MBTA_BASE_URL}/shapes`;
 const MBTA_ALERTS_URL = `${MBTA_BASE_URL}/alerts`;
 const MBTA_GTFS_VEHICLES_ENHANCED_URL = 'https://cdn.mbta.com/realtime/VehiclePositions_enhanced.json';
 const MBTA_GTFS_ALERTS_ENHANCED_URL = 'https://cdn.mbta.com/realtime/Alerts_enhanced.json';
@@ -175,6 +189,26 @@ function modeLabel(mode: LocalTransitMode): string {
   }
 }
 
+function modeColor(mode: Exclude<LocalTransitMode, 'amtrak'>): string {
+  switch (mode) {
+    case 'subway':
+      return '#e74c3c';
+    case 'bus':
+      return '#2e86de';
+    case 'commuter_rail':
+      return '#8e44ad';
+    case 'ferry':
+      return '#16a085';
+  }
+}
+
+function normalizeHexColor(value: unknown, fallback: string): string {
+  const raw = textOrEmpty(value).replace(/^#/, '').toUpperCase();
+  if (/^[0-9A-F]{6}$/.test(raw)) return `#${raw}`;
+  if (/^[0-9A-F]{3}$/.test(raw)) return `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`;
+  return fallback;
+}
+
 function severityFromMbta(raw: unknown): LocalTransitAlertSeverity {
   const severity = toNumber(raw);
   if (severity == null) return 'minor';
@@ -248,6 +282,55 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 function isWithinBostonRadius(lat: number, lon: number): boolean {
   return haversineKm(lat, lon, BOSTON_LAT, BOSTON_LON) <= BOSTON_RADIUS_KM;
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function decodePolyline(encoded: string): Array<[number, number]> {
+  if (!encoded) return [];
+  let index = 0;
+  let lat = 0;
+  let lon = 0;
+  const coordinates: Array<[number, number]> = [];
+
+  while (index < encoded.length) {
+    let shift = 0;
+    let result = 0;
+    let byte = 0;
+    do {
+      if (index >= encoded.length) return coordinates;
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    const deltaLat = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lat += deltaLat;
+
+    shift = 0;
+    result = 0;
+    do {
+      if (index >= encoded.length) return coordinates;
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    const deltaLon = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lon += deltaLon;
+
+    coordinates.push([lon / 1e5, lat / 1e5]);
+  }
+
+  return coordinates;
+}
+
+function isPathBostonRelevant(path: Array<[number, number]>): boolean {
+  return path.some(([lon, lat]) => isWithinBostonRadius(lat, lon));
 }
 
 function parseMbtaError(body: string): string {
@@ -370,6 +453,131 @@ function normalizeVehiclesFromGtfsEnhanced(payload: JsonRecord): LocalTransitVeh
 
 function filterBostonVehicles(vehicles: LocalTransitVehicle[]): LocalTransitVehicle[] {
   return vehicles.filter((vehicle) => isWithinBostonRadius(vehicle.lat, vehicle.lon));
+}
+
+function buildSyntheticLinesFromVehicles(vehicles: LocalTransitVehicle[]): LocalTransitLine[] {
+  const byRoute = new Map<string, LocalTransitVehicle[]>();
+  for (const vehicle of vehicles) {
+    if (!vehicle.routeId) continue;
+    const rows = byRoute.get(vehicle.routeId) ?? [];
+    rows.push(vehicle);
+    byRoute.set(vehicle.routeId, rows);
+  }
+
+  const lines: LocalTransitLine[] = [];
+  for (const [routeId, rows] of byRoute) {
+    if (rows.length < 2) continue;
+    const lonSpread = Math.max(...rows.map((r) => r.lon)) - Math.min(...rows.map((r) => r.lon));
+    const latSpread = Math.max(...rows.map((r) => r.lat)) - Math.min(...rows.map((r) => r.lat));
+    const sorted = [...rows].sort((a, b) => (lonSpread >= latSpread ? a.lon - b.lon : a.lat - b.lat));
+    const path = sorted.map((row) => [row.lon, row.lat] as [number, number]);
+    const mode = rows[0]!.mode;
+    lines.push({
+      id: `synthetic-${routeId}`,
+      mode,
+      routeId,
+      routeLabel: rows[0]!.routeLabel || routeId,
+      color: modeColor(mode),
+      textColor: '#FFFFFF',
+      path,
+      source: 'vehicle_synthetic',
+    });
+  }
+
+  return lines;
+}
+
+async function fetchMbtaLines(vehicles: LocalTransitVehicle[], warnings: string[]): Promise<LocalTransitLine[]> {
+  const routeIds = Array.from(new Set(vehicles.map((v) => v.routeId).filter(Boolean)));
+  if (routeIds.length === 0) return [];
+
+  const routeMeta = new Map<string, {
+    mode: Exclude<LocalTransitMode, 'amtrak'>;
+    routeLabel: string;
+    color: string;
+    textColor: string;
+  }>();
+
+  const chunkedRouteIds = chunk(routeIds, 40);
+  for (const routeChunk of chunkedRouteIds) {
+    try {
+      const routesPayload = await fetchMbtaJson(MBTA_ROUTES_URL, {
+        'filter[id]': routeChunk.join(','),
+        'page[limit]': routeChunk.length,
+        ...(MBTA_API_KEY ? { api_key: MBTA_API_KEY } : {}),
+      });
+      for (const row of routesPayload.data ?? []) {
+        if (row.type !== 'route') continue;
+        const attrs = row.attributes ?? {};
+        const mode = modeFromRouteType(toNumber(attrs.route_type)) ?? modeFromRouteId(row.id);
+        if (!mode) continue;
+        const fallback = modeColor(mode);
+        const routeLabel = String(attrs.short_name ?? attrs.long_name ?? row.id);
+        routeMeta.set(row.id, {
+          mode,
+          routeLabel,
+          color: normalizeHexColor(attrs.color, fallback),
+          textColor: normalizeHexColor(attrs.text_color, '#FFFFFF'),
+        });
+      }
+    } catch (error) {
+      warnings.push(`MBTA route metadata query failed (${error instanceof Error ? error.message : String(error)}).`);
+    }
+  }
+
+  const bestByRoute = new Map<string, LocalTransitLine>();
+  for (const routeChunk of chunkedRouteIds) {
+    try {
+      const shapesPayload = await fetchMbtaJson(MBTA_SHAPES_URL, {
+        'filter[route]': routeChunk.join(','),
+        'page[limit]': 2000,
+        ...(MBTA_API_KEY ? { api_key: MBTA_API_KEY } : {}),
+      });
+      for (const row of shapesPayload.data ?? []) {
+        if (row.type !== 'shape') continue;
+        const attrs = row.attributes ?? {};
+        const routeId = row.relationships?.route?.data?.id ?? textOrEmpty(attrs.route_id);
+        if (!routeId) continue;
+        const polyline = textOrEmpty(attrs.polyline);
+        if (!polyline) continue;
+        const path = decodePolyline(polyline);
+        if (path.length < 2 || !isPathBostonRelevant(path)) continue;
+
+        const meta = routeMeta.get(routeId);
+        const mode = meta?.mode ?? modeFromRouteId(routeId);
+        if (!mode) continue;
+
+        const candidate: LocalTransitLine = {
+          id: `shape-${routeId}-${row.id}`,
+          mode,
+          routeId,
+          routeLabel: meta?.routeLabel ?? routeId,
+          color: meta?.color ?? modeColor(mode),
+          textColor: meta?.textColor ?? '#FFFFFF',
+          path,
+          source: 'mbta_shape',
+        };
+
+        const existing = bestByRoute.get(routeId);
+        if (!existing || candidate.path.length > existing.path.length) {
+          bestByRoute.set(routeId, candidate);
+        }
+      }
+    } catch (error) {
+      warnings.push(`MBTA route shape query failed (${error instanceof Error ? error.message : String(error)}).`);
+    }
+  }
+
+  const lines = Array.from(bestByRoute.values());
+  if (lines.length > 0) {
+    return lines.sort((a, b) => a.routeLabel.localeCompare(b.routeLabel));
+  }
+
+  const synthetic = buildSyntheticLinesFromVehicles(vehicles);
+  if (synthetic.length > 0) {
+    warnings.push('Falling back to synthetic transit lines from live vehicle positions.');
+  }
+  return synthetic;
 }
 
 async function fetchMbtaVehicles(warnings: string[]): Promise<LocalTransitVehicle[]> {
@@ -653,6 +861,15 @@ export async function refreshLocalTransit(): Promise<LocalTransitPayload> {
     warnings.push(`MBTA vehicle refresh failed (${vehiclesResult.reason instanceof Error ? vehiclesResult.reason.message : String(vehiclesResult.reason)}).`);
   }
 
+  let lines: LocalTransitLine[] = [];
+  if (vehicles.length > 0) {
+    try {
+      lines = await fetchMbtaLines(vehicles, warnings);
+    } catch (error) {
+      warnings.push(`MBTA transit line refresh failed (${error instanceof Error ? error.message : String(error)}).`);
+    }
+  }
+
   const mbtaAlerts = mbtaAlertsResult.status === 'fulfilled' ? mbtaAlertsResult.value : [];
   if (mbtaAlertsResult.status === 'rejected') {
     warnings.push(`MBTA alert refresh failed (${mbtaAlertsResult.reason instanceof Error ? mbtaAlertsResult.reason.message : String(mbtaAlertsResult.reason)}).`);
@@ -674,6 +891,7 @@ export async function refreshLocalTransit(): Promise<LocalTransitPayload> {
 
   const payload: LocalTransitPayload = {
     vehicles,
+    lines,
     alerts,
     summaries,
     provenance: {

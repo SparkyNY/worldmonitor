@@ -70,7 +70,7 @@ const DEFAULT_PAGE_SIZE = 1000;
 const DATASETS: Record<BostonDatasetId, ArcGisDatasetConfig> = {
   crimeIncidents: {
     id: 'crimeIncidents',
-    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/Boston_Incidents_Public_v2_view/FeatureServer/0/query',
+    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/PublicSafety/OpenData/MapServer/6/query',
     mode: 'incident',
     datasetTag: 'crime',
     pageSize: 500,
@@ -81,12 +81,11 @@ const DATASETS: Record<BostonDatasetId, ArcGisDatasetConfig> = {
       outFields: '*',
       returnGeometry: true,
       outSR: 4326,
-      orderByFields: 'occurred_on_date DESC, objectid DESC',
     },
   },
   fireIncidents: {
     id: 'fireIncidents',
-    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/Boston_Incidents_View/FeatureServer/0/query',
+    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/BFD_Incidents_(for_BFD_BI_Dashboard)/FeatureServer/0/query',
     mode: 'incident',
     datasetTag: 'fire',
     pageSize: 500,
@@ -97,12 +96,11 @@ const DATASETS: Record<BostonDatasetId, ArcGisDatasetConfig> = {
       outFields: '*',
       returnGeometry: true,
       outSR: 4326,
-      orderByFields: 'incident_date DESC, objectid DESC',
     },
   },
   policeDistricts: {
     id: 'policeDistricts',
-    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/Police_Districts/FeatureServer/0/query',
+    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/PublicSafety/OpenData/MapServer/5/query',
     mode: 'layer',
     pageSize: 500,
     queryParams: {
@@ -114,13 +112,21 @@ const DATASETS: Record<BostonDatasetId, ArcGisDatasetConfig> = {
   },
   fireHydrants: {
     id: 'fireHydrants',
-    sourceUrl: 'https://data.boston.gov/',
-    mode: 'stub',
-    warning: 'Stable public hydrant endpoint not resolved yet. Add Analyze Boston or BostonMaps FeatureServer URL in src/services/boston-open-data.ts (fireHydrants config).',
+    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/PublicSafety/OpenData/MapServer/0/query',
+    mode: 'layer',
+    pageSize: 2000,
+    maxPages: 10,
+    maxRecords: 12000,
+    queryParams: {
+      where: '1=1',
+      outFields: '*',
+      returnGeometry: true,
+      outSR: 4326,
+    },
   },
   fireDepartments: {
     id: 'fireDepartments',
-    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/BFD_Firehouse/FeatureServer/0/query',
+    sourceUrl: 'https://services.arcgis.com/sFnw0xNflSi8J0uh/ArcGIS/rest/services/PublicSafety/OpenData/MapServer/2/query',
     mode: 'layer',
     pageSize: 500,
     queryParams: {
@@ -228,8 +234,12 @@ function normalizeIncidentFeature(feature: GeoJSON.Feature, datasetTag: 'crime' 
     'occurred_on_date',
     'incident_date',
     'dispatch_date',
+    'dispatch_time',
+    'alarm_datetime',
+    'incdt_tm',
     'fromdate',
     'open_dt',
+    'closed_dt',
     'date',
     'offense_date',
   ]);
@@ -240,6 +250,9 @@ function normalizeIncidentFeature(feature: GeoJSON.Feature, datasetTag: 'crime' 
     'offense_code_group',
     'offense_code_name',
     'nature',
+    'incident_type_desc',
+    'incident_type_code',
+    'primary_situation',
     'service',
   ]);
 
@@ -248,6 +261,8 @@ function normalizeIncidentFeature(feature: GeoJSON.Feature, datasetTag: 'crime' 
     'offense_code_name',
     'description',
     'nature',
+    'remarks',
+    'situation_desc',
     'comments',
     'incident_type_description',
   ]);
@@ -257,6 +272,10 @@ function normalizeIncidentFeature(feature: GeoJSON.Feature, datasetTag: 'crime' 
     'INCIDENT_NUMBER',
     'incidentnum',
     'INCIDENTNUM',
+    'incident_no',
+    'incidentid',
+    'incident_id',
+    'event_id',
     'case_number',
     'CASE_NUMBER',
     'objectid',
@@ -268,6 +287,9 @@ function normalizeIncidentFeature(feature: GeoJSON.Feature, datasetTag: 'crime' 
     'OFFENSE_CODE',
     'incident_type',
     'INCIDENT_TYPE',
+    'incident_type_code',
+    'situation_code',
+    'dispatch_code',
     'nature_code',
     'NATURE_CODE',
   ]);
@@ -276,13 +298,31 @@ function normalizeIncidentFeature(feature: GeoJSON.Feature, datasetTag: 'crime' 
     'occurred_on_date',
     'incident_date',
     'dispatch_date',
+    'dispatch_time',
     'report_date',
+    'alarm_datetime',
     'open_dt',
     'date',
   ]);
 
-  const district = pickString(properties, ['district', 'police_district', 'reporting_area', 'precinct']) || 'Unknown';
-  const address = pickString(properties, ['street', 'streetname', 'location', 'address']) || 'Unknown location';
+  const district = pickString(properties, [
+    'district',
+    'DISTRICT',
+    'district_name',
+    'district_no',
+    'police_district',
+    'reporting_area',
+    'precinct',
+  ]) || 'Unknown';
+  const address = pickString(properties, [
+    'street',
+    'streetname',
+    'location',
+    'address',
+    'address_line',
+    'location_street_name',
+    'full_address',
+  ]) || 'Unknown location';
 
   const objectId = pickString(properties, ['objectid', 'OBJECTID', 'incident_number', 'INCIDENT_NUMBER']);
   const id = incidentNumber || objectId || `${datasetTag}-${address}-${date ?? 'no-date'}-${typeCode || 'na'}`;

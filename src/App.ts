@@ -350,6 +350,7 @@ export class App {
     // Phase 1: Layout (creates map + panels — they'll find hydrated data)
     this.panelLayout.init();
     await this.hydrateBostonFromCache();
+    void this.primeBostonDataOnStartup();
 
     // Happy variant: pre-populate panels from persistent cache for instant render
     if (SITE_VARIANT === 'happy') {
@@ -548,7 +549,7 @@ export class App {
   }
 
   private async hydrateBostonFromCache(): Promise<void> {
-    if (SITE_VARIANT !== 'full' && SITE_VARIANT !== 'local') return;
+    if (SITE_VARIANT !== 'full' && SITE_VARIANT !== 'local' && SITE_VARIANT !== 'osint') return;
 
     try {
       const [bundle, transit] = await Promise.all([
@@ -564,9 +565,25 @@ export class App {
       if (transit) {
         this.getBostonPanel()?.setData({ transit });
         this.state.map?.setBostonTransitVehicles(transit.vehicles);
+        this.state.map?.setBostonTransitLines(transit.lines ?? []);
       }
     } catch (error) {
       console.warn('[Boston] Cache hydrate failed:', error);
+    }
+  }
+
+  private async primeBostonDataOnStartup(): Promise<void> {
+    try {
+      if (SITE_VARIANT === 'local') {
+        await this.refreshBostonAll();
+        return;
+      }
+      if (SITE_VARIANT === 'osint') {
+        const districts = await refreshBostonDataset('policeDistricts');
+        this.applyBostonDataset('policeDistricts', districts);
+      }
+    } catch (error) {
+      console.warn('[Boston] Startup prime failed:', error);
     }
   }
 
@@ -585,6 +602,7 @@ export class App {
 
       panel?.setData({ transit });
       this.state.map?.setBostonTransitVehicles(transit.vehicles);
+      this.state.map?.setBostonTransitLines(transit.lines ?? []);
     } catch (error) {
       console.error('[Boston] Refresh all failed:', error);
     } finally {
@@ -612,6 +630,7 @@ export class App {
       const transit = await refreshLocalTransit();
       panel?.setData({ transit });
       this.state.map?.setBostonTransitVehicles(transit.vehicles);
+      this.state.map?.setBostonTransitLines(transit.lines ?? []);
     } catch (error) {
       console.error('[Boston] Transit refresh failed:', error);
     } finally {
@@ -708,6 +727,13 @@ export class App {
         if (iranEvents) this.state.intelligenceCache.iranEvents = iranEvents;
         return this.dataLoader.loadIntelligenceSignals();
       }, 15 * 60 * 1000);
+    }
+
+    if (SITE_VARIANT === 'local') {
+      this.refreshScheduler.scheduleRefresh('boston-local', () => this.refreshBostonAll(), 5 * 60 * 1000);
+    }
+    if (SITE_VARIANT === 'osint') {
+      this.refreshScheduler.scheduleRefresh('boston-osint-districts', () => this.refreshSingleBostonDataset('policeDistricts'), 15 * 60 * 1000);
     }
   }
 }

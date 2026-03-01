@@ -62,7 +62,7 @@ export class BostonPanel extends Panel {
 
   private layerState: LayerToggleState = {
     policeDistricts: true,
-    fireHydrants: false,
+    fireHydrants: true,
     fireDepartments: true,
     communityCenters: false,
     transitVehicles: true,
@@ -325,6 +325,7 @@ export class BostonPanel extends Panel {
     const activeIncidents = this.activeTab === 'crime' ? crimeIncidents : fireIncidents;
     const transitSummary = this.data.transit?.summaries ?? [];
     const transitAlerts = this.data.transit?.alerts ?? [];
+    const transitLines = this.data.transit?.lines ?? [];
     const transitWarnings = this.data.transit?.provenance.warnings ?? [];
     const transitFetchedAt = this.data.transit?.provenance.fetchedAt ?? null;
 
@@ -354,7 +355,9 @@ export class BostonPanel extends Panel {
             <button class="boston-btn" data-boston-refresh-transit ${this.refreshState.transitStatus ? 'disabled' : ''}>Refresh Transit</button>
           </div>
           <div class="boston-transit-meta">
-            ${transitFetchedAt ? `Last updated: ${escapeHtml(formatDateTime(transitFetchedAt))}` : 'Waiting for first transit fetch'}
+            ${transitFetchedAt
+              ? `Live MBTA pull: ${escapeHtml(formatDateTime(transitFetchedAt))} · ${transitLines.length} route lines · ${this.data.transit?.vehicles.length ?? 0} vehicles`
+              : 'Waiting for first transit fetch'}
           </div>
           <div class="boston-transit-grid">${renderTransitSummary(transitSummary)}</div>
           <div class="boston-transit-alerts">${renderTransitAlerts(transitAlerts)}</div>

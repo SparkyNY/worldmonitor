@@ -14,7 +14,7 @@ import { getNaturalEventIcon } from '@/services/eonet';
 import type { WeatherAlert } from '@/services/weather';
 import { getSeverityColor } from '@/services/weather';
 import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
-import type { LocalTransitVehicle } from '@/services/local-transit';
+import type { LocalTransitLine, LocalTransitVehicle } from '@/services/local-transit';
 import {
   MAP_URLS,
   INTEL_HOTSPOTS,
@@ -3637,6 +3637,10 @@ export class MapComponent {
   }
 
   public setBostonTransitVehicles(_vehicles: LocalTransitVehicle[]): void {
+    // SVG/mobile fallback currently does not render Boston overlays.
+  }
+
+  public setBostonTransitLines(_lines: LocalTransitLine[]): void {
     // SVG/mobile fallback currently does not render Boston overlays.
   }
 

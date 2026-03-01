@@ -12352,6 +12352,21 @@ a.prediction-link:hover {
   font-weight: 600;
 }
 
+.deckgl-boston-live {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 120;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+
 /* MapLibre GL overrides for dark theme */
 .maplibregl-map {
   font-family: inherit;

@@ -40,7 +40,7 @@ import type { AirportDelayAlert } from '@/services/aviation';
 import type { IranEvent } from '@/services/conflict';
 import type { GpsJamHex } from '@/services/gps-interference';
 import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
-import type { LocalTransitVehicle } from '@/services/local-transit';
+import type { LocalTransitLine, LocalTransitVehicle } from '@/services/local-transit';
 import type { DisplacementFlow } from '@/services/displacement';
 import type { Earthquake } from '@/services/earthquakes';
 import type { ClimateAnomaly } from '@/services/climate';
@@ -96,7 +96,7 @@ import type { HappinessData } from '@/services/happiness-data';
 import type { RenewableInstallation } from '@/services/renewable-installations';
 import type { SpeciesRecovery } from '@/services/conservation-data';
 import { getCountriesGeoJson, getCountryAtCoordinates, getCountryBbox } from '@/services/country-geometry';
-import type { FeatureCollection, Geometry } from 'geojson';
+import type { Feature, FeatureCollection, Geometry } from 'geojson';
 
 export type TimeRange = '1h' | '6h' | '24h' | '48h' | '7d' | 'all';
 export type DeckMapView = 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
@@ -252,6 +252,15 @@ const MARKER_ICONS = {
   star: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><polygon points="16,2 20,12 30,12 22,19 25,30 16,23 7,30 10,19 2,12 12,12" fill="white"/></svg>`),
 };
 
+const EMPTY_BOSTON_LAYER: BostonLayerData = { type: 'FeatureCollection', features: [] };
+
+const BOSTON_MODE_COLORS: Record<LocalTransitVehicle['mode'], [number, number, number, number]> = {
+  subway: [239, 68, 68, 220],
+  bus: [59, 130, 246, 210],
+  commuter_rail: [139, 92, 246, 210],
+  ferry: [20, 184, 166, 210],
+};
+
 export class DeckGLMap {
   private static readonly MAX_CLUSTER_LEAVES = 200;
 
@@ -295,6 +304,23 @@ export class DeckGLMap {
   private tradeRouteSegments: TradeRouteSegment[] = resolveTradeRouteSegments();
   private positiveEvents: PositiveGeoEvent[] = [];
   private kindnessPoints: KindnessPoint[] = [];
+  private bostonPoliceDistricts: BostonLayerData = EMPTY_BOSTON_LAYER;
+  private bostonFireHydrants: BostonLayerData = EMPTY_BOSTON_LAYER;
+  private bostonFireDepartments: BostonLayerData = EMPTY_BOSTON_LAYER;
+  private bostonCommunityCenters: BostonLayerData = EMPTY_BOSTON_LAYER;
+  private bostonCrimeIncidents: BostonIncident[] = [];
+  private bostonFireIncidents: BostonIncident[] = [];
+  private bostonTransitVehicles: LocalTransitVehicle[] = [];
+  private bostonTransitLines: LocalTransitLine[] = [];
+  private bostonLayerState: Record<BostonLayerId, boolean> = {
+    policeDistricts: true,
+    fireHydrants: true,
+    fireDepartments: true,
+    communityCenters: false,
+    transitVehicles: true,
+  };
+  private bostonLiveUpdatedAt: string | null = null;
+  private bostonLiveStatusEl: HTMLElement | null = null;
 
   // Phase 8 overlay data
   private happinessScores: Map<string, number> = new Map();
@@ -442,6 +468,12 @@ export class DeckGLMap {
     attribution.className = 'map-attribution';
     attribution.innerHTML = '© <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
     wrapper.appendChild(attribution);
+
+    const bostonStatus = document.createElement('div');
+    bostonStatus.className = 'deckgl-boston-live';
+    bostonStatus.style.display = 'none';
+    wrapper.appendChild(bostonStatus);
+    this.bostonLiveStatusEl = bostonStatus;
 
     this.container.appendChild(wrapper);
   }
@@ -1002,6 +1034,10 @@ export class DeckGLMap {
     } else {
       if (this.dayNightIntervalId) this.stopDayNightTimer();
       this.layerCache.delete('day-night-layer');
+    }
+
+    if (this.hasBostonData()) {
+      layers.push(...this.createBostonLayers());
     }
 
     // Undersea cables layer
@@ -2695,6 +2731,24 @@ export class DeckGLMap {
     const text = (value: unknown): string => escapeHtml(String(value ?? ''));
 
     switch (layerId) {
+      case 'boston-police-districts-layer': {
+        const props = obj.properties || obj;
+        const district = props?.DISTRICT ?? props?.district ?? props?.name ?? 'BPD District';
+        return { html: `<div class="deckgl-tooltip"><strong>${text(district)}</strong><br/>Boston Police District</div>` };
+      }
+      case 'boston-fire-hydrants-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.label || 'Fire Hydrant')}</strong><br/>Boston Fire Hydrant</div>` };
+      case 'boston-fire-departments-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.label || 'Fire Department')}</strong><br/>Boston Fire Department</div>` };
+      case 'boston-community-centers-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.label || 'Community Center')}</strong><br/>Boston Community Center</div>` };
+      case 'boston-crime-incidents-layer':
+      case 'boston-fire-incidents-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.incidentType || obj.sourceCategory || 'Incident')}</strong><br/>${text(obj.address || 'Boston')}<br/>${text(obj.dateTimeReported || obj.date || '')}</div>` };
+      case 'boston-transit-lines-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.routeLabel || obj.routeId || 'Transit Route')}</strong><br/>${text(obj.mode || '')} line</div>` };
+      case 'boston-transit-vehicles-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.routeLabel || obj.routeId || 'Transit Vehicle')}</strong><br/>${text(obj.status || '')}</div>` };
       case 'hotspots-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name)}</strong><br/>${text(obj.subtext)}</div>` };
       case 'earthquakes-layer':
@@ -3833,6 +3887,290 @@ export class DeckGLMap {
     });
   }
 
+  private hasBostonData(): boolean {
+    return this.bostonPoliceDistricts.features.length > 0
+      || this.bostonFireHydrants.features.length > 0
+      || this.bostonFireDepartments.features.length > 0
+      || this.bostonCommunityCenters.features.length > 0
+      || this.bostonCrimeIncidents.length > 0
+      || this.bostonFireIncidents.length > 0
+      || this.bostonTransitVehicles.length > 0
+      || this.bostonTransitLines.length > 0;
+  }
+
+  private markBostonLiveUpdate(): void {
+    this.bostonLiveUpdatedAt = new Date().toISOString();
+    this.updateBostonLiveStatus();
+  }
+
+  private updateBostonLiveStatus(): void {
+    if (!this.bostonLiveStatusEl) return;
+    if (!this.hasBostonData()) {
+      this.bostonLiveStatusEl.style.display = 'none';
+      return;
+    }
+    const updated = this.bostonLiveUpdatedAt
+      ? new Date(this.bostonLiveUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : 'unknown';
+    const lineSummary = this.bostonTransitLines.length > 0 ? ` · ${this.bostonTransitLines.length} lines` : '';
+    this.bostonLiveStatusEl.style.display = 'block';
+    this.bostonLiveStatusEl.textContent = `BOSTON LIVE · ${updated} · ${this.bostonCrimeIncidents.length} crime · ${this.bostonFireIncidents.length} fire · ${this.bostonTransitVehicles.length} vehicles${lineSummary}`;
+  }
+
+  private safeFeatureProperties(feature: Feature<Geometry>): Record<string, unknown> {
+    const props = feature.properties;
+    if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
+    return props as Record<string, unknown>;
+  }
+
+  private getFeatureLabel(feature: Feature<Geometry>): string {
+    const props = this.safeFeatureProperties(feature);
+    const candidates = [
+      props['DISTRICT'],
+      props['district'],
+      props['name'],
+      props['NAME'],
+      props['hydrantid'],
+      props['HYDRANTID'],
+      props['hydrant_num'],
+      props['HYDRANT_NUM'],
+      props['station'],
+      props['STATION'],
+      props['address'],
+      props['ADDRESS'],
+      props['site_name'],
+      props['SITE_NAME'],
+    ];
+    for (const value of candidates) {
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    }
+    return 'Boston feature';
+  }
+
+  private getFeaturePointCoordinates(feature: Feature<Geometry>): Array<[number, number]> {
+    const geometry = feature.geometry;
+    if (!geometry) return [];
+
+    if (geometry.type === 'Point') {
+      const lon = Number(geometry.coordinates[0]);
+      const lat = Number(geometry.coordinates[1]);
+      return Number.isFinite(lon) && Number.isFinite(lat) ? [[lon, lat]] : [];
+    }
+    if (geometry.type === 'MultiPoint') {
+      const points: Array<[number, number]> = [];
+      for (const raw of geometry.coordinates as unknown[]) {
+        if (!Array.isArray(raw) || raw.length < 2) continue;
+        const lon = Number(raw[0]);
+        const lat = Number(raw[1]);
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+        points.push([lon, lat]);
+      }
+      return points;
+    }
+    if (geometry.type === 'LineString') {
+      if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2) return [];
+      const mid = geometry.coordinates[Math.floor(geometry.coordinates.length / 2)] ?? null;
+      const lon = Number(mid?.[0]);
+      const lat = Number(mid?.[1]);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return [];
+      return [[lon, lat]];
+    }
+    if (geometry.type === 'MultiLineString') {
+      const firstLine = geometry.coordinates[0];
+      if (!Array.isArray(firstLine) || firstLine.length < 2) return [];
+      const mid = firstLine[Math.floor(firstLine.length / 2)] ?? null;
+      const lon = Number(mid?.[0]);
+      const lat = Number(mid?.[1]);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return [];
+      return [[lon, lat]];
+    }
+    if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
+      const rings = geometry.type === 'Polygon'
+        ? geometry.coordinates
+        : geometry.coordinates.flat();
+      const outer = rings[0];
+      if (!Array.isArray(outer) || outer.length === 0) return [];
+      let lonSum = 0;
+      let latSum = 0;
+      let count = 0;
+      for (const coords of outer) {
+        if (!coords || coords.length < 2) continue;
+        const lon = Number(coords[0]);
+        const lat = Number(coords[1]);
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+        lonSum += lon;
+        latSum += lat;
+        count += 1;
+      }
+      if (count === 0) return [];
+      return [[lonSum / count, latSum / count]];
+    }
+    return [];
+  }
+
+  private extractBostonLayerPoints(data: BostonLayerData): Array<{ id: string; lon: number; lat: number; label: string; properties: Record<string, unknown> }> {
+    const points: Array<{ id: string; lon: number; lat: number; label: string; properties: Record<string, unknown> }> = [];
+    for (const feature of data.features as Feature<Geometry>[]) {
+      const properties = this.safeFeatureProperties(feature);
+      const label = this.getFeatureLabel(feature);
+      const featureId = String(feature.id ?? properties['OBJECTID'] ?? properties['objectid'] ?? label);
+      const coords = this.getFeaturePointCoordinates(feature);
+      for (let i = 0; i < coords.length; i += 1) {
+        const [lon, lat] = coords[i]!;
+        points.push({
+          id: `${featureId}-${i}`,
+          lon,
+          lat,
+          label,
+          properties,
+        });
+      }
+    }
+    return points;
+  }
+
+  private createBostonDistrictsLayer(): GeoJsonLayer {
+    const fill = getCurrentTheme() === 'light'
+      ? [30, 136, 229, 34] as [number, number, number, number]
+      : [56, 189, 248, 28] as [number, number, number, number];
+    const stroke = getCurrentTheme() === 'light'
+      ? [30, 64, 175, 200] as [number, number, number, number]
+      : [96, 165, 250, 220] as [number, number, number, number];
+
+    return new GeoJsonLayer({
+      id: 'boston-police-districts-layer',
+      data: this.bostonPoliceDistricts,
+      filled: true,
+      stroked: true,
+      pickable: true,
+      getFillColor: fill,
+      getLineColor: stroke,
+      getLineWidth: 2,
+      lineWidthMinPixels: 1,
+    });
+  }
+
+  private createBostonPointLayer(
+    id: string,
+    data: BostonLayerData,
+    color: [number, number, number, number],
+    radiusMinPixels: number,
+    radiusMaxPixels: number,
+  ): ScatterplotLayer {
+    const points = this.extractBostonLayerPoints(data);
+    return new ScatterplotLayer({
+      id,
+      data: points,
+      getPosition: (d: { lon: number; lat: number }) => [d.lon, d.lat],
+      getRadius: 60,
+      radiusUnits: 'meters' as const,
+      radiusMinPixels,
+      radiusMaxPixels,
+      getFillColor: color,
+      pickable: true,
+      stroked: true,
+      getLineColor: [255, 255, 255, 130] as [number, number, number, number],
+      lineWidthMinPixels: 1,
+    });
+  }
+
+  private createBostonIncidentLayer(
+    id: string,
+    incidents: BostonIncident[],
+    color: [number, number, number, number],
+    radiusMinPixels: number,
+  ): ScatterplotLayer<BostonIncident> {
+    const points = incidents.filter((incident) => incident.lat != null && incident.lon != null);
+    return new ScatterplotLayer<BostonIncident>({
+      id,
+      data: points,
+      getPosition: (d) => [d.lon as number, d.lat as number],
+      getRadius: 80,
+      radiusUnits: 'meters' as const,
+      radiusMinPixels,
+      radiusMaxPixels: 10,
+      getFillColor: color,
+      pickable: true,
+      stroked: true,
+      getLineColor: [255, 255, 255, 140] as [number, number, number, number],
+      lineWidthMinPixels: 1,
+    });
+  }
+
+  private createBostonTransitVehiclesLayer(): ScatterplotLayer<LocalTransitVehicle> {
+    return new ScatterplotLayer<LocalTransitVehicle>({
+      id: 'boston-transit-vehicles-layer',
+      data: this.bostonTransitVehicles,
+      getPosition: (d) => [d.lon, d.lat],
+      getRadius: 90,
+      radiusUnits: 'meters' as const,
+      radiusMinPixels: 4,
+      radiusMaxPixels: 12,
+      getFillColor: (d) => BOSTON_MODE_COLORS[d.mode],
+      pickable: true,
+      stroked: true,
+      getLineColor: [255, 255, 255, 170] as [number, number, number, number],
+      lineWidthMinPixels: 1,
+    });
+  }
+
+  private createBostonLayers(): Layer[] {
+    const layers: Layer[] = [];
+
+    if (this.bostonLayerState.policeDistricts && this.bostonPoliceDistricts.features.length > 0) {
+      layers.push(this.createBostonDistrictsLayer());
+    }
+    if (this.bostonLayerState.fireHydrants && this.bostonFireHydrants.features.length > 0) {
+      layers.push(this.createBostonPointLayer(
+        'boston-fire-hydrants-layer',
+        this.bostonFireHydrants,
+        [34, 197, 94, 150],
+        1,
+        5,
+      ));
+    }
+    if (this.bostonLayerState.fireDepartments && this.bostonFireDepartments.features.length > 0) {
+      layers.push(this.createBostonPointLayer(
+        'boston-fire-departments-layer',
+        this.bostonFireDepartments,
+        [251, 146, 60, 220],
+        4,
+        10,
+      ));
+    }
+    if (this.bostonLayerState.communityCenters && this.bostonCommunityCenters.features.length > 0) {
+      layers.push(this.createBostonPointLayer(
+        'boston-community-centers-layer',
+        this.bostonCommunityCenters,
+        [168, 85, 247, 210],
+        3,
+        8,
+      ));
+    }
+    if (this.bostonCrimeIncidents.length > 0) {
+      layers.push(this.createBostonIncidentLayer(
+        'boston-crime-incidents-layer',
+        this.bostonCrimeIncidents,
+        [59, 130, 246, 215],
+        4,
+      ));
+    }
+    if (this.bostonFireIncidents.length > 0) {
+      layers.push(this.createBostonIncidentLayer(
+        'boston-fire-incidents-layer',
+        this.bostonFireIncidents,
+        [239, 68, 68, 215],
+        4,
+      ));
+    }
+    if (this.bostonLayerState.transitVehicles && this.bostonTransitVehicles.length > 0) {
+      layers.push(this.createBostonTransitVehiclesLayer());
+    }
+
+    return layers;
+  }
+
   // Data setters - all use render() for debouncing
   public setEarthquakes(earthquakes: Earthquake[]): void {
     this.earthquakes = earthquakes;
@@ -4005,36 +4343,57 @@ export class DeckGLMap {
     this.render();
   }
 
-  public setBostonPoliceDistricts(_data: BostonLayerData): void {
-    // DeckGL Boston overlays are not implemented yet.
+  public setBostonPoliceDistricts(data: BostonLayerData): void {
+    this.bostonPoliceDistricts = data;
+    this.markBostonLiveUpdate();
+    this.render();
   }
 
-  public setBostonFireHydrants(_data: BostonLayerData): void {
-    // DeckGL Boston overlays are not implemented yet.
+  public setBostonFireHydrants(data: BostonLayerData): void {
+    this.bostonFireHydrants = data;
+    this.markBostonLiveUpdate();
+    this.render();
   }
 
-  public setBostonFireDepartments(_data: BostonLayerData): void {
-    // DeckGL Boston overlays are not implemented yet.
+  public setBostonFireDepartments(data: BostonLayerData): void {
+    this.bostonFireDepartments = data;
+    this.markBostonLiveUpdate();
+    this.render();
   }
 
-  public setBostonCommunityCenters(_data: BostonLayerData): void {
-    // DeckGL Boston overlays are not implemented yet.
+  public setBostonCommunityCenters(data: BostonLayerData): void {
+    this.bostonCommunityCenters = data;
+    this.markBostonLiveUpdate();
+    this.render();
   }
 
-  public setBostonCrimeIncidents(_incidents: BostonIncident[]): void {
-    // DeckGL Boston overlays are not implemented yet.
+  public setBostonCrimeIncidents(incidents: BostonIncident[]): void {
+    this.bostonCrimeIncidents = incidents;
+    this.markBostonLiveUpdate();
+    this.render();
   }
 
-  public setBostonFireIncidents(_incidents: BostonIncident[]): void {
-    // DeckGL Boston overlays are not implemented yet.
+  public setBostonFireIncidents(incidents: BostonIncident[]): void {
+    this.bostonFireIncidents = incidents;
+    this.markBostonLiveUpdate();
+    this.render();
   }
 
-  public setBostonTransitVehicles(_vehicles: LocalTransitVehicle[]): void {
-    // DeckGL Boston overlays are not implemented yet.
+  public setBostonTransitVehicles(vehicles: LocalTransitVehicle[]): void {
+    this.bostonTransitVehicles = vehicles;
+    this.markBostonLiveUpdate();
+    this.render();
   }
 
-  public setBostonLayerEnabled(_layerId: BostonLayerId, _enabled: boolean): void {
-    // DeckGL Boston overlays are not implemented yet.
+  public setBostonTransitLines(lines: LocalTransitLine[]): void {
+    this.bostonTransitLines = lines;
+    this.markBostonLiveUpdate();
+    this.render();
+  }
+
+  public setBostonLayerEnabled(layerId: BostonLayerId, enabled: boolean): void {
+    this.bostonLayerState[layerId] = enabled;
+    this.render();
   }
 
   public updateHotspotActivity(news: NewsItem[]): void {
