@@ -27,10 +27,15 @@ import type { TvModeController } from '@/services/tv-mode';
 import type { BreakingNewsBanner } from '@/components/BreakingNewsBanner';
 
 export interface CountryBriefSignals {
+  criticalNews: number;
   protests: number;
   militaryFlights: number;
   militaryVessels: number;
   outages: number;
+  aisDisruptions: number;
+  satelliteFires: number;
+  temporalAnomalies: number;
+  cyberThreats: number;
   earthquakes: number;
   displacementOutflow: number;
   climateStress: number;
@@ -117,6 +122,7 @@ export interface AppContext {
   isPlaybackMode: boolean;
   isIdle: boolean;
   initialLoadComplete: boolean;
+  resolvedLocation: 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
 
   initialUrlState: ParsedMapUrlState | null;
   readonly PANEL_ORDER_KEY: string;

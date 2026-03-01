@@ -451,19 +451,27 @@ function orefDateToUTC(dateStr) {
   return new Date(ms).toISOString();
 }
 
-function orefCurlFetch(proxyAuth, url) {
+function orefCurlFetch(proxyAuth, url, { toFile } = {}) {
   // Use curl via child_process — Node.js TLS fingerprint (JA3) gets blocked by Akamai,
   // but curl's fingerprint passes. curl is available on Railway (Linux) and macOS.
   // execFileSync avoids shell interpolation — safe with special chars in proxy credentials.
   const { execFileSync } = require('child_process');
   const proxyUrl = `http://${proxyAuth}`;
-  const result = execFileSync('curl', [
+  const args = [
     '-sS', '-x', proxyUrl, '--max-time', '15',
     '-H', 'Accept: application/json',
     '-H', 'Referer: https://www.oref.org.il/',
     '-H', 'X-Requested-With: XMLHttpRequest',
-    url,
-  ], { encoding: 'utf8', timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'] });
+  ];
+  if (toFile) {
+    // Write directly to disk — avoids stdout buffer overflow (ENOBUFS) for large responses
+    args.push('-o', toFile);
+    args.push(url);
+    execFileSync('curl', args, { timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'] });
+    return require('fs').readFileSync(toFile, 'utf8');
+  }
+  args.push(url);
+  const result = execFileSync('curl', args, { encoding: 'utf8', timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'] });
   return result;
 }
 
@@ -511,11 +519,18 @@ async function orefFetchAlerts() {
 }
 
 async function orefBootstrapHistory() {
-  const raw = orefCurlFetch(OREF_PROXY_AUTH, OREF_HISTORY_URL);
+  const tmpFile = require('path').join(require('os').tmpdir(), `oref-history-${Date.now()}.json`);
+  let raw;
+  try {
+    raw = orefCurlFetch(OREF_PROXY_AUTH, OREF_HISTORY_URL, { toFile: tmpFile });
+  } finally {
+    try { require('fs').unlinkSync(tmpFile); } catch {}
+  }
   const cleaned = stripBom(raw).trim();
   if (!cleaned || cleaned === '[]') return;
 
-  const records = JSON.parse(cleaned);
+  const allRecords = JSON.parse(cleaned);
+  const records = allRecords.slice(-500);
   const waves = new Map();
   for (const r of records) {
     const key = r.alertDate;
@@ -2982,12 +2997,17 @@ const server = http.createServer(async (req, res) => {
           return sendError(502, 'Too many redirects');
         }
 
+        const conditionalHeaders = {};
+        if (rssCached?.etag) conditionalHeaders['If-None-Match'] = rssCached.etag;
+        if (rssCached?.lastModified) conditionalHeaders['If-Modified-Since'] = rssCached.lastModified;
+
         const protocol = url.startsWith('https') ? https : http;
         const request = protocol.get(url, {
           headers: {
             'Accept': 'application/rss+xml, application/xml, text/xml, */*',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
+            ...conditionalHeaders,
           },
           timeout: 15000
         }, (response) => {
@@ -2997,6 +3017,20 @@ const server = http.createServer(async (req, res) => {
               : new URL(response.headers.location, url).href;
             logThrottled('log', `rss-redirect:${feedUrl}:${redirectUrl}`, `[Relay] Following redirect to: ${redirectUrl}`);
             return fetchWithRedirects(redirectUrl, redirectCount + 1);
+          }
+
+          if (response.statusCode === 304 && rssCached) {
+            responseHandled = true;
+            rssCached.timestamp = Date.now();
+            resolveInFlight();
+            logThrottled('log', `rss-revalidated:${feedUrl}`, '[Relay] RSS 304 revalidated:', feedUrl);
+            sendCompressed(req, res, 200, {
+              'Content-Type': rssCached.contentType || 'application/xml',
+              'Cache-Control': 'public, max-age=300',
+              'CDN-Cache-Control': 'public, max-age=600, stale-while-revalidate=300',
+              'X-Cache': 'REVALIDATED',
+            }, rssCached.data);
+            return;
           }
 
           const encoding = response.headers['content-encoding'];
@@ -3017,7 +3051,11 @@ const server = http.createServer(async (req, res) => {
               const oldest = rssResponseCache.keys().next().value;
               if (oldest) rssResponseCache.delete(oldest);
             }
-            rssResponseCache.set(feedUrl, { data, contentType: 'application/xml', statusCode: response.statusCode, timestamp: Date.now() });
+            rssResponseCache.set(feedUrl, {
+              data, contentType: 'application/xml', statusCode: response.statusCode, timestamp: Date.now(),
+              etag: response.headers['etag'] || null,
+              lastModified: response.headers['last-modified'] || null,
+            });
             if (response.statusCode < 200 || response.statusCode >= 300) {
               logThrottled('warn', `rss-upstream:${feedUrl}:${response.statusCode}`, `[Relay] RSS upstream ${response.statusCode} for ${feedUrl}`);
             }

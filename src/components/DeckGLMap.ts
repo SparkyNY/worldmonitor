@@ -33,7 +33,9 @@ import type {
   MapDatacenterCluster,
   CyberThreat,
   CableHealthRecord,
+  MilitaryBaseEnriched,
 } from '@/types';
+import { fetchMilitaryBases, type MilitaryBaseCluster as ServerBaseCluster } from '@/services/military-bases';
 import type { AirportDelayAlert } from '@/services/aviation';
 import type { IranEvent } from '@/services/conflict';
 import type { GpsJamHex } from '@/services/gps-interference';
@@ -44,6 +46,7 @@ import { ArcLayer } from '@deck.gl/layers';
 import { HeatmapLayer } from '@deck.gl/aggregation-layers';
 import type { WeatherAlert } from '@/services/weather';
 import { escapeHtml } from '@/utils/sanitize';
+import { tokenizeForMatch, matchKeyword, matchesAnyKeyword, findMatchingKeywords } from '@/utils/keyword-match';
 import { t } from '@/services/i18n';
 import { debounce, rafSchedule, getCurrentTheme } from '@/utils/index';
 import {
@@ -90,10 +93,8 @@ import type { KindnessPoint } from '@/services/kindness-data';
 import type { HappinessData } from '@/services/happiness-data';
 import type { RenewableInstallation } from '@/services/renewable-installations';
 import type { SpeciesRecovery } from '@/services/conservation-data';
-import { getCountriesGeoJson, getCountryAtCoordinates } from '@/services/country-geometry';
+import { getCountriesGeoJson, getCountryAtCoordinates, getCountryBbox } from '@/services/country-geometry';
 import type { FeatureCollection, Geometry } from 'geojson';
-import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
-import type { LocalTransitVehicle } from '@/services/local-transit';
 
 export type TimeRange = '1h' | '6h' | '24h' | '48h' | '7d' | 'all';
 export type DeckMapView = 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
@@ -275,6 +276,9 @@ export class DeckGLMap {
   private militaryFlightClusters: MilitaryFlightCluster[] = [];
   private militaryVessels: MilitaryVessel[] = [];
   private militaryVesselClusters: MilitaryVesselCluster[] = [];
+  private serverBases: MilitaryBaseEnriched[] = [];
+  private serverBaseClusters: ServerBaseCluster[] = [];
+  private serverBasesLoaded = false;
   private naturalEvents: NaturalEvent[] = [];
   private firmsFireData: Array<{ lat: number; lon: number; brightness: number; frp: number; confidence: number; region: string; acq_date: string; daynight: string }> = [];
   private techEvents: TechEventMarker[] = [];
@@ -296,20 +300,6 @@ export class DeckGLMap {
   private happinessSource = '';
   private speciesRecoveryZones: Array<SpeciesRecovery & { recoveryZone: { name: string; lat: number; lon: number } }> = [];
   private renewableInstallations: RenewableInstallation[] = [];
-  private bostonPoliceDistricts: BostonLayerData = { type: 'FeatureCollection', features: [] };
-  private bostonFireHydrants: BostonLayerData = { type: 'FeatureCollection', features: [] };
-  private bostonFireDepartments: BostonLayerData = { type: 'FeatureCollection', features: [] };
-  private bostonCommunityCenters: BostonLayerData = { type: 'FeatureCollection', features: [] };
-  private bostonCrimeIncidents: BostonIncident[] = [];
-  private bostonFireIncidents: BostonIncident[] = [];
-  private bostonTransitVehicles: LocalTransitVehicle[] = [];
-  private bostonLayersEnabled: Record<BostonLayerId, boolean> = {
-    policeDistricts: true,
-    fireHydrants: false,
-    fireDepartments: true,
-    communityCenters: false,
-    transitVehicles: true,
-  };
   private countriesGeoJsonData: FeatureCollection<Geometry> | null = null;
 
   // Country highlight state
@@ -361,6 +351,7 @@ export class DeckGLMap {
   private lastCableHealthSignature = '';
   private lastPipelineHighlightSignature = '';
   private debouncedRebuildLayers: () => void;
+  private debouncedFetchBases: () => void;
   private rafUpdateLayers: () => void;
   private moveTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -374,6 +365,7 @@ export class DeckGLMap {
       this.maplibreMap.resize();
       try { this.deckOverlay?.setProps({ layers: this.buildLayers() }); } catch { /* map mid-teardown */ }
     }, 150);
+    this.debouncedFetchBases = debounce(() => this.fetchServerBases(), 300);
     this.rafUpdateLayers = rafSchedule(() => {
       if (this.renderPaused || this.webglLost || !this.maplibreMap) return;
       try { this.deckOverlay?.setProps({ layers: this.buildLayers() }); } catch { /* map mid-teardown */ }
@@ -397,6 +389,7 @@ export class DeckGLMap {
       this.rebuildDatacenterSupercluster();
       this.initDeck();
       this.loadCountryBoundaries();
+      this.fetchServerBases();
       this.render();
     });
 
@@ -511,6 +504,9 @@ export class DeckGLMap {
     this.maplibreMap.on('moveend', () => {
       this.lastSCZoom = -1;
       this.rafUpdateLayers();
+      this.debouncedFetchBases();
+      this.state.zoom = this.maplibreMap?.getZoom() ?? this.state.zoom;
+      this.onStateChange?.(this.state);
     });
 
     this.maplibreMap.on('move', () => {
@@ -536,6 +532,8 @@ export class DeckGLMap {
         this.lastZoomThreshold = currentZoom;
         this.debouncedRebuildLayers();
       }
+      this.state.zoom = this.maplibreMap?.getZoom() ?? this.state.zoom;
+      this.onStateChange?.(this.state);
     });
   }
 
@@ -1023,10 +1021,12 @@ export class DeckGLMap {
       layers.push(this.createConflictZonesLayer());
     }
 
-    // Military bases layer — hidden at low zoom (E: progressive disclosure) + ghost
+    // Military bases layer — hidden at low zoom (E: progressive disclosure) + ghost + clusters
     if (mapLayers.bases && this.isLayerVisible('bases')) {
       layers.push(this.createBasesLayer());
-      layers.push(this.createGhostLayer('bases-layer', MILITARY_BASES, d => [d.lon, d.lat], { radiusMinPixels: 12 }));
+      layers.push(...this.createBasesClusterLayer());
+      const basesData = this.getBasesData();
+      layers.push(this.createGhostLayer('bases-layer', basesData, d => [d.lon, d.lat], { radiusMinPixels: 12 }));
     }
 
     // Nuclear facilities layer — hidden at low zoom + ghost
@@ -1241,32 +1241,6 @@ export class DeckGLMap {
       layers.push(this.createGulfInvestmentsLayer());
     }
 
-    // Boston local overlays (panel-driven, manual refresh only)
-    if (SITE_VARIANT === 'full' || SITE_VARIANT === 'local') {
-      if (this.bostonLayersEnabled.policeDistricts && this.bostonPoliceDistricts.features.length > 0) {
-        layers.push(this.createBostonPolygonLayer('boston-police-districts-layer', this.bostonPoliceDistricts, [70, 130, 255, 45], [70, 130, 255, 180]));
-      }
-      if (this.bostonLayersEnabled.fireHydrants && this.bostonFireHydrants.features.length > 0) {
-        layers.push(this.createBostonPointLayer('boston-fire-hydrants-layer', this.bostonFireHydrants, [220, 70, 70, 200], 2));
-      }
-      if (this.bostonLayersEnabled.fireDepartments && this.bostonFireDepartments.features.length > 0) {
-        layers.push(this.createBostonPointLayer('boston-fire-departments-layer', this.bostonFireDepartments, [255, 140, 0, 220], 5));
-      }
-      if (this.bostonLayersEnabled.communityCenters && this.bostonCommunityCenters.features.length > 0) {
-        layers.push(this.createBostonPointLayer('boston-community-centers-layer', this.bostonCommunityCenters, [50, 200, 130, 220], 4));
-      }
-      if (this.bostonLayersEnabled.transitVehicles && this.bostonTransitVehicles.length > 0) {
-        layers.push(this.createBostonTransitVehiclesLayer());
-      }
-
-      if (this.bostonCrimeIncidents.length > 0) {
-        layers.push(...this.createBostonIncidentClusterLayers('boston-crime', this.bostonCrimeIncidents, [255, 60, 90, 210]));
-      }
-      if (this.bostonFireIncidents.length > 0) {
-        layers.push(...this.createBostonIncidentClusterLayers('boston-fire', this.bostonFireIncidents, [255, 150, 60, 210]));
-      }
-    }
-
     // Positive events layer (happy variant)
     if (mapLayers.positiveEvents && this.positiveEvents.length > 0) {
       layers.push(...this.createPositiveEventsLayers());
@@ -1406,32 +1380,33 @@ export class DeckGLMap {
     return layer;
   }
 
+  private getBasesData(): MilitaryBaseEnriched[] {
+    return this.serverBasesLoaded ? this.serverBases : MILITARY_BASES as MilitaryBaseEnriched[];
+  }
+
+  private getBaseColor(type: string, a: number): [number, number, number, number] {
+    switch (type) {
+      case 'us-nato': return [68, 136, 255, a];
+      case 'russia': return [255, 68, 68, a];
+      case 'china': return [255, 136, 68, a];
+      case 'uk': return [68, 170, 255, a];
+      case 'france': return [0, 85, 164, a];
+      case 'india': return [255, 153, 51, a];
+      case 'japan': return [188, 0, 45, a];
+      default: return [136, 136, 136, a];
+    }
+  }
+
   private createBasesLayer(): IconLayer {
     const highlightedBases = this.highlightedAssets.base;
-
-    // Base colors by operator type - semi-transparent for layering
-    // F: Fade in bases as you zoom — subtle at zoom 3, full at zoom 5+
     const zoom = this.maplibreMap?.getZoom() || 3;
-    const alphaScale = Math.min(1, (zoom - 2.5) / 2.5); // 0.2 at zoom 3, 1.0 at zoom 5
+    const alphaScale = Math.min(1, (zoom - 2.5) / 2.5);
     const a = Math.round(160 * Math.max(0.3, alphaScale));
+    const data = this.getBasesData();
 
-    const getBaseColor = (type: string): [number, number, number, number] => {
-      switch (type) {
-        case 'us-nato': return [68, 136, 255, a];
-        case 'russia': return [255, 68, 68, a];
-        case 'china': return [255, 136, 68, a];
-        case 'uk': return [68, 170, 255, a];
-        case 'france': return [0, 85, 164, a];
-        case 'india': return [255, 153, 51, a];
-        case 'japan': return [188, 0, 45, a];
-        default: return [136, 136, 136, a];
-      }
-    };
-
-    // Military bases: TRIANGLE icons - color by operator, semi-transparent
     return new IconLayer({
       id: 'bases-layer',
-      data: MILITARY_BASES,
+      data,
       getPosition: (d) => [d.lon, d.lat],
       getIcon: () => 'triangleUp',
       iconAtlas: MARKER_ICONS.triangleUp,
@@ -1441,13 +1416,45 @@ export class DeckGLMap {
         if (highlightedBases.has(d.id)) {
           return [255, 100, 100, 220] as [number, number, number, number];
         }
-        return getBaseColor(d.type);
+        return this.getBaseColor(d.type, a);
       },
       sizeScale: 1,
       sizeMinPixels: 6,
       sizeMaxPixels: 16,
       pickable: true,
     });
+  }
+
+  private createBasesClusterLayer(): Layer[] {
+    if (this.serverBaseClusters.length === 0) return [];
+    const zoom = this.maplibreMap?.getZoom() || 3;
+    const alphaScale = Math.min(1, (zoom - 2.5) / 2.5);
+    const a = Math.round(180 * Math.max(0.3, alphaScale));
+
+    const scatterLayer = new ScatterplotLayer<ServerBaseCluster>({
+      id: 'bases-cluster-layer',
+      data: this.serverBaseClusters,
+      getPosition: (d) => [d.longitude, d.latitude],
+      getRadius: (d) => Math.max(8000, Math.log2(d.count) * 6000),
+      getFillColor: (d) => this.getBaseColor(d.dominantType, a),
+      radiusMinPixels: 10,
+      radiusMaxPixels: 40,
+      pickable: true,
+    });
+
+    const textLayer = new TextLayer<ServerBaseCluster>({
+      id: 'bases-cluster-text',
+      data: this.serverBaseClusters,
+      getPosition: (d) => [d.longitude, d.latitude],
+      getText: (d) => String(d.count),
+      getSize: 12,
+      getColor: [255, 255, 255, 220],
+      fontWeight: 'bold',
+      getTextAnchor: 'middle',
+      getAlignmentBaseline: 'center',
+    });
+
+    return [scatterLayer, textLayer];
   }
 
   private createNuclearLayer(): IconLayer {
@@ -2725,7 +2732,9 @@ export class DeckGLMap {
         }
         return { html: `<div class="deckgl-tooltip"><strong>${t('components.deckgl.tooltip.dataCentersCount', { count: String(obj.count) })}</strong><br/>${text(obj.country)}</div>` };
       case 'bases-layer':
-        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name)}</strong><br/>${text(obj.country)}</div>` };
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name)}</strong><br/>${text(obj.country)}${obj.kind ? ` · ${text(obj.kind)}` : ''}</div>` };
+      case 'bases-cluster-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${obj.count} bases</strong></div>` };
       case 'nuclear-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name)}</strong><br/>${text(obj.type)}</div>` };
       case 'datacenters-layer':
@@ -3571,6 +3580,17 @@ export class DeckGLMap {
     }
   }
 
+  public fitCountry(code: string): void {
+    const bbox = getCountryBbox(code);
+    if (!bbox || !this.maplibreMap) return;
+    const [minLon, minLat, maxLon, maxLat] = bbox;
+    this.maplibreMap.fitBounds([[minLon, minLat], [maxLon, maxLat]], {
+      padding: 40,
+      duration: 800,
+      maxZoom: 8,
+    });
+  }
+
   public getCenter(): { lat: number; lon: number } | null {
     if (this.maplibreMap) {
       const center = this.maplibreMap.getCenter();
@@ -3620,10 +3640,6 @@ export class DeckGLMap {
   }
 
   private resetView(): void {
-    if (SITE_VARIANT === 'local') {
-      this.setCenter(42.3601, -71.0589, 10.6);
-      return;
-    }
     this.setView('global');
   }
 
@@ -3685,154 +3701,6 @@ export class DeckGLMap {
       ],
       pickable: false,
     });
-  }
-
-  private createBostonPolygonLayer(
-    id: string,
-    data: BostonLayerData,
-    fillColor: [number, number, number, number],
-    lineColor: [number, number, number, number],
-  ): GeoJsonLayer {
-    return new GeoJsonLayer({
-      id,
-      data,
-      stroked: true,
-      filled: true,
-      lineWidthMinPixels: 1,
-      getLineColor: lineColor,
-      getFillColor: fillColor,
-      pickable: false,
-    });
-  }
-
-  private createBostonPointLayer(
-    id: string,
-    data: BostonLayerData,
-    color: [number, number, number, number],
-    radiusMinPixels: number,
-  ): GeoJsonLayer {
-    return new GeoJsonLayer({
-      id,
-      data,
-      pointType: 'circle',
-      stroked: false,
-      filled: true,
-      getFillColor: color,
-      getPointRadius: 35,
-      pointRadiusUnits: 'meters',
-      pointRadiusMinPixels: radiusMinPixels,
-      pointRadiusMaxPixels: radiusMinPixels + 3,
-      pickable: false,
-    });
-  }
-
-  private createBostonTransitVehiclesLayer(): ScatterplotLayer<LocalTransitVehicle> {
-    const colorForMode = (mode: LocalTransitVehicle['mode']): [number, number, number, number] => {
-      if (mode === 'subway') return [60, 160, 255, 230];
-      if (mode === 'commuter_rail') return [180, 120, 255, 230];
-      if (mode === 'ferry') return [40, 200, 190, 230];
-      return [255, 190, 70, 230];
-    };
-
-    return new ScatterplotLayer<LocalTransitVehicle>({
-      id: 'boston-transit-vehicles-layer',
-      data: this.bostonTransitVehicles,
-      getPosition: (d) => [d.lon, d.lat],
-      getFillColor: (d) => colorForMode(d.mode),
-      getLineColor: [255, 255, 255, 210],
-      stroked: true,
-      lineWidthMinPixels: 1,
-      radiusUnits: 'pixels',
-      getRadius: (d) => (d.mode === 'subway' || d.mode === 'commuter_rail' ? 6 : 5),
-      radiusMinPixels: 4,
-      radiusMaxPixels: 8,
-      pickable: true,
-      onClick: (info) => {
-        const vehicle = info.object;
-        if (!vehicle) return;
-        this.setCenter(vehicle.lat, vehicle.lon, Math.max(11, this.state.zoom));
-      },
-    });
-  }
-
-  private createBostonIncidentClusterLayers(
-    idPrefix: string,
-    incidents: BostonIncident[],
-    color: [number, number, number, number],
-  ): Layer[] {
-    const points = incidents.filter((item) => item.lat != null && item.lon != null);
-    if (points.length === 0 || !this.maplibreMap) return [];
-
-    const supercluster = new Supercluster<{ incident: BostonIncident }, { cluster: true; cluster_id: number; point_count: number; point_count_abbreviated: string }>({
-      radius: 45,
-      maxZoom: 16,
-    });
-
-    supercluster.load(points.map((item) => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [item.lon!, item.lat!] },
-      properties: { incident: item },
-    })));
-
-    const bounds = this.maplibreMap.getBounds();
-    const zoom = Math.floor(this.maplibreMap.getZoom());
-    const clusters = supercluster.getClusters(
-      [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
-      zoom,
-    );
-
-    const clusterFeatures = clusters.filter((f) => (f.properties as { cluster?: boolean }).cluster === true);
-    const pointFeatures = clusters.filter((f) => (f.properties as { cluster?: boolean }).cluster !== true);
-
-    const clusterLayer = new ScatterplotLayer({
-      id: `${idPrefix}-clusters`,
-      data: clusterFeatures,
-      getPosition: (d: { geometry: { coordinates: number[] } }) => d.geometry.coordinates as [number, number],
-      getRadius: (d: { properties: { point_count: number } }) => 20 + Math.min(40, (d.properties.point_count ?? 1) * 0.8),
-      radiusUnits: 'pixels',
-      getFillColor: color,
-      getLineColor: [255, 255, 255, 220],
-      lineWidthMinPixels: 1,
-      pickable: true,
-      onClick: (info) => {
-        const clusterId = (info.object as { properties?: { cluster_id?: number } } | null)?.properties?.cluster_id;
-        if (clusterId == null || !this.maplibreMap) return;
-        const expansionZoom = Math.min(16, supercluster.getClusterExpansionZoom(clusterId));
-        const coords = (info.object as { geometry: { coordinates: [number, number] } }).geometry.coordinates;
-        this.maplibreMap.easeTo({ center: coords, zoom: expansionZoom, duration: 400 });
-      },
-    });
-
-    const clusterLabelLayer = new TextLayer({
-      id: `${idPrefix}-cluster-labels`,
-      data: clusterFeatures,
-      getPosition: (d: { geometry: { coordinates: number[] } }) => d.geometry.coordinates as [number, number],
-      getText: (d: { properties: { point_count: number } }) => String(d.properties.point_count ?? 0),
-      getSize: 12,
-      getColor: [255, 255, 255, 255],
-      getTextAnchor: 'middle',
-      getAlignmentBaseline: 'center',
-      billboard: true,
-      pickable: false,
-    });
-
-    const pointLayer = new ScatterplotLayer({
-      id: `${idPrefix}-points`,
-      data: pointFeatures,
-      getPosition: (d: { geometry: { coordinates: number[] } }) => d.geometry.coordinates as [number, number],
-      getRadius: 12,
-      radiusUnits: 'pixels',
-      getFillColor: color,
-      pickable: true,
-      onClick: (info) => {
-        const incident = (info.object as { properties?: { incident?: BostonIncident } } | null)?.properties?.incident;
-        if (incident?.lat != null && incident.lon != null) {
-          this.setCenter(incident.lat, incident.lon, Math.max(11, this.state.zoom));
-        }
-      },
-    });
-
-    return [clusterLayer, clusterLabelLayer, pointLayer];
   }
 
   private createTradeRoutesLayer(): ArcLayer<TradeRouteSegment> {
@@ -3971,8 +3839,6 @@ export class DeckGLMap {
 
   public setWeatherAlerts(alerts: WeatherAlert[]): void {
     this.weatherAlerts = alerts;
-    const withCentroid = alerts.filter(a => a.centroid && a.centroid.length === 2).length;
-    console.log(`[DeckGLMap] Weather alerts: ${alerts.length} total, ${withCentroid} with coordinates`);
     this.render();
   }
 
@@ -4031,6 +3897,26 @@ export class DeckGLMap {
     this.militaryVessels = vessels;
     this.militaryVesselClusters = clusters;
     this.render();
+  }
+
+  private fetchServerBases(): void {
+    if (!this.maplibreMap) return;
+    const mapLayers = this.state.layers;
+    if (!mapLayers.bases) return;
+    const zoom = this.maplibreMap.getZoom();
+    if (zoom < 3) return;
+    const bounds = this.maplibreMap.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+    fetchMilitaryBases(sw.lat, sw.lng, ne.lat, ne.lng, zoom).then((result) => {
+      if (!result) return;
+      this.serverBases = result.bases;
+      this.serverBaseClusters = result.clusters;
+      this.serverBasesLoaded = true;
+      this.render();
+    }).catch((err) => {
+      console.error('[bases] fetch error', err);
+    });
   }
 
   public setNaturalEvents(events: NaturalEvent[]): void {
@@ -4117,46 +4003,6 @@ export class DeckGLMap {
     this.render();
   }
 
-  public setBostonPoliceDistricts(data: BostonLayerData): void {
-    this.bostonPoliceDistricts = data;
-    this.render();
-  }
-
-  public setBostonFireHydrants(data: BostonLayerData): void {
-    this.bostonFireHydrants = data;
-    this.render();
-  }
-
-  public setBostonFireDepartments(data: BostonLayerData): void {
-    this.bostonFireDepartments = data;
-    this.render();
-  }
-
-  public setBostonCommunityCenters(data: BostonLayerData): void {
-    this.bostonCommunityCenters = data;
-    this.render();
-  }
-
-  public setBostonCrimeIncidents(incidents: BostonIncident[]): void {
-    this.bostonCrimeIncidents = incidents;
-    this.render();
-  }
-
-  public setBostonFireIncidents(incidents: BostonIncident[]): void {
-    this.bostonFireIncidents = incidents;
-    this.render();
-  }
-
-  public setBostonTransitVehicles(vehicles: LocalTransitVehicle[]): void {
-    this.bostonTransitVehicles = vehicles;
-    this.render();
-  }
-
-  public setBostonLayerEnabled(layerId: BostonLayerId, enabled: boolean): void {
-    this.bostonLayersEnabled[layerId] = enabled;
-    this.render();
-  }
-
   public updateHotspotActivity(news: NewsItem[]): void {
     this.news = news; // Store for related news lookup
 
@@ -4170,10 +4016,9 @@ export class DeckGLMap {
     const matchCounts = new Map<string, number>();
 
     recentNews.forEach(item => {
+      const tokens = tokenizeForMatch(item.title);
       this.hotspots.forEach(hotspot => {
-        if (hotspot.keywords.some(kw =>
-          item.title.toLowerCase().includes(kw.toLowerCase())
-        )) {
+        if (matchesAnyKeyword(tokens, hotspot.keywords)) {
           breakingKeywords.add(hotspot.id);
           matchCounts.set(hotspot.id, (matchCounts.get(hotspot.id) || 0) + 1);
         }
@@ -4194,32 +4039,27 @@ export class DeckGLMap {
 
   /** Get news items related to a hotspot by keyword matching */
   private getRelatedNews(hotspot: Hotspot): NewsItem[] {
-    // High-priority conflict keywords that indicate the news is really about another topic
-    const conflictTopics = ['gaza', 'ukraine', 'russia', 'israel', 'iran', 'china', 'taiwan', 'korea', 'syria'];
+    const conflictTopics = ['gaza', 'ukraine', 'ukrainian', 'russia', 'russian', 'israel', 'israeli', 'iran', 'iranian', 'china', 'chinese', 'taiwan', 'taiwanese', 'korea', 'korean', 'syria', 'syrian'];
 
     return this.news
       .map((item) => {
-        const titleLower = item.title.toLowerCase();
-        const matchedKeywords = hotspot.keywords.filter((kw) => titleLower.includes(kw.toLowerCase()));
+        const tokens = tokenizeForMatch(item.title);
+        const matchedKeywords = findMatchingKeywords(tokens, hotspot.keywords);
 
         if (matchedKeywords.length === 0) return null;
 
-        // Check if this news mentions other hotspot conflict topics
         const conflictMatches = conflictTopics.filter(t =>
-          titleLower.includes(t) && !hotspot.keywords.some(k => k.toLowerCase().includes(t))
+          matchKeyword(tokens, t) && !hotspot.keywords.some(k => k.toLowerCase().includes(t))
         );
 
-        // If article mentions a major conflict topic that isn't this hotspot, deprioritize heavily
         if (conflictMatches.length > 0) {
-          // Only include if it ALSO has a strong local keyword (city name, agency)
           const strongLocalMatch = matchedKeywords.some(kw =>
             kw.toLowerCase() === hotspot.name.toLowerCase() ||
-            hotspot.agencies?.some(a => titleLower.includes(a.toLowerCase()))
+            hotspot.agencies?.some(a => matchKeyword(tokens, a))
           );
           if (!strongLocalMatch) return null;
         }
 
-        // Score: more keyword matches = more relevant
         const score = matchedKeywords.length;
         return { item, score };
       })
@@ -4346,7 +4186,6 @@ export class DeckGLMap {
 
   // Toggle layer on/off programmatically
   public toggleLayer(layer: keyof MapLayers): void {
-    console.log(`[DeckGLMap.toggleLayer] ${layer}: ${this.state.layers[layer]} -> ${!this.state.layers[layer]}`);
     this.state.layers[layer] = !this.state.layers[layer];
     const toggle = this.container.querySelector(`.layer-toggle[data-layer="${layer}"] input`) as HTMLInputElement;
     if (toggle) toggle.checked = this.state.layers[layer];
@@ -4400,9 +4239,8 @@ export class DeckGLMap {
   }
 
   public triggerBaseClick(id: string): void {
-    const base = MILITARY_BASES.find(b => b.id === id);
+    const base = this.serverBases.find(b => b.id === id) || MILITARY_BASES.find(b => b.id === id);
     if (base) {
-      // Don't pan - show popup at projected screen position or center
       const screenPos = this.projectToScreen(base.lat, base.lon);
       const { x, y } = screenPos || this.getContainerCenter();
       this.popup.show({ type: 'base', data: base, x, y });
@@ -4589,7 +4427,6 @@ export class DeckGLMap {
         if (!this.countryHoverSetup) this.setupCountryHover();
         this.updateCountryLayerPaint(getCurrentTheme());
         if (this.highlightedCountryCode) this.highlightCountry(this.highlightedCountryCode);
-        console.log('[DeckGLMap] Country boundaries loaded');
       })
       .catch((err) => console.warn('[DeckGLMap] Failed to load country boundaries:', err));
   }
