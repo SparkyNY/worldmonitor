@@ -354,16 +354,11 @@ export class CountryBriefPage implements CountryBriefPanel {
     linkShareBtn?.addEventListener('click', () => {
       if (!this.currentCode || !this.currentName) return;
       const url = `${window.location.origin}/?c=${this.currentCode}`;
-      const title = `${this.currentName} — World Monitor`;
-      if (navigator.share) {
-        navigator.share({ title, url }).catch(() => {});
-      } else {
-        navigator.clipboard.writeText(url).then(() => {
-          const orig = linkShareBtn!.innerHTML;
-          linkShareBtn!.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-          setTimeout(() => { linkShareBtn!.innerHTML = orig; }, 1500);
-        }).catch(() => {});
-      }
+      navigator.clipboard.writeText(url).then(() => {
+        const orig = linkShareBtn!.innerHTML;
+        linkShareBtn!.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(() => { linkShareBtn!.innerHTML = orig; }, 1500);
+      }).catch(() => {});
     });
     this.overlay.querySelector('.cb-share-btn')?.addEventListener('click', () => {
       if (this.onShareStory && this.currentCode && this.currentName) {
@@ -687,9 +682,13 @@ export class CountryBriefPage implements CountryBriefPanel {
     </head><body>${header ? header.outerHTML : ''}${content.outerHTML}</body></html>`);
     doc.close();
 
-    iframe.contentWindow!.onafterprint = () => document.body.removeChild(iframe);
+    if (iframe.contentWindow) {
+      iframe.contentWindow.onafterprint = () => document.body.removeChild(iframe);
+    }
     setTimeout(() => {
-      iframe.contentWindow!.print();
+      if (iframe.contentWindow) {
+        iframe.contentWindow.print();
+      }
       setTimeout(() => { if (iframe.parentNode) document.body.removeChild(iframe); }, 5000);
     }, 300);
   }

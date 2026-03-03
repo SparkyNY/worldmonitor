@@ -1826,7 +1826,7 @@ export class EventHandlerManager implements AppModule {
       center,
       timeRange: state.timeRange,
       layers: state.layers,
-      country: isCountryVisible ? (briefPage!.getCode() ?? undefined) : undefined,
+      country: isCountryVisible ? (briefPage?.getCode() ?? undefined) : undefined,
       expanded: isCountryVisible && briefPage?.getIsMaximized?.() ? true : undefined,
     });
   }

@@ -53,6 +53,7 @@ export class App {
   private state: AppContext;
   private pendingDeepLinkCountry: string | null = null;
   private pendingDeepLinkExpanded = false;
+  private pendingDeepLinkStoryCode: string | null = null;
 
   private panelLayout: PanelLayoutManager;
   private dataLoader: DataLoaderManager;
@@ -444,10 +445,12 @@ export class App {
 
     // Phase 5: Event listeners + URL sync
     this.eventHandlers.init();
-    // Capture ?country= and ?expanded= BEFORE URL sync overwrites them
+    // Capture deep link params BEFORE URL sync overwrites them
     const initState = parseMapUrlState(window.location.search, this.state.mapLayers);
     this.pendingDeepLinkCountry = initState.country ?? null;
     this.pendingDeepLinkExpanded = initState.expanded === true;
+    const earlyParams = new URLSearchParams(window.location.search);
+    this.pendingDeepLinkStoryCode = earlyParams.get('c') ?? null;
     this.eventHandlers.setupUrlStateSync();
 
     this.state.countryBriefPage?.onStateChange?.(() => {
@@ -511,17 +514,22 @@ export class App {
     const DEEP_LINK_RETRY_INTERVAL_MS = 500;
     const DEEP_LINK_INITIAL_DELAY_MS = 2000;
 
-    // Check for story deep link: /story?c=UA&t=ciianalysis
-    if (url.pathname === '/story' || url.searchParams.has('c')) {
-      const countryCode = url.searchParams.get('c');
+    // Check for country brief deep link: ?c=IR (captured early before URL sync)
+    const storyCode = this.pendingDeepLinkStoryCode ?? url.searchParams.get('c');
+    this.pendingDeepLinkStoryCode = null;
+    if (url.pathname === '/story' || storyCode) {
+      const countryCode = storyCode;
       if (countryCode) {
-        trackDeeplinkOpened('story', countryCode);
+        trackDeeplinkOpened('country', countryCode);
         const countryName = getCountryNameByCode(countryCode.toUpperCase()) || countryCode;
 
         let attempts = 0;
         const checkAndOpen = () => {
-          if (dataFreshness.hasSufficientData() && this.state.latestClusters.length > 0) {
-            this.countryIntel.openCountryStory(countryCode.toUpperCase(), countryName);
+          if (dataFreshness.hasSufficientData()) {
+            this.countryIntel.openCountryBriefByCode(countryCode.toUpperCase(), countryName, {
+              maximize: true,
+            });
+            this.eventHandlers.syncUrlState();
             return;
           }
           attempts += 1;
@@ -534,7 +542,6 @@ export class App {
         };
         setTimeout(checkAndOpen, DEEP_LINK_INITIAL_DELAY_MS);
 
-        history.replaceState(null, '', '/');
         return;
       }
     }

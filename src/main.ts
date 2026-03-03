@@ -299,10 +299,14 @@ if (!('__TAURI_INTERNALS__' in window) && !('__TAURI__' in window) && 'serviceWo
   navigator.serviceWorker.register('/sw.js', { scope: '/' })
     .then((registration) => {
       console.log('[PWA] Service worker registered');
-      setInterval(async () => {
+      const swUpdateInterval = setInterval(async () => {
         if (!navigator.onLine) return;
         try { await registration.update(); } catch {}
       }, 60 * 60 * 1000);
+      // Expose interval ID for cleanup/debugging
+      (window as unknown as Record<string, unknown>).__swUpdateInterval = swUpdateInterval;
     })
-    .catch(() => {});
+    .catch((err) => {
+      console.warn('[PWA] Service worker registration failed:', err);
+    });
 }

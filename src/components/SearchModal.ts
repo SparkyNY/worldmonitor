@@ -282,7 +282,7 @@ export class SearchModal {
         this.handleSearch();
       });
 
-      this.resultsList!.appendChild(item);
+      this.resultsList?.appendChild(item);
     });
   }
 

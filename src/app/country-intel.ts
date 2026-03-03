@@ -278,7 +278,7 @@ export class CountryIntelManager implements AppModule {
       } catch { /* server unreachable */ }
 
       if (briefText) {
-        this.ctx.countryBriefPage!.updateBrief({ brief: briefText, country, code });
+        this.ctx.countryBriefPage?.updateBrief({ brief: briefText, country, code });
       } else {
         let fallbackBrief = '';
         const sumModelId = BETA_MODE ? 'summarization-beta' : 'summarization';
@@ -295,7 +295,7 @@ export class CountryIntelManager implements AppModule {
         }
 
         if (fallbackBrief) {
-          this.ctx.countryBriefPage!.updateBrief({ brief: fallbackBrief, country, code, fallback: true });
+          this.ctx.countryBriefPage?.updateBrief({ brief: fallbackBrief, country, code, fallback: true });
         } else {
           const lines: string[] = [];
           if (score) lines.push(t('countryBrief.fallback.instabilityIndex', { score: String(score.score), level: t(`countryBrief.levels.${score.level}`), trend: t(`countryBrief.trends.${score.trend}`) }));
@@ -319,15 +319,15 @@ export class CountryIntelManager implements AppModule {
             briefHeadlines.slice(0, 5).forEach(h => lines.push(`• ${h}`));
           }
           if (lines.length > 0) {
-            this.ctx.countryBriefPage!.updateBrief({ brief: lines.join('\n'), country, code, fallback: true });
+            this.ctx.countryBriefPage?.updateBrief({ brief: lines.join('\n'), country, code, fallback: true });
           } else {
-            this.ctx.countryBriefPage!.updateBrief({ brief: '', country, code, error: 'No AI service available. Configure GROQ_API_KEY in Settings for full briefs.' });
+            this.ctx.countryBriefPage?.updateBrief({ brief: '', country, code, error: 'No AI service available. Configure GROQ_API_KEY in Settings for full briefs.' });
           }
         }
       }
     } catch (err) {
       console.error('[CountryBrief] fetch error:', err);
-      this.ctx.countryBriefPage!.updateBrief({ brief: '', country, code, error: 'Failed to generate brief' });
+      this.ctx.countryBriefPage?.updateBrief({ brief: '', country, code, error: 'Failed to generate brief' });
     }
   }
 

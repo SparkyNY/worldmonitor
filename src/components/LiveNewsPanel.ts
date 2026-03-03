@@ -3,6 +3,7 @@ import { fetchLiveVideoInfo } from '@/services/live-news';
 import { isDesktopRuntime, getRemoteApiBaseUrl, getApiBaseUrl, getLocalApiPort } from '@/services/runtime';
 import { t } from '../services/i18n';
 import { loadFromStorage, saveToStorage } from '@/utils';
+import { escapeHtml, sanitizeUrl } from '@/utils/sanitize';
 import { STORAGE_KEYS, SITE_VARIANT } from '@/config';
 import { getStreamQuality } from '@/services/ai-flow-settings';
 
@@ -954,10 +955,11 @@ export class LiveNewsPanel extends Panel {
 
   private showOfflineMessage(channel: LiveChannel): void {
     this.destroyPlayer();
+    const safeName = escapeHtml(channel.name);
     this.content.innerHTML = `
       <div class="live-offline">
         <div class="offline-icon">📺</div>
-        <div class="offline-text">${t('components.liveNews.notLive', { name: channel.name })}</div>
+        <div class="offline-text">${t('components.liveNews.notLive', { name: safeName })}</div>
         <button class="offline-retry" onclick="this.closest('.panel').querySelector('.live-channel-btn.active')?.click()">${t('common.retry')}</button>
       </div>
     `;
@@ -967,13 +969,14 @@ export class LiveNewsPanel extends Panel {
     this.destroyPlayer();
     const watchUrl = channel.videoId
       ? `https://www.youtube.com/watch?v=${encodeURIComponent(channel.videoId)}`
-      : `https://www.youtube.com/${channel.handle}`;
+      : `https://www.youtube.com/${encodeURIComponent(channel.handle)}`;
+    const safeName = escapeHtml(channel.name);
 
     this.content.innerHTML = `
       <div class="live-offline">
         <div class="offline-icon">!</div>
-        <div class="offline-text">${t('components.liveNews.cannotEmbed', { name: channel.name, code: String(errorCode) })}</div>
-        <a class="offline-retry" href="${watchUrl}" target="_blank" rel="noopener noreferrer">${t('components.liveNews.openOnYouTube')}</a>
+        <div class="offline-text">${t('components.liveNews.cannotEmbed', { name: safeName, code: String(errorCode) })}</div>
+        <a class="offline-retry" href="${sanitizeUrl(watchUrl)}" target="_blank" rel="noopener noreferrer">${t('components.liveNews.openOnYouTube')}</a>
       </div>
     `;
   }
