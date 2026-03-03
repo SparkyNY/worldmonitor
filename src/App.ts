@@ -10,7 +10,7 @@ import {
 } from '@/config';
 import { initDB, cleanOldSnapshots, isAisConfigured, initAisStream, isOutagesConfigured, disconnectAisStream } from '@/services';
 import { mlWorker } from '@/services/ml-worker';
-import { getAiFlowSettings, subscribeAiFlowChange } from '@/services/ai-flow-settings';
+import { getAiFlowSettings, subscribeAiFlowChange, isHeadlineMemoryEnabled } from '@/services/ai-flow-settings';
 import { startLearning } from '@/services/country-instability';
 import { dataFreshness } from '@/services/data-freshness';
 import type { BostonDatasetId, BostonDatasetPayload, BostonLayerData } from '@/services/boston-open-data';
@@ -33,6 +33,7 @@ import { trackEvent, trackDeeplinkOpened } from '@/services/analytics';
 import { preloadCountryGeometry, getCountryNameByCode } from '@/services/country-geometry';
 import { initI18n } from '@/services/i18n';
 
+import { computeDefaultDisabledSources, getLocaleBoostedSources, getTotalFeedCount } from '@/config/feeds';
 import { fetchBootstrapData } from '@/services/bootstrap';
 import { DesktopUpdater } from '@/app/desktop-updater';
 import { CountryIntelManager } from '@/app/country-intel';
@@ -51,6 +52,7 @@ export type { CountryBriefSignals } from '@/app/app-context';
 export class App {
   private state: AppContext;
   private pendingDeepLinkCountry: string | null = null;
+  private pendingDeepLinkExpanded = false;
 
   private panelLayout: PanelLayoutManager;
   private dataLoader: DataLoaderManager;
@@ -206,6 +208,31 @@ export class App {
     if (!CYBER_LAYER_ENABLED) {
       mapLayers.cyberThreats = false;
     }
+    // One-time migration: reduce default-enabled sources (full variant only)
+    if (currentVariant === 'full') {
+      const baseKey = 'worldmonitor-sources-reduction-v3';
+      if (!localStorage.getItem(baseKey)) {
+        const defaultDisabled = computeDefaultDisabledSources();
+        saveToStorage(STORAGE_KEYS.disabledFeeds, defaultDisabled);
+        localStorage.setItem(baseKey, 'done');
+        const total = getTotalFeedCount();
+        console.log(`[App] Sources reduction: ${defaultDisabled.length} disabled, ${total - defaultDisabled.length} enabled`);
+      }
+      // Locale boost: additively enable locale-matched sources (runs once per locale)
+      const userLang = ((navigator.language ?? 'en').split('-')[0] ?? 'en').toLowerCase();
+      const localeKey = `worldmonitor-locale-boost-${userLang}`;
+      if (userLang !== 'en' && !localStorage.getItem(localeKey)) {
+        const boosted = getLocaleBoostedSources(userLang);
+        if (boosted.size > 0) {
+          const current = loadFromStorage<string[]>(STORAGE_KEYS.disabledFeeds, []);
+          const updated = current.filter(name => !boosted.has(name));
+          saveToStorage(STORAGE_KEYS.disabledFeeds, updated);
+          console.log(`[App] Locale boost (${userLang}): enabled ${current.length - updated.length} sources`);
+        }
+        localStorage.setItem(localeKey, 'done');
+      }
+    }
+
     const disabledSources = new Set(loadFromStorage<string[]>(STORAGE_KEYS.disabledFeeds, []));
 
     // Build shared state object
@@ -296,6 +323,7 @@ export class App {
       loadDataForLayer: (layer) => { void this.dataLoader.loadDataForLayer(layer as keyof MapLayers); },
       waitForAisData: () => this.dataLoader.waitForAisData(),
       syncDataFreshnessWithLayers: () => this.dataLoader.syncDataFreshnessWithLayers(),
+      ensureCorrectZones: () => this.panelLayout.ensureCorrectZones(),
     });
 
     // Wire cross-module callback: DataLoader → SearchManager
@@ -320,7 +348,13 @@ export class App {
     const aiFlow = getAiFlowSettings();
     if (aiFlow.browserModel || isDesktopRuntime()) {
       await mlWorker.init();
-      if (BETA_MODE) mlWorker.loadModel('summarization-beta').catch(() => {});
+      if (BETA_MODE) mlWorker.loadModel('summarization-beta').catch(() => { });
+    }
+
+    if (aiFlow.headlineMemory) {
+      mlWorker.init().then(ok => {
+        if (ok) mlWorker.loadModel('embeddings').catch(() => { });
+      }).catch(() => { });
     }
 
     this.unsubAiFlow = subscribeAiFlowChange((key) => {
@@ -328,8 +362,21 @@ export class App {
         const s = getAiFlowSettings();
         if (s.browserModel) {
           mlWorker.init();
-        } else {
+        } else if (!isHeadlineMemoryEnabled()) {
           mlWorker.terminate();
+        }
+      }
+      if (key === 'headlineMemory') {
+        if (isHeadlineMemoryEnabled()) {
+          mlWorker.init().then(ok => {
+            if (ok) mlWorker.loadModel('embeddings').catch(() => { });
+          }).catch(() => { });
+        } else {
+          mlWorker.unloadModel('embeddings').catch(() => { });
+          const s = getAiFlowSettings();
+          if (!s.browserModel && !isDesktopRuntime()) {
+            mlWorker.terminate();
+          }
         }
       }
     });
@@ -397,10 +444,15 @@ export class App {
 
     // Phase 5: Event listeners + URL sync
     this.eventHandlers.init();
-    // Capture ?country= BEFORE URL sync overwrites it
+    // Capture ?country= and ?expanded= BEFORE URL sync overwrites them
     const initState = parseMapUrlState(window.location.search, this.state.mapLayers);
     this.pendingDeepLinkCountry = initState.country ?? null;
+    this.pendingDeepLinkExpanded = initState.expanded === true;
     this.eventHandlers.setupUrlStateSync();
+
+    this.state.countryBriefPage?.onStateChange?.(() => {
+      this.eventHandlers.syncUrlState();
+    });
 
     // Phase 6: Data loading
     this.dataLoader.syncDataFreshnessWithLayers();
@@ -487,16 +539,21 @@ export class App {
       }
     }
 
-    // Check for country brief deep link: ?country=UA
+    // Check for country brief deep link: ?country=UA or ?country=UA&expanded=1
     const deepLinkCountry = this.pendingDeepLinkCountry;
+    const deepLinkExpanded = this.pendingDeepLinkExpanded;
     this.pendingDeepLinkCountry = null;
+    this.pendingDeepLinkExpanded = false;
     if (deepLinkCountry) {
       trackDeeplinkOpened('country', deepLinkCountry);
       const cName = CountryIntelManager.resolveCountryName(deepLinkCountry);
       let attempts = 0;
       const checkAndOpenBrief = () => {
         if (dataFreshness.hasSufficientData()) {
-          this.countryIntel.openCountryBriefByCode(deepLinkCountry, cName);
+          this.countryIntel.openCountryBriefByCode(deepLinkCountry, cName, {
+            maximize: deepLinkExpanded,
+          });
+          this.eventHandlers.syncUrlState();
           return;
         }
         attempts += 1;
@@ -659,10 +716,12 @@ export class App {
         { name: 'cables', fn: () => this.dataLoader.loadCableActivity(), intervalMs: 30 * 60 * 1000, condition: () => this.state.mapLayers.cables },
         { name: 'cableHealth', fn: () => this.dataLoader.loadCableHealth(), intervalMs: 2 * 60 * 60 * 1000, condition: () => this.state.mapLayers.cables },
         { name: 'flights', fn: () => this.dataLoader.loadFlightDelays(), intervalMs: 2 * 60 * 60 * 1000, condition: () => this.state.mapLayers.flights },
-        { name: 'cyberThreats', fn: () => {
-          this.state.cyberThreatsCache = null;
-          return this.dataLoader.loadCyberThreats();
-        }, intervalMs: 10 * 60 * 1000, condition: () => CYBER_LAYER_ENABLED && this.state.mapLayers.cyberThreats },
+        {
+          name: 'cyberThreats', fn: () => {
+            this.state.cyberThreatsCache = null;
+            return this.dataLoader.loadCyberThreats();
+          }, intervalMs: 10 * 60 * 1000, condition: () => CYBER_LAYER_ENABLED && this.state.mapLayers.cyberThreats
+        },
       ]);
     }
 

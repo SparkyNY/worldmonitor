@@ -14,6 +14,7 @@ export interface OrefAlertsResponse {
   configured: boolean;
   alerts: OrefAlert[];
   historyCount24h: number;
+  totalHistoryCount?: number;
   timestamp: string;
   error?: string;
 }
@@ -37,11 +38,69 @@ const CACHE_TTL = 8_000;
 let pollingInterval: ReturnType<typeof setInterval> | null = null;
 let updateCallbacks: Array<(data: OrefAlertsResponse) => void> = [];
 
+let locationTranslator: ((s: string) => string) | null = null;
+let locationMapPromise: Promise<void> | null = null;
+
+async function ensureLocationMapLoaded(): Promise<void> {
+  if (locationTranslator) return;
+  if (locationMapPromise) { await locationMapPromise; return; }
+  locationMapPromise = import('./oref-locations').then(m => {
+    locationTranslator = m.translateLocation;
+  }).catch(() => { locationMapPromise = null; console.warn('[OREF] Failed to load location translations, will retry'); });
+  await locationMapPromise;
+}
+
 const MAX_TRANSLATION_CACHE = 200;
 const translationCache = new Map<string, { title: string; data: string[]; desc: string }>();
 let translationPromise: Promise<boolean> | null = null;
 
+function sanitizeHebrew(text: string): string {
+  return text
+    .normalize('NFKC')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
 const HEBREW_RE = /[\u0590-\u05FF]/;
+
+const STATIC_TRANSLATIONS: Record<string, string> = {
+  'ירי רקטות וטילים': 'Rocket and missile fire',
+  'חדירת כלי טיס עוין': 'Hostile aircraft intrusion',
+  'רעידת אדמה': 'Earthquake',
+  'צונאמי': 'Tsunami',
+  'חומרים מסוכנים': 'Hazardous materials',
+  'פריצת מחסום': 'Security breach',
+  'חשש לחדירה עוינת': 'Suspected hostile infiltration',
+  'אירוע רדיולוגי': 'Radiological event',
+  'אירוע חומרים מסוכנים': 'Hazardous materials event',
+  'היכנסו למרחב המוגן': 'Enter the protected space',
+  'ניתן לצאת מהמרחב המוגן אך יש להישאר בקרבתו': 'You may leave the protected space but stay nearby',
+  'ניתן לצאת מהמרחב המוגן': 'You may leave the protected space',
+  'בדקות הקרובות צפויות להתקבל התרעות באזורך': 'Alerts expected in your area soon',
+  'התרעה לא קונבנציונלית': 'Non-conventional threat alert',
+  'ירי שיגור רקטות': 'Rocket launch fire',
+  'התקפה כימית': 'Chemical attack',
+  'חדירת מחבלים': 'Terrorist infiltration',
+  'שריפה גדולה': 'Large fire',
+  'אזעקה': 'Siren alert',
+  'ירי רקטות': 'Rocket fire',
+  'ירי טילים': 'Missile fire',
+  'התגוננו': 'Take shelter',
+};
+
+function staticTranslate(text: string): string {
+  if (!text || !HEBREW_RE.test(text)) return text;
+  const sanitized = sanitizeHebrew(text);
+  const direct = STATIC_TRANSLATIONS[sanitized];
+  if (direct) return direct;
+  let result = sanitized;
+  for (const [heb, eng] of Object.entries(STATIC_TRANSLATIONS)) {
+    if (result.includes(heb)) result = result.replace(heb, eng);
+  }
+  return result;
+}
 
 function hasHebrew(text: string): boolean {
   return HEBREW_RE.test(text);
@@ -54,6 +113,14 @@ function alertNeedsTranslation(alert: OrefAlert): boolean {
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+const OREF_LABEL_RE = /(?:ALERT|AREAS|DESC)\[[^\]]*\]:\s*/g;
+
+function stripOrefLabels(text: string): string {
+  return text.replace(OREF_LABEL_RE, '').trim();
+}
+
+export { stripOrefLabels };
 
 function buildTranslationPrompt(alerts: OrefAlert[]): string {
   const lines: string[] = [];
@@ -72,9 +139,9 @@ function parseTranslationResponse(raw: string, alerts: OrefAlert[]): void {
     const reAlert = new RegExp(`ALERT\\[${eid}\\]:\\s*(.+)`);
     const reAreas = new RegExp(`AREAS\\[${eid}\\]:\\s*(.+)`);
     const reDesc = new RegExp(`DESC\\[${eid}\\]:\\s*(.+)`);
-    let title = alert.title;
-    let areas = alert.data;
-    let desc = alert.desc;
+    let title: string | null = null;
+    let areas: string[] | null = null;
+    let desc: string | null = null;
     for (const line of lines) {
       const alertMatch = line.match(reAlert);
       if (alertMatch?.[1]) title = alertMatch[1].trim();
@@ -83,7 +150,13 @@ function parseTranslationResponse(raw: string, alerts: OrefAlert[]): void {
       const descMatch = line.match(reDesc);
       if (descMatch?.[1]) desc = descMatch[1].trim();
     }
-    translationCache.set(alert.id, { title, data: areas, desc });
+    if (title === null && areas === null && desc === null) continue;
+    const entry = {
+      title: stripOrefLabels(title && !hasHebrew(title) ? title : staticTranslate(alert.title)),
+      data: (areas && !areas.some(hasHebrew) ? areas : alert.data.map(d => locationTranslator ? locationTranslator(staticTranslate(d)) : staticTranslate(d))).map(stripOrefLabels),
+      desc: stripOrefLabels(desc && !hasHebrew(desc) ? desc : staticTranslate(alert.desc)),
+    };
+    translationCache.set(alert.id, entry);
   }
   if (translationCache.size > MAX_TRANSLATION_CACHE) {
     const excess = translationCache.size - MAX_TRANSLATION_CACHE;
@@ -95,10 +168,23 @@ function parseTranslationResponse(raw: string, alerts: OrefAlert[]): void {
   }
 }
 
+function translateFields(alert: OrefAlert): OrefAlert {
+  return {
+    ...alert,
+    title: staticTranslate(alert.title),
+    data: alert.data.map(d => locationTranslator ? locationTranslator(staticTranslate(d)) : staticTranslate(d)),
+    desc: staticTranslate(alert.desc),
+  };
+}
+
 function applyTranslations(alerts: OrefAlert[]): OrefAlert[] {
   return alerts.map(a => {
     const cached = translationCache.get(a.id);
-    if (cached) return { ...a, ...cached };
+    if (cached) {
+      const merged = { ...a, ...cached };
+      return alertNeedsTranslation(merged) ? translateFields(merged) : merged;
+    }
+    if (alertNeedsTranslation(a)) return translateFields(a);
     return a;
   });
 }
@@ -143,6 +229,7 @@ function getOrefApiUrl(endpoint?: string): string {
 }
 
 export async function fetchOrefAlerts(): Promise<OrefAlertsResponse> {
+  await ensureLocationMapLoaded();
   const now = Date.now();
   if (cachedResponse && now - lastFetchAt < CACHE_TTL) {
     return { ...cachedResponse, alerts: applyTranslations(cachedResponse.alerts) };
@@ -174,11 +261,13 @@ export async function fetchOrefAlerts(): Promise<OrefAlertsResponse> {
 }
 
 export async function fetchOrefHistory(): Promise<OrefHistoryResponse> {
+  await ensureLocationMapLoaded();
   try {
     const res = await fetch(getOrefApiUrl('history'), {
       headers: { Accept: 'application/json' },
     });
     if (!res.ok) {
+      console.warn('[OREF History] HTTP', res.status);
       return { configured: false, history: [], historyCount24h: 0, timestamp: new Date().toISOString(), error: `HTTP ${res.status}` };
     }
     const data: OrefHistoryResponse = await res.json();

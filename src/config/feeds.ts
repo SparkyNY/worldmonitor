@@ -32,6 +32,7 @@ export const SOURCE_TIERS: Record<string, number> = {
   'Al Jazeera': 2,
   'Financial Times': 2,
   'Politico': 2,
+  'Axios': 2,
   'EuroNews': 2,
   'France 24': 2,
   'Le Monde': 2,
@@ -58,6 +59,13 @@ export const SOURCE_TIERS: Record<string, number> = {
   'Svenska Dagbladet': 2,
   'Reuters World': 1,
   'Reuters Business': 1,
+  'Reuters US': 1,
+  'Fox News': 2,
+  'NBC News': 2,
+  'CBS News': 2,
+  'The National': 2,
+  'Yonhap News': 2,
+  'Chosun Ilbo': 2,
   'OpenAI News': 3,
   // Portuguese
   'Brasil Paralelo': 2,
@@ -322,7 +330,7 @@ export const SOURCE_TYPES: Record<string, SourceType> = {
   'BBC World': 'mainstream', 'BBC Middle East': 'mainstream',
   'Guardian World': 'mainstream', 'Guardian ME': 'mainstream',
   'NPR News': 'mainstream', 'Al Jazeera': 'mainstream',
-  'CNN World': 'mainstream', 'Politico': 'mainstream',
+  'CNN World': 'mainstream', 'Politico': 'mainstream', 'Axios': 'mainstream',
   'EuroNews': 'mainstream', 'France 24': 'mainstream', 'Le Monde': 'mainstream',
   // European Addition
   'El País': 'mainstream', 'El Mundo': 'mainstream', 'BBC Mundo': 'mainstream',
@@ -435,6 +443,18 @@ export function isStateAffiliatedSource(sourceName: string): boolean {
   return !!profile?.stateAffiliated;
 }
 
+let _sourcePanelMap: Map<string, string> | null = null;
+export function getSourcePanelId(sourceName: string): string {
+  if (!_sourcePanelMap) {
+    _sourcePanelMap = new Map();
+    for (const [category, feeds] of Object.entries(FEEDS)) {
+      for (const feed of feeds) _sourcePanelMap.set(feed.name, category);
+    }
+    for (const feed of INTEL_SOURCES) _sourcePanelMap.set(feed.name, 'intel');
+  }
+  return _sourcePanelMap.get(sourceName) ?? 'politics';
+}
+
 const FULL_FEEDS: Record<string, Feed[]> = {
   politics: [
     { name: 'BBC World', url: rss('https://feeds.bbci.co.uk/news/world/rss.xml') },
@@ -446,6 +466,11 @@ const FULL_FEEDS: Record<string, Feed[]> = {
   us: [
     { name: 'NPR News', url: rss('https://feeds.npr.org/1001/rss.xml') },
     { name: 'Politico', url: rss('https://news.google.com/rss/search?q=site:politico.com+when:1d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Axios', url: rss('https://api.axios.com/feed/') },
+    { name: 'Fox News', url: rss('https://moxie.foxnews.com/google-publisher/us.xml') },
+    { name: 'NBC News', url: rss('http://feeds.nbcnews.com/feeds/topstories') },
+    { name: 'CBS News', url: rss('http://www.cbsnews.com/latest/rss/main') },
+    { name: 'Reuters US', url: rss('http://feeds.reuters.com/Reuters/domesticNews') },
   ],
   europe: [
     {
@@ -525,16 +550,19 @@ const FULL_FEEDS: Record<string, Feed[]> = {
   middleeast: [
     { name: 'BBC Middle East', url: rss('https://feeds.bbci.co.uk/news/world/middle_east/rss.xml') },
     { name: 'Al Jazeera', url: { en: rss('https://www.aljazeera.com/xml/rss/all.xml'), ar: rss('https://www.aljazeera.net/aljazeerarss/a7c186be-1adb-4b11-a982-4783e765316e/4e17ecdc-8fb9-40de-a5d6-d00f72384a51') } },
-    // AlArabiya blocks cloud IPs (Cloudflare), use Google News fallback
-    { name: 'Al Arabiya', url: rss('https://news.google.com/rss/search?q=site:english.alarabiya.net+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    // AlArabiya EN blocks cloud IPs — Google News fallback; AR RSS is direct
+    { name: 'Al Arabiya', url: { en: rss('https://news.google.com/rss/search?q=site:english.alarabiya.net+when:2d&hl=en-US&gl=US&ceid=US:en'), ar: rss('https://www.alarabiya.net/tools/mrss/?cat=main') } },
     // Arab News and Times of Israel removed — 403 from cloud IPs
     { name: 'Guardian ME', url: rss('https://www.theguardian.com/world/middleeast/rss') },
     { name: 'BBC Persian', url: rss('http://feeds.bbci.co.uk/persian/tv-and-radio-37434376/rss.xml') },
     { name: 'Iran International', url: rss('https://news.google.com/rss/search?q=site:iranintl.com+when:2d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'Fars News', url: rss('https://news.google.com/rss/search?q=site:farsnews.ir+when:2d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'L\'Orient-Le Jour', url: rss('https://news.google.com/rss/search?q=site:lorientlejour.com+when:1d&hl=fr&gl=LB&ceid=LB:fr'), lang: 'fr' },
     { name: 'Haaretz', url: rss('https://news.google.com/rss/search?q=site:haaretz.com+when:7d&hl=en-US&gl=US&ceid=US:en') },
     { name: 'Arab News', url: rss('https://news.google.com/rss/search?q=site:arabnews.com+when:7d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'The National', url: rss('https://news.google.com/rss/search?q=site:thenationalnews.com+when:2d&hl=en-US&gl=US&ceid=US:en') },
+    { name: 'Oman Observer', url: rss('https://www.omanobserver.om/rssFeed/1') },
+    { name: 'Asharq Business', url: rss('https://asharqbusiness.com/rss.xml') },
+    { name: 'Asharq News', url: rss('https://asharq.com/snapchat/rss.xml'), lang: 'ar' },
   ],
   tech: [
     { name: 'Hacker News', url: rss('https://hnrss.org/frontpage') },
@@ -654,6 +682,7 @@ const FULL_FEEDS: Record<string, Feed[]> = {
     { name: 'Asahi Shimbun', url: rss('https://www.asahi.com/rss/asahi/newsheadlines.rdf'), lang: 'ja' },
     { name: 'The Hindu', url: rss('https://www.thehindu.com/news/national/feeder/default.rss'), lang: 'en' },
     { name: 'Indian Express', url: rss('https://indianexpress.com/section/india/feed/') },
+    { name: 'NDTV', url: rss('https://feeds.feedburner.com/ndtvnews-top-stories') },
     { name: 'India News Network', url: rss('https://news.google.com/rss/search?q=India+diplomacy+foreign+policy+news&hl=en&gl=US&ceid=US:en') },
     { name: 'CNA', url: rss('https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml') },
     { name: 'MIIT (China)', url: rss('https://news.google.com/rss/search?q=site:miit.gov.cn+when:7d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'), lang: 'zh' },
@@ -664,6 +693,9 @@ const FULL_FEEDS: Record<string, Feed[]> = {
     // Vietnam
     { name: 'VnExpress', url: rss('https://vnexpress.net/rss/tin-moi-nhat.rss'), lang: 'vi' },
     { name: 'Tuoi Tre News', url: rss('https://tuoitrenews.vn/rss'), lang: 'vi' },
+    // Korea
+    { name: 'Yonhap News', url: rss('https://www.yonhapnewstv.co.kr/browse/feed/'), lang: 'ko' },
+    { name: 'Chosun Ilbo', url: rss('https://www.chosun.com/arc/outboundfeeds/rss/?outputType=xml'), lang: 'ko' },
     // Australia
     { name: 'ABC News Australia', url: rss('https://www.abc.net.au/news/feed/2942460/rss.xml') },
     { name: 'Guardian Australia', url: rss('https://www.theguardian.com/australia-news/rss') },
@@ -989,87 +1021,6 @@ const FINANCE_FEEDS: Record<string, Feed[]> = {
   ],
 };
 
-// Local variant feeds (Boston/Regional)
-const LOCAL_FEEDS: Record<string, Feed[]> = {
-  local: [
-    { name: 'Boston Globe', url: rss('https://news.google.com/rss/search?q=site:bostonglobe.com+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'WBUR News', url: rss('https://rss.wbur.org/wbur/news') },
-    { name: 'WHDH 7News', url: rss('https://whdh.com/feed/') },
-    { name: 'NBC10 Boston', url: rss('https://www.nbcboston.com/?rss=y') },
-    { name: 'GBH News', url: rss('https://news.google.com/rss/search?q=site:wgbh.org+OR+site:gbhnews.org+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'WBZ Boston', url: rss('https://news.google.com/rss/search?q=site:cbsnews.com+Boston+when:2d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Universal Hub', url: rss('https://www.universalhub.com/rss.xml') },
-    { name: 'WCVB Boston', url: rss('https://www.wcvb.com/topstories-rss') },
-    { name: 'Boston 25 News', url: rss('https://www.boston25news.com/arc/outboundfeeds/rss/') },
-    { name: 'Boston Herald', url: rss('https://news.google.com/rss/search?q=site:bostonherald.com+when:2d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Boston Herald RSS', url: rss('https://www.bostonherald.com/feed/') },
-    { name: 'Boston.com', url: rss('https://www.boston.com/feed/') },
-    { name: 'South Boston Today', url: rss('https://www.southbostontoday.com/feed/') },
-    { name: 'East Boston Times-Free Press', url: rss('https://feeds.feedburner.com/EastBostonTimes') },
-    { name: 'South Boston Online', url: rss('https://southbostononline.com/feed/') },
-    { name: 'Boston Business Journal', url: rss('https://feeds.bizjournals.com/bizj_boston') },
-    { name: 'DigBoston', url: rss('https://digboston.com/feed/') },
-    { name: 'Wicked Local Boston', url: rss('https://news.google.com/rss/search?q=site:wickedlocal.com+Boston+when:3d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'EastBoston.com', url: rss('https://news.google.com/rss/search?q=site:eastboston.com+when:3d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'The Boston Pilot', url: rss('https://news.google.com/rss/search?q=site:thebostonpilot.com+Boston+when:3d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'WBZ NewsRadio', url: rss('https://news.google.com/rss/search?q=site:wbznewsradio.iheart.com+when:2d&hl=en-US&gl=US&ceid=US:en') },
-  ],
-  city: [
-    { name: 'City of Boston', url: rss('https://news.google.com/rss/search?q=site:boston.gov+when:3d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Boston Public Health', url: rss('https://news.google.com/rss/search?q=site:boston.gov+\"public+health\"+when:7d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Mass.gov', url: rss('https://news.google.com/rss/search?q=site:mass.gov+when:3d&hl=en-US&gl=US&ceid=US:en') },
-  ],
-  transit: [
-    { name: 'MBTA Alerts', url: rss('https://www.mbta.com/alerts/rss') },
-    { name: 'MassDOT', url: rss('https://news.google.com/rss/search?q=site:mass.gov+MassDOT+traffic+when:3d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Boston Traffic', url: rss('https://news.google.com/rss/search?q=Boston+traffic+I-93+I-90+when:1d&hl=en-US&gl=US&ceid=US:en') },
-  ],
-  weather: [
-    { name: 'NWS Boston', url: rss('https://news.google.com/rss/search?q=(\"National+Weather+Service\"+Boston)+when:2d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'New England Weather', url: rss('https://news.google.com/rss/search?q=New+England+weather+warning+OR+watch+when:2d&hl=en-US&gl=US&ceid=US:en') },
-  ],
-  outages: [
-    { name: 'DownDetector US', url: rss('https://news.google.com/rss/search?q=Downdetector+US+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Internet Outages (US)', url: rss('https://news.google.com/rss/search?q=(internet+outage+OR+ISP+outage)+United+States+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Comcast/Xfinity Outages', url: rss('https://news.google.com/rss/search?q=(Comcast+OR+Xfinity)+outage+Boston+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Verizon Outages', url: rss('https://news.google.com/rss/search?q=Verizon+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'AT&T Outages', url: rss('https://news.google.com/rss/search?q=AT%26T+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'T-Mobile Outages', url: rss('https://news.google.com/rss/search?q=T-Mobile+outage+Massachusetts+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Spectrum Outages', url: rss('https://news.google.com/rss/search?q=Spectrum+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Cox Outages', url: rss('https://news.google.com/rss/search?q=Cox+Communications+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'US Cellular Outages', url: rss('https://news.google.com/rss/search?q=US+Cellular+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
-  ],
-};
-
-// OSINT workbench variant feeds
-const OSINT_FEEDS: Record<string, Feed[]> = {
-  osint: [
-    { name: 'Bellingcat', url: rss('https://www.bellingcat.com/feed/') },
-    { name: 'Oryx OSINT', url: rss('https://www.oryxspioenkop.com/feeds/posts/default?alt=rss') },
-    { name: 'OSINT Curious', url: rss('https://osintcurio.us/feed/') },
-    { name: 'Hunchly Blog', url: rss('https://www.hunch.ly/blog-feed.xml') },
-    { name: 'Digital Investigation', url: rss('https://news.google.com/rss/search?q=(OSINT+OR+\"open+source+intelligence\")+investigation+when:3d&hl=en-US&gl=US&ceid=US:en') },
-  ],
-  security: [
-    { name: 'CISA Advisories', url: rss('https://www.cisa.gov/cybersecurity-advisories/all.xml') },
-    { name: 'Krebs Security', url: rss('https://krebsonsecurity.com/feed/') },
-    { name: 'The Hacker News', url: rss('https://feeds.feedburner.com/TheHackersNews') },
-    { name: 'SANS ISC', url: rss('https://isc.sans.edu/rssfeed.xml') },
-  ],
-  cyber: [
-    { name: 'Ransomware.live', url: rss('https://www.ransomware.live/rss.xml') },
-    { name: 'Abuse.ch', url: rss('https://abuse.ch/feed/') },
-    { name: 'Security Week', url: rss('https://www.securityweek.com/feed/') },
-    { name: 'Recorded Future News', url: rss('https://www.recordedfuture.com/feed') },
-  ],
-  outages: [
-    { name: 'DownDetector', url: rss('https://news.google.com/rss/search?q=Downdetector+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Cloudflare Status', url: rss('https://www.cloudflarestatus.com/history.atom') },
-    { name: 'AWS Status News', url: rss('https://news.google.com/rss/search?q=AWS+status+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
-    { name: 'Google Cloud Outages', url: rss('https://news.google.com/rss/search?q=(Google+Cloud+OR+GCP)+outage+when:1d&hl=en-US&gl=US&ceid=US:en') },
-  ],
-};
-
 const HAPPY_FEEDS: Record<string, Feed[]> = {
   positive: [
     { name: 'Good News Network', url: rss('https://www.goodnewsnetwork.org/feed/') },
@@ -1111,12 +1062,6 @@ export const FEEDS = SITE_VARIANT === 'tech'
     ? FINANCE_FEEDS
     : SITE_VARIANT === 'happy'
       ? HAPPY_FEEDS
-      : SITE_VARIANT === 'gtd'
-        ? FULL_FEEDS
-      : SITE_VARIANT === 'local'
-        ? LOCAL_FEEDS
-        : SITE_VARIANT === 'osint'
-          ? OSINT_FEEDS
       : FULL_FEEDS;
 
 export const SOURCE_REGION_MAP: Record<string, { labelKey: string; feedKeys: string[] }> = {
@@ -1150,12 +1095,6 @@ export const SOURCE_REGION_MAP: Record<string, { labelKey: string; feedKeys: str
   dealsCorpFin: { labelKey: 'header.sourceRegionDeals', feedKeys: ['institutional', 'derivatives'] },
   finRegulation: { labelKey: 'header.sourceRegionFinRegulation', feedKeys: ['regulation'] },
   gulfMena: { labelKey: 'header.sourceRegionGulfMena', feedKeys: ['gccNews'] },
-
-  // Local variant regions
-  localRegion: { labelKey: 'header.sourceRegionLocal', feedKeys: ['local', 'city', 'transit', 'weather', 'outages'] },
-
-  // OSINT variant regions
-  osintRegion: { labelKey: 'header.sourceRegionOsint', feedKeys: ['osint', 'security', 'cyber', 'outages'] },
 };
 
 export const INTEL_SOURCES: Feed[] = [
@@ -1208,6 +1147,79 @@ export const INTEL_SOURCES: Feed[] = [
   { name: 'FAO GIEWS', url: rss('https://news.google.com/rss/search?q=site:fao.org+GIEWS+food+security+when:30d&hl=en-US&gl=US&ceid=US:en'), type: 'economic' },
   { name: 'EU ISS', url: rss('https://news.google.com/rss/search?q=site:iss.europa.eu+when:7d&hl=en-US&gl=US&ceid=US:en'), type: 'intl' },
 ];
+
+// Default-enabled sources per panel (Tier 1+2 priority, ≥8 per panel)
+export const DEFAULT_ENABLED_SOURCES: Record<string, string[]> = {
+  politics: ['BBC World', 'Guardian World', 'AP News', 'Reuters World', 'CNN World'],
+  us: ['NPR News', 'Politico', 'Axios', 'Fox News', 'NBC News', 'CBS News', 'Reuters US'],
+  europe: ['France 24', 'EuroNews', 'Le Monde', 'DW News', 'Tagesschau', 'ANSA', 'NOS Nieuws', 'SVT Nyheter'],
+  middleeast: ['BBC Middle East', 'Al Jazeera', 'Al Arabiya', 'Guardian ME', 'BBC Persian', 'Iran International', 'Haaretz', 'Asharq News', 'The National'],
+  africa: ['BBC Africa', 'News24', 'Africanews', 'Jeune Afrique', 'Africa News', 'Premium Times', 'Channels TV', 'Sahel Crisis'],
+  latam: ['BBC Latin America', 'Reuters LatAm', 'Guardian Americas', 'Latin America', 'InSight Crime', 'France 24 LatAm', 'Mexico News Daily', 'Clarín'],
+  asia: ['BBC Asia', 'The Diplomat', 'South China Morning Post', 'Reuters Asia', 'Nikkei Asia', 'CNA', 'Asia News', 'The Hindu'],
+  tech: ['Hacker News', 'Ars Technica', 'The Verge', 'MIT Tech Review'],
+  ai: ['AI News', 'VentureBeat AI', 'The Verge AI', 'MIT Tech Review', 'ArXiv AI'],
+  finance: ['CNBC', 'MarketWatch', 'Yahoo Finance', 'Financial Times', 'Reuters Business'],
+  gov: ['White House', 'State Dept', 'Pentagon', 'UN News', 'CISA', 'Treasury', 'DOJ', 'CDC'],
+  layoffs: ['Layoffs.fyi', 'TechCrunch Layoffs', 'Layoffs News'],
+  thinktanks: ['Foreign Policy', 'Atlantic Council', 'Foreign Affairs', 'CSIS', 'RAND', 'Brookings', 'Carnegie', 'War on the Rocks'],
+  crisis: ['CrisisWatch', 'IAEA', 'WHO', 'UNHCR'],
+  energy: ['Oil & Gas', 'Nuclear Energy', 'Reuters Energy', 'Mining & Resources'],
+};
+
+export const DEFAULT_ENABLED_INTEL: string[] = [
+  'Defense One', 'Breaking Defense', 'The War Zone', 'Defense News',
+  'Military Times', 'USNI News', 'Bellingcat', 'Krebs Security',
+];
+
+export function getAllDefaultEnabledSources(): Set<string> {
+  const s = new Set<string>();
+  for (const names of Object.values(DEFAULT_ENABLED_SOURCES)) names.forEach(n => s.add(n));
+  DEFAULT_ENABLED_INTEL.forEach(n => s.add(n));
+  return s;
+}
+
+/** Sources boosted by locale (feeds tagged with matching `lang` or multi-URL key). */
+export function getLocaleBoostedSources(locale: string): Set<string> {
+  const lang = (locale.split('-')[0] ?? 'en').toLowerCase();
+  const boosted = new Set<string>();
+  if (lang === 'en') return boosted;
+  const allFeeds = [...Object.values(FULL_FEEDS).flat(), ...INTEL_SOURCES];
+  for (const f of allFeeds) {
+    if (f.lang === lang) boosted.add(f.name);
+    if (typeof f.url === 'object' && lang in f.url) boosted.add(f.name);
+  }
+  return boosted;
+}
+
+export function computeDefaultDisabledSources(locale?: string): string[] {
+  const enabled = getAllDefaultEnabledSources();
+  if (locale) {
+    for (const name of getLocaleBoostedSources(locale)) enabled.add(name);
+  }
+  const all = new Set<string>();
+  for (const feeds of Object.values(FULL_FEEDS)) for (const f of feeds) all.add(f.name);
+  for (const f of INTEL_SOURCES) all.add(f.name);
+  return [...all].filter(name => !enabled.has(name));
+}
+
+export function getTotalFeedCount(): number {
+  const all = new Set<string>();
+  for (const feeds of Object.values(FULL_FEEDS)) for (const f of feeds) all.add(f.name);
+  for (const f of INTEL_SOURCES) all.add(f.name);
+  return all.size;
+}
+
+if (import.meta.env.DEV) {
+  const allFeedNames = new Set<string>();
+  for (const feeds of Object.values(FULL_FEEDS)) for (const f of feeds) allFeedNames.add(f.name);
+  for (const f of INTEL_SOURCES) allFeedNames.add(f.name);
+  const defaultEnabled = getAllDefaultEnabledSources();
+  for (const name of defaultEnabled) {
+    if (!allFeedNames.has(name)) console.error(`[feeds] DEFAULT_ENABLED name "${name}" not found in FULL_FEEDS!`);
+  }
+  console.log(`[feeds] ${defaultEnabled.size} unique default-enabled sources / ${allFeedNames.size} total`);
+}
 
 // Keywords that trigger alert status - must be specific to avoid false positives
 export const ALERT_KEYWORDS = [

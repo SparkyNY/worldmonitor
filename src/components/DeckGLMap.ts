@@ -39,8 +39,6 @@ import { fetchMilitaryBases, type MilitaryBaseCluster as ServerBaseCluster } fro
 import type { AirportDelayAlert } from '@/services/aviation';
 import type { IranEvent } from '@/services/conflict';
 import type { GpsJamHex } from '@/services/gps-interference';
-import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
-import type { LocalTransitLine, LocalTransitVehicle } from '@/services/local-transit';
 import type { DisplacementFlow } from '@/services/displacement';
 import type { Earthquake } from '@/services/earthquakes';
 import type { ClimateAnomaly } from '@/services/climate';
@@ -96,7 +94,7 @@ import type { HappinessData } from '@/services/happiness-data';
 import type { RenewableInstallation } from '@/services/renewable-installations';
 import type { SpeciesRecovery } from '@/services/conservation-data';
 import { getCountriesGeoJson, getCountryAtCoordinates, getCountryBbox } from '@/services/country-geometry';
-import type { Feature, FeatureCollection, Geometry } from 'geojson';
+import type { FeatureCollection, Geometry } from 'geojson';
 
 export type TimeRange = '1h' | '6h' | '24h' | '48h' | '7d' | 'all';
 export type DeckMapView = 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
@@ -252,13 +250,17 @@ const MARKER_ICONS = {
   star: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><polygon points="16,2 20,12 30,12 22,19 25,30 16,23 7,30 10,19 2,12 12,12" fill="white"/></svg>`),
 };
 
-const EMPTY_BOSTON_LAYER: BostonLayerData = { type: 'FeatureCollection', features: [] };
+const BASES_ICON_MAPPING = { triangleUp: { x: 0, y: 0, width: 32, height: 32, mask: true } };
+const NUCLEAR_ICON_MAPPING = { hexagon: { x: 0, y: 0, width: 32, height: 32, mask: true } };
+const DATACENTER_ICON_MAPPING = { square: { x: 0, y: 0, width: 32, height: 32, mask: true } };
 
-const BOSTON_MODE_COLORS: Record<LocalTransitVehicle['mode'], [number, number, number, number]> = {
-  subway: [239, 68, 68, 220],
-  bus: [59, 130, 246, 210],
-  commuter_rail: [139, 92, 246, 210],
-  ferry: [20, 184, 166, 210],
+const CONFLICT_ZONES_GEOJSON: GeoJSON.FeatureCollection = {
+  type: 'FeatureCollection',
+  features: CONFLICT_ZONES.map(zone => ({
+    type: 'Feature' as const,
+    properties: { id: zone.id, name: zone.name, intensity: zone.intensity },
+    geometry: { type: 'Polygon' as const, coordinates: [zone.coords] },
+  })),
 };
 
 export class DeckGLMap {
@@ -269,6 +271,7 @@ export class DeckGLMap {
   private maplibreMap: maplibregl.Map | null = null;
   private state: DeckMapState;
   private popup: MapPopup;
+  private isResizing = false;
 
   // Data stores
   private hotspots: HotspotWithBreaking[];
@@ -304,23 +307,6 @@ export class DeckGLMap {
   private tradeRouteSegments: TradeRouteSegment[] = resolveTradeRouteSegments();
   private positiveEvents: PositiveGeoEvent[] = [];
   private kindnessPoints: KindnessPoint[] = [];
-  private bostonPoliceDistricts: BostonLayerData = EMPTY_BOSTON_LAYER;
-  private bostonFireHydrants: BostonLayerData = EMPTY_BOSTON_LAYER;
-  private bostonFireDepartments: BostonLayerData = EMPTY_BOSTON_LAYER;
-  private bostonCommunityCenters: BostonLayerData = EMPTY_BOSTON_LAYER;
-  private bostonCrimeIncidents: BostonIncident[] = [];
-  private bostonFireIncidents: BostonIncident[] = [];
-  private bostonTransitVehicles: LocalTransitVehicle[] = [];
-  private bostonTransitLines: LocalTransitLine[] = [];
-  private bostonLayerState: Record<BostonLayerId, boolean> = {
-    policeDistricts: true,
-    fireHydrants: true,
-    fireDepartments: true,
-    communityCenters: false,
-    transitVehicles: true,
-  };
-  private bostonLiveUpdatedAt: string | null = null;
-  private bostonLiveStatusEl: HTMLElement | null = null;
 
   // Phase 8 overlay data
   private happinessScores: Map<string, number> = new Map();
@@ -363,6 +349,7 @@ export class DeckGLMap {
   private techHQSC: Supercluster | null = null;
   private techEventSC: Supercluster | null = null;
   private datacenterSC: Supercluster | null = null;
+  private datacenterSCSource: AIDataCenter[] = [];
   private protestClusters: MapProtestCluster[] = [];
   private techHQClusters: MapTechHQCluster[] = [];
   private techEventClusters: MapTechEventCluster[] = [];
@@ -378,9 +365,9 @@ export class DeckGLMap {
   private lastCableHighlightSignature = '';
   private lastCableHealthSignature = '';
   private lastPipelineHighlightSignature = '';
-  private debouncedRebuildLayers: () => void;
-  private debouncedFetchBases: () => void;
-  private rafUpdateLayers: () => void;
+  private debouncedRebuildLayers: (() => void) & { cancel(): void };
+  private debouncedFetchBases: (() => void) & { cancel(): void };
+  private rafUpdateLayers: (() => void) & { cancel(): void };
   private moveTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor(container: HTMLElement, initialState: DeckMapState) {
@@ -468,12 +455,6 @@ export class DeckGLMap {
     attribution.className = 'map-attribution';
     attribution.innerHTML = '© <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
     wrapper.appendChild(attribution);
-
-    const bostonStatus = document.createElement('div');
-    bostonStatus.className = 'deckgl-boston-live';
-    bostonStatus.style.display = 'none';
-    wrapper.appendChild(bostonStatus);
-    this.bostonLiveStatusEl = bostonStatus;
 
     this.container.appendChild(wrapper);
   }
@@ -573,6 +554,7 @@ export class DeckGLMap {
 
   private setupResizeObserver(): void {
     this.resizeObserver = new ResizeObserver(() => {
+      if (this.isResizing) return;
       if (this.maplibreMap) {
         this.maplibreMap.resize();
       }
@@ -580,6 +562,13 @@ export class DeckGLMap {
     this.resizeObserver.observe(this.container);
   }
 
+  public setIsResizing(value: boolean): void {
+    const wasResizing = this.isResizing;
+    this.isResizing = value;
+    if (wasResizing && !value && this.maplibreMap) {
+      this.maplibreMap.resize();
+    }
+  }
 
   private getSetSignature(set: Set<string>): string {
     return [...set].sort().join('|');
@@ -664,8 +653,10 @@ export class DeckGLMap {
         country: p.country,
         severity: p.severity,
         eventType: p.eventType,
+        sourceType: p.sourceType,
         validated: Boolean(p.validated),
         fatalities: Number.isFinite(p.fatalities) ? Number(p.fatalities) : 0,
+        timeMs: p.time.getTime(),
       },
     }));
     this.protestSC = new Supercluster({
@@ -679,6 +670,7 @@ export class DeckGLMap {
         highSeverityCount: props.severity === 'high' ? 1 : 0,
         verifiedCount: props.validated ? 1 : 0,
         totalFatalities: Number(props.fatalities ?? 0) || 0,
+        riotTimeMs: props.eventType === 'riot' && props.sourceType !== 'gdelt' && Number.isFinite(Number(props.timeMs)) ? Number(props.timeMs) : 0,
       }),
       reduce: (acc: Record<string, unknown>, props: Record<string, unknown>) => {
         acc.maxSeverityRank = Math.max(Number(acc.maxSeverityRank ?? 0), Number(props.maxSeverityRank ?? 0));
@@ -686,6 +678,9 @@ export class DeckGLMap {
         acc.highSeverityCount = Number(acc.highSeverityCount ?? 0) + Number(props.highSeverityCount ?? 0);
         acc.verifiedCount = Number(acc.verifiedCount ?? 0) + Number(props.verifiedCount ?? 0);
         acc.totalFatalities = Number(acc.totalFatalities ?? 0) + Number(props.totalFatalities ?? 0);
+        const accRiot = Number(acc.riotTimeMs ?? 0);
+        const propRiot = Number(props.riotTimeMs ?? 0);
+        acc.riotTimeMs = Number.isFinite(propRiot) ? Math.max(accRiot, propRiot) : accRiot;
         if (!acc.country && props.country) acc.country = props.country;
       },
     });
@@ -767,6 +762,7 @@ export class DeckGLMap {
 
   private rebuildDatacenterSupercluster(): void {
     const activeDCs = AI_DATA_CENTERS.filter(dc => dc.status !== 'decommissioned');
+    this.datacenterSCSource = activeDCs;
     const points = activeDCs.map((dc, i) => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [dc.lon, dc.lat] as [number, number] },
@@ -825,34 +821,29 @@ export class DeckGLMap {
         const coords = f.geometry.coordinates as [number, number];
         if (f.properties.cluster) {
           const props = f.properties as Record<string, unknown>;
-          const leaves = this.protestSC!.getLeaves(f.properties.cluster_id!, DeckGLMap.MAX_CLUSTER_LEAVES);
-          const items = leaves.map(l => this.protestSuperclusterSource[l.properties.index]).filter((x): x is SocialUnrestEvent => !!x);
           const maxSeverityRank = Number(props.maxSeverityRank ?? 0);
           const maxSev = maxSeverityRank >= 2 ? 'high' : maxSeverityRank === 1 ? 'medium' : 'low';
           const riotCount = Number(props.riotCount ?? 0);
           const highSeverityCount = Number(props.highSeverityCount ?? 0);
           const verifiedCount = Number(props.verifiedCount ?? 0);
           const totalFatalities = Number(props.totalFatalities ?? 0);
-          const clusterCount = Number(f.properties.point_count ?? items.length);
-          const latestRiotEventTimeMs = items.reduce((max, it) => {
-            if (it.eventType !== 'riot' || it.sourceType === 'gdelt') return max;
-            const ts = it.time.getTime();
-            return Number.isFinite(ts) ? Math.max(max, ts) : max;
-          }, 0);
+          const clusterCount = Number(f.properties.point_count ?? 0);
+          const riotTimeMs = Number(props.riotTimeMs ?? 0);
           return {
             id: `pc-${f.properties.cluster_id}`,
+            _clusterId: f.properties.cluster_id!,
             lat: coords[1], lon: coords[0],
             count: clusterCount,
-            items,
-            country: String(props.country ?? items[0]?.country ?? ''),
+            items: [] as SocialUnrestEvent[],
+            country: String(props.country ?? ''),
             maxSeverity: maxSev as 'low' | 'medium' | 'high',
             hasRiot: riotCount > 0,
-            latestRiotEventTimeMs: latestRiotEventTimeMs || undefined,
+            latestRiotEventTimeMs: riotTimeMs || undefined,
             totalFatalities,
             riotCount,
             highSeverityCount,
             verifiedCount,
-            sampled: items.length < clusterCount,
+            sampled: clusterCount > DeckGLMap.MAX_CLUSTER_LEAVES,
           };
         }
         const item = this.protestSuperclusterSource[f.properties.index]!;
@@ -880,12 +871,10 @@ export class DeckGLMap {
         const coords = f.geometry.coordinates as [number, number];
         if (f.properties.cluster) {
           const props = f.properties as Record<string, unknown>;
-          const leaves = this.techHQSC!.getLeaves(f.properties.cluster_id!, DeckGLMap.MAX_CLUSTER_LEAVES);
-          const items = leaves.map(l => TECH_HQS[l.properties.index]).filter(Boolean) as typeof TECH_HQS;
           const faangCount = Number(props.faangCount ?? 0);
           const unicornCount = Number(props.unicornCount ?? 0);
           const publicCount = Number(props.publicCount ?? 0);
-          const clusterCount = Number(f.properties.point_count ?? items.length);
+          const clusterCount = Number(f.properties.point_count ?? 0);
           const primaryType = faangCount >= unicornCount && faangCount >= publicCount
             ? 'faang'
             : unicornCount >= publicCount
@@ -893,16 +882,17 @@ export class DeckGLMap {
               : 'public';
           return {
             id: `hc-${f.properties.cluster_id}`,
+            _clusterId: f.properties.cluster_id!,
             lat: coords[1], lon: coords[0],
             count: clusterCount,
-            items,
-            city: String(props.city ?? items[0]?.city ?? ''),
-            country: String(props.country ?? items[0]?.country ?? ''),
+            items: [] as import('@/config/tech-geo').TechHQ[],
+            city: String(props.city ?? ''),
+            country: String(props.country ?? ''),
             primaryType,
             faangCount,
             unicornCount,
             publicCount,
-            sampled: items.length < clusterCount,
+            sampled: clusterCount > DeckGLMap.MAX_CLUSTER_LEAVES,
           };
         }
         const item = TECH_HQS[f.properties.index]!;
@@ -925,21 +915,20 @@ export class DeckGLMap {
         const coords = f.geometry.coordinates as [number, number];
         if (f.properties.cluster) {
           const props = f.properties as Record<string, unknown>;
-          const leaves = this.techEventSC!.getLeaves(f.properties.cluster_id!, DeckGLMap.MAX_CLUSTER_LEAVES);
-          const items = leaves.map(l => this.techEvents[l.properties.index]).filter((x): x is TechEventMarker => !!x);
-          const clusterCount = Number(f.properties.point_count ?? items.length);
+          const clusterCount = Number(f.properties.point_count ?? 0);
           const soonestDaysUntil = Number(props.soonestDaysUntil ?? Number.MAX_SAFE_INTEGER);
           const soonCount = Number(props.soonCount ?? 0);
           return {
             id: `ec-${f.properties.cluster_id}`,
+            _clusterId: f.properties.cluster_id!,
             lat: coords[1], lon: coords[0],
             count: clusterCount,
-            items,
-            location: String(props.location ?? items[0]?.location ?? ''),
-            country: String(props.country ?? items[0]?.country ?? ''),
+            items: [] as TechEventMarker[],
+            location: String(props.location ?? ''),
+            country: String(props.country ?? ''),
             soonestDaysUntil: Number.isFinite(soonestDaysUntil) ? soonestDaysUntil : Number.MAX_SAFE_INTEGER,
             soonCount,
-            sampled: items.length < clusterCount,
+            sampled: clusterCount > DeckGLMap.MAX_CLUSTER_LEAVES,
           };
         }
         const item = this.techEvents[f.properties.index]!;
@@ -956,31 +945,30 @@ export class DeckGLMap {
     }
 
     if (useDatacenterClusters && this.datacenterSC) {
-      const activeDCs = AI_DATA_CENTERS.filter(dc => dc.status !== 'decommissioned');
+      const activeDCs = this.datacenterSCSource;
       this.datacenterClusters = this.datacenterSC.getClusters(bbox, zoom).map(f => {
         const coords = f.geometry.coordinates as [number, number];
         if (f.properties.cluster) {
           const props = f.properties as Record<string, unknown>;
-          const leaves = this.datacenterSC!.getLeaves(f.properties.cluster_id!, DeckGLMap.MAX_CLUSTER_LEAVES);
-          const items = leaves.map(l => activeDCs[l.properties.index]).filter((x): x is AIDataCenter => !!x);
-          const clusterCount = Number(f.properties.point_count ?? items.length);
+          const clusterCount = Number(f.properties.point_count ?? 0);
           const existingCount = Number(props.existingCount ?? 0);
           const plannedCount = Number(props.plannedCount ?? 0);
           const totalChips = Number(props.totalChips ?? 0);
           const totalPowerMW = Number(props.totalPowerMW ?? 0);
           return {
             id: `dc-${f.properties.cluster_id}`,
+            _clusterId: f.properties.cluster_id!,
             lat: coords[1], lon: coords[0],
             count: clusterCount,
-            items,
-            region: String(props.country ?? items[0]?.country ?? ''),
-            country: String(props.country ?? items[0]?.country ?? ''),
+            items: [] as AIDataCenter[],
+            region: String(props.country ?? ''),
+            country: String(props.country ?? ''),
             totalChips,
             totalPowerMW,
             majorityExisting: existingCount >= Math.max(1, clusterCount / 2),
             existingCount,
             plannedCount,
-            sampled: items.length < clusterCount,
+            sampled: clusterCount > DeckGLMap.MAX_CLUSTER_LEAVES,
           };
         }
         const item = activeDCs[f.properties.index]!;
@@ -1015,17 +1003,17 @@ export class DeckGLMap {
     COLORS = getOverlayColors();
     const layers: (Layer | null | false)[] = [];
     const { layers: mapLayers } = this.state;
-    const filteredEarthquakes = this.filterByTime(this.earthquakes, (eq) => eq.occurredAt);
-    const filteredNaturalEvents = this.filterByTime(this.naturalEvents, (event) => event.date);
-    const filteredWeatherAlerts = this.filterByTime(this.weatherAlerts, (alert) => alert.onset);
-    const filteredOutages = this.filterByTime(this.outages, (outage) => outage.pubDate);
-    const filteredCableAdvisories = this.filterByTime(this.cableAdvisories, (advisory) => advisory.reported);
-    const filteredFlightDelays = this.filterByTime(this.flightDelays, (delay) => delay.updatedAt);
-    const filteredMilitaryFlights = this.filterByTime(this.militaryFlights, (flight) => flight.lastSeen);
-    const filteredMilitaryVessels = this.filterByTime(this.militaryVessels, (vessel) => vessel.lastAisUpdate);
-    const filteredMilitaryFlightClusters = this.filterMilitaryFlightClustersByTime(this.militaryFlightClusters);
-    const filteredMilitaryVesselClusters = this.filterMilitaryVesselClustersByTime(this.militaryVesselClusters);
-    const filteredUcdpEvents = this.filterByTime(this.ucdpEvents, (event) => event.date_start);
+    const filteredEarthquakes = mapLayers.natural ? this.filterByTime(this.earthquakes, (eq) => eq.occurredAt) : [];
+    const filteredNaturalEvents = mapLayers.natural ? this.filterByTime(this.naturalEvents, (event) => event.date) : [];
+    const filteredWeatherAlerts = mapLayers.weather ? this.filterByTime(this.weatherAlerts, (alert) => alert.onset) : [];
+    const filteredOutages = mapLayers.outages ? this.filterByTime(this.outages, (outage) => outage.pubDate) : [];
+    const filteredCableAdvisories = mapLayers.cables ? this.filterByTime(this.cableAdvisories, (advisory) => advisory.reported) : [];
+    const filteredFlightDelays = mapLayers.flights ? this.filterByTime(this.flightDelays, (delay) => delay.updatedAt) : [];
+    const filteredMilitaryFlights = mapLayers.military ? this.filterByTime(this.militaryFlights, (flight) => flight.lastSeen) : [];
+    const filteredMilitaryVessels = mapLayers.military ? this.filterByTime(this.militaryVessels, (vessel) => vessel.lastAisUpdate) : [];
+    const filteredMilitaryFlightClusters = mapLayers.military ? this.filterMilitaryFlightClustersByTime(this.militaryFlightClusters) : [];
+    const filteredMilitaryVesselClusters = mapLayers.military ? this.filterMilitaryVesselClustersByTime(this.militaryVesselClusters) : [];
+    const filteredUcdpEvents = mapLayers.ucdpEvents ? this.filterByTime(this.ucdpEvents, (event) => event.date_start) : [];
 
     // Day/night overlay (rendered first as background)
     if (mapLayers.dayNight) {
@@ -1036,8 +1024,22 @@ export class DeckGLMap {
       this.layerCache.delete('day-night-layer');
     }
 
-    if (this.hasBostonData()) {
-      layers.push(...this.createBostonLayers());
+    // Day/night overlay (rendered first as background)
+    if (mapLayers.dayNight) {
+      if (!this.dayNightIntervalId) this.startDayNightTimer();
+      layers.push(this.createDayNightLayer());
+    } else {
+      if (this.dayNightIntervalId) this.stopDayNightTimer();
+      this.layerCache.delete('day-night-layer');
+    }
+
+    // Day/night overlay (rendered first as background)
+    if (mapLayers.dayNight) {
+      if (!this.dayNightIntervalId) this.startDayNightTimer();
+      layers.push(this.createDayNightLayer());
+    } else {
+      if (this.dayNightIntervalId) this.stopDayNightTimer();
+      this.layerCache.delete('day-night-layer');
     }
 
     // Undersea cables layer
@@ -1059,19 +1061,18 @@ export class DeckGLMap {
       layers.push(this.createConflictZonesLayer());
     }
 
-    // Military bases layer — hidden at low zoom (E: progressive disclosure) + ghost + clusters
+    // Military bases layer — hidden at low zoom (E: progressive disclosure) + clusters
     if (mapLayers.bases && this.isLayerVisible('bases')) {
       layers.push(this.createBasesLayer());
       layers.push(...this.createBasesClusterLayer());
-      const basesData = this.getBasesData();
-      layers.push(this.createGhostLayer('bases-layer', basesData, d => [d.lon, d.lat], { radiusMinPixels: 12 }));
     }
+    layers.push(this.createEmptyGhost('bases-layer'));
 
-    // Nuclear facilities layer — hidden at low zoom + ghost
+    // Nuclear facilities layer — hidden at low zoom
     if (mapLayers.nuclear && this.isLayerVisible('nuclear')) {
       layers.push(this.createNuclearLayer());
-      layers.push(this.createGhostLayer('nuclear-layer', NUCLEAR_FACILITIES.filter(f => f.status !== 'decommissioned'), d => [d.lon, d.lat], { radiusMinPixels: 12 }));
     }
+    layers.push(this.createEmptyGhost('nuclear-layer'));
 
     // Gamma irradiators layer — hidden at low zoom
     if (mapLayers.irradiators && this.isLayerVisible('irradiators')) {
@@ -1098,11 +1099,11 @@ export class DeckGLMap {
       }
     }
 
-    // Earthquakes layer + ghost for easier picking
+    // Earthquakes layer
     if (mapLayers.natural && filteredEarthquakes.length > 0) {
       layers.push(this.createEarthquakesLayer(filteredEarthquakes));
-      layers.push(this.createGhostLayer('earthquakes-layer', filteredEarthquakes, d => [d.location?.longitude ?? 0, d.location?.latitude ?? 0], { radiusMinPixels: 12 }));
     }
+    layers.push(this.createEmptyGhost('earthquakes-layer'));
 
     // Natural events layer
     if (mapLayers.natural && filteredNaturalEvents.length > 0) {
@@ -1125,17 +1126,17 @@ export class DeckGLMap {
       layers.push(this.createWeatherLayer(filteredWeatherAlerts));
     }
 
-    // Internet outages layer + ghost for easier picking
+    // Internet outages layer
     if (mapLayers.outages && filteredOutages.length > 0) {
       layers.push(this.createOutagesLayer(filteredOutages));
-      layers.push(this.createGhostLayer('outages-layer', filteredOutages, d => [d.lon, d.lat], { radiusMinPixels: 12 }));
     }
+    layers.push(this.createEmptyGhost('outages-layer'));
 
     // Cyber threat IOC layer
     if (mapLayers.cyberThreats && this.cyberThreats.length > 0) {
       layers.push(this.createCyberThreatsLayer());
-      layers.push(this.createGhostLayer('cyber-threats-layer', this.cyberThreats, d => [d.lon, d.lat], { radiusMinPixels: 12 }));
     }
+    layers.push(this.createEmptyGhost('cyber-threats-layer'));
 
     // AIS density layer
     if (mapLayers.ais && this.aisDensity.length > 0) {
@@ -1390,21 +1391,9 @@ export class DeckGLMap {
   private createConflictZonesLayer(): GeoJsonLayer {
     const cacheKey = 'conflict-zones-layer';
 
-    const geojsonData = {
-      type: 'FeatureCollection' as const,
-      features: CONFLICT_ZONES.map(zone => ({
-        type: 'Feature' as const,
-        properties: { id: zone.id, name: zone.name, intensity: zone.intensity },
-        geometry: {
-          type: 'Polygon' as const,
-          coordinates: [zone.coords],
-        },
-      })),
-    };
-
     const layer = new GeoJsonLayer({
       id: cacheKey,
-      data: geojsonData,
+      data: CONFLICT_ZONES_GEOJSON,
       filled: true,
       stroked: true,
       getFillColor: () => COLORS.conflict,
@@ -1448,7 +1437,7 @@ export class DeckGLMap {
       getPosition: (d) => [d.lon, d.lat],
       getIcon: () => 'triangleUp',
       iconAtlas: MARKER_ICONS.triangleUp,
-      iconMapping: { triangleUp: { x: 0, y: 0, width: 32, height: 32, mask: true } },
+      iconMapping: BASES_ICON_MAPPING,
       getSize: (d) => highlightedBases.has(d.id) ? 16 : 11,
       getColor: (d) => {
         if (highlightedBases.has(d.id)) {
@@ -1506,7 +1495,7 @@ export class DeckGLMap {
       getPosition: (d) => [d.lon, d.lat],
       getIcon: () => 'hexagon',
       iconAtlas: MARKER_ICONS.hexagon,
-      iconMapping: { hexagon: { x: 0, y: 0, width: 32, height: 32, mask: true } },
+      iconMapping: NUCLEAR_ICON_MAPPING,
       getSize: (d) => highlightedNuclear.has(d.id) ? 15 : 11,
       getColor: (d) => {
         if (highlightedNuclear.has(d.id)) {
@@ -1609,6 +1598,11 @@ export class DeckGLMap {
     });
   }
 
+  /** Empty sentinel layer — keeps a stable layer ID for deck.gl interleaved mode without rendering anything. */
+  private createEmptyGhost(id: string): ScatterplotLayer {
+    return new ScatterplotLayer({ id: `${id}-ghost`, data: [], getPosition: () => [0, 0], visible: false });
+  }
+
 
   private createDatacentersLayer(): IconLayer {
     const highlightedDC = this.highlightedAssets.datacenter;
@@ -1621,7 +1615,7 @@ export class DeckGLMap {
       getPosition: (d) => [d.lon, d.lat],
       getIcon: () => 'square',
       iconAtlas: MARKER_ICONS.square,
-      iconMapping: { square: { x: 0, y: 0, width: 32, height: 32, mask: true } },
+      iconMapping: DATACENTER_ICON_MAPPING,
       getSize: (d) => highlightedDC.has(d.id) ? 14 : 10,
       getColor: (d) => {
         if (highlightedDC.has(d.id)) {
@@ -2141,8 +2135,6 @@ export class DeckGLMap {
       updateTriggers: { getRadius: this.lastSCZoom, getFillColor: this.lastSCZoom },
     }));
 
-    layers.push(this.createGhostLayer('protest-clusters-layer', this.protestClusters, d => [d.lon, d.lat], { radiusMinPixels: 14 }));
-
     const multiClusters = this.protestClusters.filter(c => c.count > 1);
     if (multiClusters.length > 0) {
       layers.push(new TextLayer<MapProtestCluster>({
@@ -2182,6 +2174,7 @@ export class DeckGLMap {
       }));
     }
 
+    layers.push(this.createEmptyGhost('protest-clusters-layer'));
     return layers;
   }
 
@@ -2205,8 +2198,6 @@ export class DeckGLMap {
       pickable: true,
       updateTriggers: { getRadius: this.lastSCZoom },
     }));
-
-    layers.push(this.createGhostLayer('tech-hq-clusters-layer', this.techHQClusters, d => [d.lon, d.lat], { radiusMinPixels: 14 }));
 
     const multiClusters = this.techHQClusters.filter(c => c.count > 1);
     if (multiClusters.length > 0) {
@@ -2244,6 +2235,7 @@ export class DeckGLMap {
       }
     }
 
+    layers.push(this.createEmptyGhost('tech-hq-clusters-layer'));
     return layers;
   }
 
@@ -2266,8 +2258,6 @@ export class DeckGLMap {
       updateTriggers: { getRadius: this.lastSCZoom },
     }));
 
-    layers.push(this.createGhostLayer('tech-event-clusters-layer', this.techEventClusters, d => [d.lon, d.lat], { radiusMinPixels: 14 }));
-
     const multiClusters = this.techEventClusters.filter(c => c.count > 1);
     if (multiClusters.length > 0) {
       layers.push(new TextLayer<MapTechEventCluster>({
@@ -2287,6 +2277,7 @@ export class DeckGLMap {
       }));
     }
 
+    layers.push(this.createEmptyGhost('tech-event-clusters-layer'));
     return layers;
   }
 
@@ -2309,8 +2300,6 @@ export class DeckGLMap {
       updateTriggers: { getRadius: this.lastSCZoom },
     }));
 
-    layers.push(this.createGhostLayer('datacenter-clusters-layer', this.datacenterClusters, d => [d.lon, d.lat], { radiusMinPixels: 14 }));
-
     const multiClusters = this.datacenterClusters.filter(c => c.count > 1);
     if (multiClusters.length > 0) {
       layers.push(new TextLayer<MapDatacenterCluster>({
@@ -2330,6 +2319,7 @@ export class DeckGLMap {
       }));
     }
 
+    layers.push(this.createEmptyGhost('datacenter-clusters-layer'));
     return layers;
   }
 
@@ -2364,8 +2354,6 @@ export class DeckGLMap {
       lineWidthMinPixels: 2,
     }));
 
-    layers.push(this.createGhostLayer('hotspots-layer', this.hotspots, d => [d.lon, d.lat], { radiusMinPixels: 14 }));
-
     const highHotspots = this.hotspots.filter(h => h.level === 'high' || h.hasBreaking);
     if (highHotspots.length > 0) {
       const pulse = 1.0 + 0.8 * (0.5 + 0.5 * Math.sin((this.pulseTime || Date.now()) / 400));
@@ -2393,6 +2381,7 @@ export class DeckGLMap {
 
     }
 
+    layers.push(this.createEmptyGhost('hotspots-layer'));
     return layers;
   }
 
@@ -2729,48 +2718,8 @@ export class DeckGLMap {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const obj = info.object as any;
     const text = (value: unknown): string => escapeHtml(String(value ?? ''));
-    const timeText = (value: unknown): string => {
-      if (typeof value !== 'string' || !value) return 'N/A';
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return text(value);
-      return escapeHtml(date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    };
 
     switch (layerId) {
-      case 'boston-police-districts-layer': {
-        const props = obj.properties || obj;
-        const district = props?.DISTRICT ?? props?.district ?? props?.name ?? 'BPD District';
-        return { html: `<div class="deckgl-tooltip"><strong>${text(district)}</strong><br/>Boston Police District</div>` };
-      }
-      case 'boston-fire-hydrants-layer':
-        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.label || 'Fire Hydrant')}</strong><br/>Boston Fire Hydrant</div>` };
-      case 'boston-fire-departments-layer':
-        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.label || 'Fire Department')}</strong><br/>Boston Fire Department</div>` };
-      case 'boston-community-centers-layer':
-        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.label || 'Community Center')}</strong><br/>Boston Community Center</div>` };
-      case 'boston-crime-incidents-layer':
-      case 'boston-fire-incidents-layer':
-        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.incidentType || obj.sourceCategory || 'Incident')}</strong><br/>${text(obj.address || 'Boston')}<br/>${text(obj.dateTimeReported || obj.date || '')}</div>` };
-      case 'boston-transit-lines-layer':
-        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.routeLabel || obj.routeId || 'Transit Route')}</strong><br/>${text(obj.mode || '')} line</div>` };
-      case 'boston-transit-vehicles-layer': {
-        const direction = obj.directionLabel || 'Unknown';
-        const stopName = obj.nextStopName || obj.currentStopName || 'Stop unavailable';
-        const status = obj.scheduleStatus || obj.status || 'Status unavailable';
-        const eta = obj.nextArrivalTime || obj.nextDepartureTime;
-        const asOf = obj.asOf || obj.updatedAt;
-        const vehicleLabel = obj.vehicleLabel ? `<br/>Vehicle: ${text(obj.vehicleLabel)}` : '';
-        return {
-          html: `<div class="deckgl-tooltip">
-            <strong>${text(obj.routeLabel || obj.routeId || 'Transit Vehicle')}</strong><br/>
-            ${text(direction)} · ${text(obj.mode || '')}${vehicleLabel}<br/>
-            Next: ${text(stopName)}${obj.nextStopSequence != null ? ` (Stop #${text(obj.nextStopSequence)})` : ''}<br/>
-            ETA: ${timeText(eta)}<br/>
-            Service: ${text(status)}<br/>
-            As of: ${timeText(asOf)}
-          </div>`,
-        };
-      }
       case 'hotspots-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name)}</strong><br/>${text(obj.subtext)}</div>` };
       case 'earthquakes-layer':
@@ -2977,6 +2926,16 @@ export class DeckGLMap {
     // Handle cluster layers with single/multi logic
     if (layerId === 'protest-clusters-layer') {
       const cluster = info.object as MapProtestCluster;
+      if (cluster.items.length === 0 && cluster._clusterId != null && this.protestSC) {
+        try {
+          const leaves = this.protestSC.getLeaves(cluster._clusterId, DeckGLMap.MAX_CLUSTER_LEAVES);
+          cluster.items = leaves.map(l => this.protestSuperclusterSource[l.properties.index]).filter((x): x is SocialUnrestEvent => !!x);
+          cluster.sampled = cluster.items.length < cluster.count;
+        } catch (e) {
+          console.warn('[DeckGLMap] stale protest cluster', cluster._clusterId, e);
+          return;
+        }
+      }
       if (cluster.count === 1 && cluster.items[0]) {
         this.popup.show({ type: 'protest', data: cluster.items[0], x: info.x, y: info.y });
       } else {
@@ -3000,6 +2959,16 @@ export class DeckGLMap {
     }
     if (layerId === 'tech-hq-clusters-layer') {
       const cluster = info.object as MapTechHQCluster;
+      if (cluster.items.length === 0 && cluster._clusterId != null && this.techHQSC) {
+        try {
+          const leaves = this.techHQSC.getLeaves(cluster._clusterId, DeckGLMap.MAX_CLUSTER_LEAVES);
+          cluster.items = leaves.map(l => TECH_HQS[l.properties.index]).filter(Boolean) as typeof TECH_HQS;
+          cluster.sampled = cluster.items.length < cluster.count;
+        } catch (e) {
+          console.warn('[DeckGLMap] stale techHQ cluster', cluster._clusterId, e);
+          return;
+        }
+      }
       if (cluster.count === 1 && cluster.items[0]) {
         this.popup.show({ type: 'techHQ', data: cluster.items[0], x: info.x, y: info.y });
       } else {
@@ -3023,6 +2992,16 @@ export class DeckGLMap {
     }
     if (layerId === 'tech-event-clusters-layer') {
       const cluster = info.object as MapTechEventCluster;
+      if (cluster.items.length === 0 && cluster._clusterId != null && this.techEventSC) {
+        try {
+          const leaves = this.techEventSC.getLeaves(cluster._clusterId, DeckGLMap.MAX_CLUSTER_LEAVES);
+          cluster.items = leaves.map(l => this.techEvents[l.properties.index]).filter((x): x is TechEventMarker => !!x);
+          cluster.sampled = cluster.items.length < cluster.count;
+        } catch (e) {
+          console.warn('[DeckGLMap] stale techEvent cluster', cluster._clusterId, e);
+          return;
+        }
+      }
       if (cluster.count === 1 && cluster.items[0]) {
         this.popup.show({ type: 'techEvent', data: cluster.items[0], x: info.x, y: info.y });
       } else {
@@ -3044,6 +3023,16 @@ export class DeckGLMap {
     }
     if (layerId === 'datacenter-clusters-layer') {
       const cluster = info.object as MapDatacenterCluster;
+      if (cluster.items.length === 0 && cluster._clusterId != null && this.datacenterSC) {
+        try {
+          const leaves = this.datacenterSC.getLeaves(cluster._clusterId, DeckGLMap.MAX_CLUSTER_LEAVES);
+          cluster.items = leaves.map(l => this.datacenterSCSource[l.properties.index]).filter((x): x is AIDataCenter => !!x);
+          cluster.sampled = cluster.items.length < cluster.count;
+        } catch (e) {
+          console.warn('[DeckGLMap] stale datacenter cluster', cluster._clusterId, e);
+          return;
+        }
+      }
       if (cluster.count === 1 && cluster.items[0]) {
         this.popup.show({ type: 'datacenter', data: cluster.items[0], x: info.x, y: info.y });
       } else {
@@ -3127,7 +3116,7 @@ export class DeckGLMap {
       const normalizedLoc = data.locationName.trim().toLowerCase();
       const related = this.iranEvents
         .filter(e => e.id !== clickedId && e.locationName && e.locationName.trim().toLowerCase() === normalizedLoc)
-        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        .sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0))
         .slice(0, 5);
       data = { ...data, relatedEvents: related };
     }
@@ -3909,290 +3898,6 @@ export class DeckGLMap {
     });
   }
 
-  private hasBostonData(): boolean {
-    return this.bostonPoliceDistricts.features.length > 0
-      || this.bostonFireHydrants.features.length > 0
-      || this.bostonFireDepartments.features.length > 0
-      || this.bostonCommunityCenters.features.length > 0
-      || this.bostonCrimeIncidents.length > 0
-      || this.bostonFireIncidents.length > 0
-      || this.bostonTransitVehicles.length > 0
-      || this.bostonTransitLines.length > 0;
-  }
-
-  private markBostonLiveUpdate(): void {
-    this.bostonLiveUpdatedAt = new Date().toISOString();
-    this.updateBostonLiveStatus();
-  }
-
-  private updateBostonLiveStatus(): void {
-    if (!this.bostonLiveStatusEl) return;
-    if (!this.hasBostonData()) {
-      this.bostonLiveStatusEl.style.display = 'none';
-      return;
-    }
-    const updated = this.bostonLiveUpdatedAt
-      ? new Date(this.bostonLiveUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      : 'unknown';
-    const lineSummary = this.bostonTransitLines.length > 0 ? ` · ${this.bostonTransitLines.length} lines` : '';
-    this.bostonLiveStatusEl.style.display = 'block';
-    this.bostonLiveStatusEl.textContent = `BOSTON LIVE · ${updated} · ${this.bostonCrimeIncidents.length} crime · ${this.bostonFireIncidents.length} fire · ${this.bostonTransitVehicles.length} vehicles${lineSummary}`;
-  }
-
-  private safeFeatureProperties(feature: Feature<Geometry>): Record<string, unknown> {
-    const props = feature.properties;
-    if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
-    return props as Record<string, unknown>;
-  }
-
-  private getFeatureLabel(feature: Feature<Geometry>): string {
-    const props = this.safeFeatureProperties(feature);
-    const candidates = [
-      props['DISTRICT'],
-      props['district'],
-      props['name'],
-      props['NAME'],
-      props['hydrantid'],
-      props['HYDRANTID'],
-      props['hydrant_num'],
-      props['HYDRANT_NUM'],
-      props['station'],
-      props['STATION'],
-      props['address'],
-      props['ADDRESS'],
-      props['site_name'],
-      props['SITE_NAME'],
-    ];
-    for (const value of candidates) {
-      if (typeof value === 'string' && value.trim()) return value.trim();
-      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-    }
-    return 'Boston feature';
-  }
-
-  private getFeaturePointCoordinates(feature: Feature<Geometry>): Array<[number, number]> {
-    const geometry = feature.geometry;
-    if (!geometry) return [];
-
-    if (geometry.type === 'Point') {
-      const lon = Number(geometry.coordinates[0]);
-      const lat = Number(geometry.coordinates[1]);
-      return Number.isFinite(lon) && Number.isFinite(lat) ? [[lon, lat]] : [];
-    }
-    if (geometry.type === 'MultiPoint') {
-      const points: Array<[number, number]> = [];
-      for (const raw of geometry.coordinates as unknown[]) {
-        if (!Array.isArray(raw) || raw.length < 2) continue;
-        const lon = Number(raw[0]);
-        const lat = Number(raw[1]);
-        if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
-        points.push([lon, lat]);
-      }
-      return points;
-    }
-    if (geometry.type === 'LineString') {
-      if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2) return [];
-      const mid = geometry.coordinates[Math.floor(geometry.coordinates.length / 2)] ?? null;
-      const lon = Number(mid?.[0]);
-      const lat = Number(mid?.[1]);
-      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return [];
-      return [[lon, lat]];
-    }
-    if (geometry.type === 'MultiLineString') {
-      const firstLine = geometry.coordinates[0];
-      if (!Array.isArray(firstLine) || firstLine.length < 2) return [];
-      const mid = firstLine[Math.floor(firstLine.length / 2)] ?? null;
-      const lon = Number(mid?.[0]);
-      const lat = Number(mid?.[1]);
-      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return [];
-      return [[lon, lat]];
-    }
-    if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
-      const rings = geometry.type === 'Polygon'
-        ? geometry.coordinates
-        : geometry.coordinates.flat();
-      const outer = rings[0];
-      if (!Array.isArray(outer) || outer.length === 0) return [];
-      let lonSum = 0;
-      let latSum = 0;
-      let count = 0;
-      for (const coords of outer) {
-        if (!coords || coords.length < 2) continue;
-        const lon = Number(coords[0]);
-        const lat = Number(coords[1]);
-        if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
-        lonSum += lon;
-        latSum += lat;
-        count += 1;
-      }
-      if (count === 0) return [];
-      return [[lonSum / count, latSum / count]];
-    }
-    return [];
-  }
-
-  private extractBostonLayerPoints(data: BostonLayerData): Array<{ id: string; lon: number; lat: number; label: string; properties: Record<string, unknown> }> {
-    const points: Array<{ id: string; lon: number; lat: number; label: string; properties: Record<string, unknown> }> = [];
-    for (const feature of data.features as Feature<Geometry>[]) {
-      const properties = this.safeFeatureProperties(feature);
-      const label = this.getFeatureLabel(feature);
-      const featureId = String(feature.id ?? properties['OBJECTID'] ?? properties['objectid'] ?? label);
-      const coords = this.getFeaturePointCoordinates(feature);
-      for (let i = 0; i < coords.length; i += 1) {
-        const [lon, lat] = coords[i]!;
-        points.push({
-          id: `${featureId}-${i}`,
-          lon,
-          lat,
-          label,
-          properties,
-        });
-      }
-    }
-    return points;
-  }
-
-  private createBostonDistrictsLayer(): GeoJsonLayer {
-    const fill = getCurrentTheme() === 'light'
-      ? [30, 136, 229, 34] as [number, number, number, number]
-      : [56, 189, 248, 28] as [number, number, number, number];
-    const stroke = getCurrentTheme() === 'light'
-      ? [30, 64, 175, 200] as [number, number, number, number]
-      : [96, 165, 250, 220] as [number, number, number, number];
-
-    return new GeoJsonLayer({
-      id: 'boston-police-districts-layer',
-      data: this.bostonPoliceDistricts,
-      filled: true,
-      stroked: true,
-      pickable: true,
-      getFillColor: fill,
-      getLineColor: stroke,
-      getLineWidth: 2,
-      lineWidthMinPixels: 1,
-    });
-  }
-
-  private createBostonPointLayer(
-    id: string,
-    data: BostonLayerData,
-    color: [number, number, number, number],
-    radiusMinPixels: number,
-    radiusMaxPixels: number,
-  ): ScatterplotLayer {
-    const points = this.extractBostonLayerPoints(data);
-    return new ScatterplotLayer({
-      id,
-      data: points,
-      getPosition: (d: { lon: number; lat: number }) => [d.lon, d.lat],
-      getRadius: 60,
-      radiusUnits: 'meters' as const,
-      radiusMinPixels,
-      radiusMaxPixels,
-      getFillColor: color,
-      pickable: true,
-      stroked: true,
-      getLineColor: [255, 255, 255, 130] as [number, number, number, number],
-      lineWidthMinPixels: 1,
-    });
-  }
-
-  private createBostonIncidentLayer(
-    id: string,
-    incidents: BostonIncident[],
-    color: [number, number, number, number],
-    radiusMinPixels: number,
-  ): ScatterplotLayer<BostonIncident> {
-    const points = incidents.filter((incident) => incident.lat != null && incident.lon != null);
-    return new ScatterplotLayer<BostonIncident>({
-      id,
-      data: points,
-      getPosition: (d) => [d.lon as number, d.lat as number],
-      getRadius: 80,
-      radiusUnits: 'meters' as const,
-      radiusMinPixels,
-      radiusMaxPixels: 10,
-      getFillColor: color,
-      pickable: true,
-      stroked: true,
-      getLineColor: [255, 255, 255, 140] as [number, number, number, number],
-      lineWidthMinPixels: 1,
-    });
-  }
-
-  private createBostonTransitVehiclesLayer(): ScatterplotLayer<LocalTransitVehicle> {
-    return new ScatterplotLayer<LocalTransitVehicle>({
-      id: 'boston-transit-vehicles-layer',
-      data: this.bostonTransitVehicles,
-      getPosition: (d) => [d.lon, d.lat],
-      getRadius: 90,
-      radiusUnits: 'meters' as const,
-      radiusMinPixels: 4,
-      radiusMaxPixels: 12,
-      getFillColor: (d) => BOSTON_MODE_COLORS[d.mode],
-      pickable: true,
-      stroked: true,
-      getLineColor: [255, 255, 255, 170] as [number, number, number, number],
-      lineWidthMinPixels: 1,
-    });
-  }
-
-  private createBostonLayers(): Layer[] {
-    const layers: Layer[] = [];
-
-    if (this.bostonLayerState.policeDistricts && this.bostonPoliceDistricts.features.length > 0) {
-      layers.push(this.createBostonDistrictsLayer());
-    }
-    if (this.bostonLayerState.fireHydrants && this.bostonFireHydrants.features.length > 0) {
-      layers.push(this.createBostonPointLayer(
-        'boston-fire-hydrants-layer',
-        this.bostonFireHydrants,
-        [34, 197, 94, 150],
-        1,
-        5,
-      ));
-    }
-    if (this.bostonLayerState.fireDepartments && this.bostonFireDepartments.features.length > 0) {
-      layers.push(this.createBostonPointLayer(
-        'boston-fire-departments-layer',
-        this.bostonFireDepartments,
-        [251, 146, 60, 220],
-        4,
-        10,
-      ));
-    }
-    if (this.bostonLayerState.communityCenters && this.bostonCommunityCenters.features.length > 0) {
-      layers.push(this.createBostonPointLayer(
-        'boston-community-centers-layer',
-        this.bostonCommunityCenters,
-        [168, 85, 247, 210],
-        3,
-        8,
-      ));
-    }
-    if (this.bostonCrimeIncidents.length > 0) {
-      layers.push(this.createBostonIncidentLayer(
-        'boston-crime-incidents-layer',
-        this.bostonCrimeIncidents,
-        [59, 130, 246, 215],
-        4,
-      ));
-    }
-    if (this.bostonFireIncidents.length > 0) {
-      layers.push(this.createBostonIncidentLayer(
-        'boston-fire-incidents-layer',
-        this.bostonFireIncidents,
-        [239, 68, 68, 215],
-        4,
-      ));
-    }
-    if (this.bostonLayerState.transitVehicles && this.bostonTransitVehicles.length > 0) {
-      layers.push(this.createBostonTransitVehiclesLayer());
-    }
-
-    return layers;
-  }
-
   // Data setters - all use render() for debouncing
   public setEarthquakes(earthquakes: Earthquake[]): void {
     this.earthquakes = earthquakes;
@@ -4362,59 +4067,6 @@ export class DeckGLMap {
 
   public setRenewableInstallations(installations: RenewableInstallation[]): void {
     this.renewableInstallations = installations;
-    this.render();
-  }
-
-  public setBostonPoliceDistricts(data: BostonLayerData): void {
-    this.bostonPoliceDistricts = data;
-    this.markBostonLiveUpdate();
-    this.render();
-  }
-
-  public setBostonFireHydrants(data: BostonLayerData): void {
-    this.bostonFireHydrants = data;
-    this.markBostonLiveUpdate();
-    this.render();
-  }
-
-  public setBostonFireDepartments(data: BostonLayerData): void {
-    this.bostonFireDepartments = data;
-    this.markBostonLiveUpdate();
-    this.render();
-  }
-
-  public setBostonCommunityCenters(data: BostonLayerData): void {
-    this.bostonCommunityCenters = data;
-    this.markBostonLiveUpdate();
-    this.render();
-  }
-
-  public setBostonCrimeIncidents(incidents: BostonIncident[]): void {
-    this.bostonCrimeIncidents = incidents;
-    this.markBostonLiveUpdate();
-    this.render();
-  }
-
-  public setBostonFireIncidents(incidents: BostonIncident[]): void {
-    this.bostonFireIncidents = incidents;
-    this.markBostonLiveUpdate();
-    this.render();
-  }
-
-  public setBostonTransitVehicles(vehicles: LocalTransitVehicle[]): void {
-    this.bostonTransitVehicles = vehicles;
-    this.markBostonLiveUpdate();
-    this.render();
-  }
-
-  public setBostonTransitLines(lines: LocalTransitLine[]): void {
-    this.bostonTransitLines = lines;
-    this.markBostonLiveUpdate();
-    this.render();
-  }
-
-  public setBostonLayerEnabled(layerId: BostonLayerId, enabled: boolean): void {
-    this.bostonLayerState[layerId] = enabled;
     this.render();
   }
 
@@ -4926,6 +4578,10 @@ export class DeckGLMap {
   }
 
   public destroy(): void {
+    this.debouncedRebuildLayers.cancel();
+    this.debouncedFetchBases.cancel();
+    this.rafUpdateLayers.cancel();
+
     if (this.moveTimeoutId) {
       clearTimeout(this.moveTimeoutId);
       this.moveTimeoutId = null;

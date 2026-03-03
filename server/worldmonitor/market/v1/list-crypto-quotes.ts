@@ -9,17 +9,20 @@ import type {
   ListCryptoQuotesResponse,
   CryptoQuote,
 } from '../../../../src/generated/server/worldmonitor/market/v1/service_server';
-import { CRYPTO_META, fetchCoinGeckoMarkets } from './_shared';
+import { CRYPTO_META, fetchCoinGeckoMarkets, parseStringArray } from './_shared';
 import { cachedFetchJson } from '../../../_shared/redis';
 
 const REDIS_CACHE_KEY = 'market:crypto:v1';
 const REDIS_CACHE_TTL = 600; // 10 min — CoinGecko rate-limited
 
+const fallbackCryptoCache = new Map<string, { data: ListCryptoQuotesResponse; ts: number }>();
+
 export async function listCryptoQuotes(
   _ctx: ServerContext,
   req: ListCryptoQuotesRequest,
 ): Promise<ListCryptoQuotesResponse> {
-  const ids = req.ids.length > 0 ? req.ids : Object.keys(CRYPTO_META);
+  const parsedIds = parseStringArray(req.ids);
+  const ids = parsedIds.length > 0 ? parsedIds : Object.keys(CRYPTO_META);
 
   const cacheKey = `${REDIS_CACHE_KEY}:${[...ids].sort().join(',')}`;
 
@@ -57,8 +60,12 @@ export async function listCryptoQuotes(
     return quotes.length > 0 ? { quotes } : null;
   });
 
-  return result || { quotes: [] };
+  if (result) {
+    if (fallbackCryptoCache.size > 50) fallbackCryptoCache.clear();
+    fallbackCryptoCache.set(cacheKey, { data: result, ts: Date.now() });
+  }
+  return result || fallbackCryptoCache.get(cacheKey)?.data || { quotes: [] };
   } catch {
-    return { quotes: [] };
+    return fallbackCryptoCache.get(cacheKey)?.data || { quotes: [] };
   }
 }

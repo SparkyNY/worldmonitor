@@ -3,7 +3,10 @@ import { escapeHtml } from '@/utils/sanitize';
 import { fetchCachedTheaterPosture, type CachedTheaterPosture } from '@/services/cached-theater-posture';
 import { fetchMilitaryVessels } from '@/services/military-vessels';
 import { recalcPostureWithVessels, type TheaterPostureSummary } from '@/services/military-surge';
+import { isDesktopRuntime } from '@/services/runtime';
 import { t } from '../services/i18n';
+import type { NewsItem, DeductContextDetail } from '@/types';
+import { buildNewsContext } from '@/utils/news-context';
 
 export class StrategicPosturePanel extends Panel {
   private postures: TheaterPostureSummary[] = [];
@@ -15,7 +18,7 @@ export class StrategicPosturePanel extends Panel {
   private lastTimestamp: string = '';
   private isStale: boolean = false;
 
-  constructor() {
+  constructor(private getLatestNews?: () => NewsItem[]) {
     super({
       id: 'strategic-posture',
       title: t('panels.strategicPosture'),
@@ -53,6 +56,7 @@ export class StrategicPosturePanel extends Panel {
     if (!this.isPanelVisible() || this.postures.length === 0) return;
     console.log('[StrategicPosturePanel] Re-augmenting with vessels...');
     await this.augmentWithVessels();
+    if (!this.element?.isConnected) return;
     this.render();
   }
 
@@ -131,6 +135,7 @@ export class StrategicPosturePanel extends Panel {
       // Fetch aircraft data from server
       this.showLoadingStage('aircraft');
       const data = await fetchCachedTheaterPosture(this.signal);
+      if (!this.element?.isConnected) return;
       if (!data || data.postures.length === 0) {
         this.showNoData();
         return;
@@ -147,6 +152,7 @@ export class StrategicPosturePanel extends Panel {
       // Try to augment with vessel data (client-side)
       this.showLoadingStage('vessels');
       await this.augmentWithVessels();
+      if (!this.element?.isConnected) return;
 
       this.showLoadingStage('analysis');
       this.updateBadges();
@@ -281,6 +287,7 @@ export class StrategicPosturePanel extends Panel {
     this.lastTimestamp = data.timestamp;
     this.isStale = data.stale || false;
     this.augmentWithVessels().then(() => {
+      if (!this.element?.isConnected) return;
       this.updateBadges();
       this.render();
     });
@@ -441,6 +448,7 @@ export class StrategicPosturePanel extends Panel {
           ${p.strikeCapable ? `<span class="posture-strike">⚡ ${t('components.strategicPosture.strike')}</span>` : ''}
           ${this.getTrendIcon(p.trend, p.changePercent)}
           ${p.targetNation ? `<span class="posture-focus">→ ${escapeHtml(p.targetNation)}</span>` : ''}
+          ${isDesktopRuntime() ? `<button class="posture-deduce-btn" title="Deduce Situation with AI" style="background: none; border: none; cursor: pointer; opacity: 0.7; font-size: 1.1em; transition: opacity 0.2s; margin-left: auto;" data-theater='${escapeHtml(JSON.stringify(p))}'>\u{1F9E0}</button>` : ''}
         </div>
       </div>
     `;
@@ -484,7 +492,12 @@ export class StrategicPosturePanel extends Panel {
 
     const theaters = this.content.querySelectorAll('.posture-theater');
     theaters.forEach((el) => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        // Prevent click if we clicked the deduce button specifically
+        if ((e.target as HTMLElement).closest('.posture-deduce-btn')) {
+          return;
+        }
+
         const lat = parseFloat((el as HTMLElement).dataset.lat || '0');
         const lon = parseFloat((el as HTMLElement).dataset.lon || '0');
         console.log('[StrategicPosturePanel] Theater clicked:', {
@@ -504,6 +517,31 @@ export class StrategicPosturePanel extends Panel {
             lat,
             lon,
           });
+        }
+      });
+    });
+
+    const deduceBtns = this.content.querySelectorAll('.posture-deduce-btn');
+    deduceBtns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        try {
+          const theaterDataStr = (btn as HTMLElement).dataset.theater;
+          if (!theaterDataStr) return;
+
+          const p = JSON.parse(theaterDataStr);
+          const query = `What is the expected strategic impact of the current military posture in the ${p.shortName} theater?`;
+          let geoContext = `Theater: ${p.shortName} (${p.theaterName}). Military Assets: ${p.totalAircraft} aircraft, ${p.totalVessels} naval vessels. Readiness Level: ${p.postureLevel}. Assets breakdown: ${p.fighters} fighters, ${p.bombers} bombers, ${p.carriers} carriers, ${p.submarines} submarines. Focus/Target: ${p.targetNation || 'Unknown'}.`;
+
+          if (this.getLatestNews) {
+            const newsCtx = buildNewsContext(this.getLatestNews);
+            if (newsCtx) geoContext += `\n\n${newsCtx}`;
+          }
+
+          const detail: DeductContextDetail = { query, geoContext, autoSubmit: true };
+          document.dispatchEvent(new CustomEvent('wm:deduct-context', { detail }));
+        } catch (err) {
+          console.error('[StrategicPosturePanel] Failed to dispatch deduction event', err);
         }
       });
     });

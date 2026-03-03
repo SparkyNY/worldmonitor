@@ -11,9 +11,29 @@ import { CHROME_UA } from '../../../_shared/constants';
 import { VARIANT_FEEDS, INTEL_SOURCES, type ServerFeed } from './_feeds';
 import { classifyByKeyword, type ThreatLevel } from './_classifier';
 
-declare const process: { env: Record<string, string | undefined> };
+function getRelayBaseUrl(): string | null {
+  const relayUrl = process.env.WS_RELAY_URL;
+  if (!relayUrl) return null;
+  return relayUrl
+    .replace(/^ws(s?):\/\//, 'http$1://')
+    .replace(/\/$/, '');
+}
+
+function getRelayHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'User-Agent': CHROME_UA,
+    Accept: 'application/rss+xml, application/xml, text/xml, */*',
+  };
+  const relaySecret = process.env.RELAY_SHARED_SECRET;
+  if (relaySecret) {
+    const relayHeader = (process.env.RELAY_AUTH_HEADER || 'x-relay-key').toLowerCase();
+    headers[relayHeader] = relaySecret;
+  }
+  return headers;
+}
 
 const VALID_VARIANTS = new Set(['full', 'tech', 'finance', 'happy']);
+const fallbackDigestCache = new Map<string, { data: ListFeedDigestResponse; ts: number }>();
 const ITEMS_PER_FEED = 5;
 const MAX_ITEMS_PER_CATEGORY = 20;
 const FEED_TIMEOUT_MS = 8_000;
@@ -40,6 +60,32 @@ interface ParsedItem {
   classSource: 'keyword';
 }
 
+async function fetchRssText(
+  url: string,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+  const onAbort = () => controller.abort();
+  signal.addEventListener('abort', onAbort, { once: true });
+
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        'User-Agent': CHROME_UA,
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      signal: controller.signal,
+    });
+    if (!resp.ok) return null;
+    return await resp.text();
+  } finally {
+    clearTimeout(timeout);
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
 async function fetchAndParseRss(
   feed: ServerFeed,
   variant: string,
@@ -49,29 +95,33 @@ async function fetchAndParseRss(
 
   try {
     const cached = await cachedFetchJson<ParsedItem[]>(cacheKey, 600, async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+      // Try direct fetch first
+      let text = await fetchRssText(feed.url, signal).catch(() => null);
 
-      const onAbort = () => controller.abort();
-      signal.addEventListener('abort', onAbort, { once: true });
-
-      try {
-        const resp = await fetch(feed.url, {
-          headers: {
-            'User-Agent': CHROME_UA,
-            'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-          },
-          signal: controller.signal,
-        });
-        if (!resp.ok) return null;
-
-        const text = await resp.text();
-        return parseRssXml(text, feed, variant);
-      } finally {
-        clearTimeout(timeout);
-        signal.removeEventListener('abort', onAbort);
+      // Fallback: route through Railway relay (different IP, avoids Vercel blocks)
+      if (!text) {
+        const relayBase = getRelayBaseUrl();
+        if (relayBase) {
+          const relayUrl = `${relayBase}/rss?url=${encodeURIComponent(feed.url)}`;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS);
+          const onAbort = () => controller.abort();
+          signal.addEventListener('abort', onAbort, { once: true });
+          try {
+            const resp = await fetch(relayUrl, {
+              headers: getRelayHeaders(),
+              signal: controller.signal,
+            });
+            if (resp.ok) text = await resp.text();
+          } catch { /* relay also failed */ } finally {
+            clearTimeout(timeout);
+            signal.removeEventListener('abort', onAbort);
+          }
+        }
       }
+
+      if (!text) return null;
+      return parseRssXml(text, feed, variant);
     });
 
     return cached ?? [];
@@ -187,13 +237,18 @@ export async function listFeedDigest(
 
   const digestCacheKey = `news:digest:v1:${variant}:${lang}`;
 
+  const fallbackKey = `${variant}:${lang}`;
   try {
-    const cached = await cachedFetchJson<ListFeedDigestResponse>(digestCacheKey, 300, async () => {
+    const cached = await cachedFetchJson<ListFeedDigestResponse>(digestCacheKey, 900, async () => {
       return buildDigest(variant, lang);
     });
-    return cached ?? { categories: {}, feedStatuses: {}, generatedAt: new Date().toISOString() };
+    if (cached) {
+      if (fallbackDigestCache.size > 50) fallbackDigestCache.clear();
+      fallbackDigestCache.set(fallbackKey, { data: cached, ts: Date.now() });
+    }
+    return cached ?? fallbackDigestCache.get(fallbackKey)?.data ?? { categories: {}, feedStatuses: {}, generatedAt: new Date().toISOString() };
   } catch {
-    return { categories: {}, feedStatuses: {}, generatedAt: new Date().toISOString() };
+    return fallbackDigestCache.get(fallbackKey)?.data ?? { categories: {}, feedStatuses: {}, generatedAt: new Date().toISOString() };
   }
 }
 

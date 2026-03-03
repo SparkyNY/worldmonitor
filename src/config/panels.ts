@@ -43,6 +43,7 @@ const FULL_PANELS: Record<string, PanelConfig> = {
   monitors: { name: 'My Monitors', enabled: true, priority: 2 },
   'satellite-fires': { name: 'Fires', enabled: true, priority: 2 },
   'macro-signals': { name: 'Market Radar', enabled: true, priority: 2 },
+  'gulf-economies': { name: 'Gulf Economies', enabled: false, priority: 2 },
   'etf-flows': { name: 'BTC ETF Tracker', enabled: true, priority: 2 },
   stablecoins: { name: 'Stablecoins', enabled: true, priority: 2 },
   'ucdp-events': { name: 'UCDP Conflict Events', enabled: true, priority: 2 },
@@ -51,10 +52,14 @@ const FULL_PANELS: Record<string, PanelConfig> = {
   climate: { name: 'Climate Anomalies', enabled: true, priority: 2 },
   'population-exposure': { name: 'Population Exposure', enabled: true, priority: 2 },
   'security-advisories': { name: 'Security Advisories', enabled: true, priority: 2 },
-  boston: { name: 'Boston Open Data', enabled: true, priority: 2 },
+  'oref-sirens': { name: 'Israel Sirens', enabled: true, priority: 2 },
+  'telegram-intel': { name: 'Telegram Intel', enabled: true, priority: 2 },
+  'world-clock': { name: 'World Clock', enabled: true, priority: 2 },
 };
 
 const FULL_MAP_LAYERS: MapLayers = {
+  iranAttacks: true,
+  gpsJamming: false,
   conflicts: true,
   bases: true,
   cables: false,
@@ -100,12 +105,12 @@ const FULL_MAP_LAYERS: MapLayers = {
   speciesRecovery: false,
   renewableInstallations: false,
   tradeRoutes: false,
-  iranAttacks: false,
-  gpsJamming: false,
   dayNight: false,
 };
 
 const FULL_MOBILE_MAP_LAYERS: MapLayers = {
+  iranAttacks: true,
+  gpsJamming: false,
   conflicts: true,
   bases: false,
   cables: false,
@@ -151,25 +156,7 @@ const FULL_MOBILE_MAP_LAYERS: MapLayers = {
   speciesRecovery: false,
   renewableInstallations: false,
   tradeRoutes: false,
-  iranAttacks: false,
-  gpsJamming: false,
   dayNight: false,
-};
-
-const GTD_PANELS: Record<string, PanelConfig> = {
-  ...(Object.fromEntries(
-    Object.entries(FULL_PANELS).filter(([key]) => key !== 'boston')
-  ) as Record<string, PanelConfig>),
-  map: { name: 'GTD Map', enabled: true, priority: 1 },
-  insights: { name: 'GTD Insights', enabled: true, priority: 1 },
-};
-
-const GTD_MAP_LAYERS: MapLayers = {
-  ...FULL_MAP_LAYERS,
-};
-
-const GTD_MOBILE_MAP_LAYERS: MapLayers = {
-  ...FULL_MOBILE_MAP_LAYERS,
 };
 
 // ============================================
@@ -209,10 +196,12 @@ const TECH_PANELS: Record<string, PanelConfig> = {
   'macro-signals': { name: 'Market Radar', enabled: true, priority: 2 },
   'etf-flows': { name: 'BTC ETF Tracker', enabled: true, priority: 2 },
   stablecoins: { name: 'Stablecoins', enabled: true, priority: 2 },
+  'world-clock': { name: 'World Clock', enabled: true, priority: 2 },
   monitors: { name: 'My Monitors', enabled: true, priority: 2 },
 };
 
 const TECH_MAP_LAYERS: MapLayers = {
+  gpsJamming: false,
   conflicts: false,
   bases: false,
   cables: true,
@@ -259,11 +248,11 @@ const TECH_MAP_LAYERS: MapLayers = {
   renewableInstallations: false,
   tradeRoutes: false,
   iranAttacks: false,
-  gpsJamming: false,
   dayNight: false,
 };
 
 const TECH_MOBILE_MAP_LAYERS: MapLayers = {
+  gpsJamming: false,
   conflicts: false,
   bases: false,
   cables: false,
@@ -310,7 +299,6 @@ const TECH_MOBILE_MAP_LAYERS: MapLayers = {
   renewableInstallations: false,
   tradeRoutes: false,
   iranAttacks: false,
-  gpsJamming: false,
   dayNight: false,
 };
 
@@ -347,11 +335,14 @@ const FINANCE_PANELS: Record<string, PanelConfig> = {
   stablecoins: { name: 'Stablecoins', enabled: true, priority: 2 },
   'gcc-investments': { name: 'GCC Investments', enabled: true, priority: 2 },
   gccNews: { name: 'GCC Business News', enabled: true, priority: 2 },
+  'gulf-economies': { name: 'Gulf Economies', enabled: true, priority: 1 },
   polymarket: { name: 'Predictions', enabled: true, priority: 2 },
+  'world-clock': { name: 'World Clock', enabled: true, priority: 2 },
   monitors: { name: 'My Monitors', enabled: true, priority: 2 },
 };
 
 const FINANCE_MAP_LAYERS: MapLayers = {
+  gpsJamming: false,
   conflicts: false,
   bases: false,
   cables: true,
@@ -398,11 +389,11 @@ const FINANCE_MAP_LAYERS: MapLayers = {
   renewableInstallations: false,
   tradeRoutes: true,
   iranAttacks: false,
-  gpsJamming: false,
   dayNight: false,
 };
 
 const FINANCE_MOBILE_MAP_LAYERS: MapLayers = {
+  gpsJamming: false,
   conflicts: false,
   bases: false,
   cables: false,
@@ -449,102 +440,7 @@ const FINANCE_MOBILE_MAP_LAYERS: MapLayers = {
   renewableInstallations: false,
   tradeRoutes: false,
   iranAttacks: false,
-  gpsJamming: false,
   dayNight: false,
-};
-
-// ============================================
-// LOCAL VARIANT (Boston/Regional)
-// ============================================
-const LOCAL_PANELS: Record<string, PanelConfig> = {
-  map: { name: 'Boston & Regional Map', enabled: true, priority: 1 },
-  'live-news': { name: 'Local Headlines', enabled: true, priority: 1 },
-  local: { name: 'Boston & Metro News', enabled: true, priority: 1 },
-  city: { name: 'City Services', enabled: true, priority: 1 },
-  transit: { name: 'Transit & Mobility', enabled: true, priority: 1 },
-  weather: { name: 'Regional Weather', enabled: true, priority: 1 },
-  outages: { name: 'Service Outages', enabled: true, priority: 1 },
-  boston: { name: 'Boston Open Data', enabled: true, priority: 1 },
-  'service-status': { name: 'Service Status', enabled: true, priority: 2 },
-  monitors: { name: 'My Monitors', enabled: true, priority: 2 },
-};
-
-const LOCAL_MAP_LAYERS: MapLayers = {
-  ...FULL_MAP_LAYERS,
-  conflicts: false,
-  bases: false,
-  hotspots: false,
-  nuclear: false,
-  sanctions: false,
-  military: false,
-  ais: false,
-  cables: false,
-  pipelines: false,
-  waterways: false,
-  weather: true,
-  outages: true,
-  natural: true,
-  ucdpEvents: false,
-  displacement: false,
-  climate: false,
-};
-
-const LOCAL_MOBILE_MAP_LAYERS: MapLayers = {
-  ...FULL_MOBILE_MAP_LAYERS,
-  conflicts: false,
-  hotspots: false,
-  weather: true,
-  outages: true,
-  natural: true,
-};
-
-// ============================================
-// OSINT VARIANT (Workbench)
-// ============================================
-const OSINT_PANELS: Record<string, PanelConfig> = {
-  map: { name: 'OSINT Situation Map', enabled: true, priority: 1 },
-  'live-news': { name: 'OSINT Headlines', enabled: true, priority: 1 },
-  'osint-workbench': { name: 'OSINT Workbench', enabled: true, priority: 1 },
-  osint: { name: 'OSINT Sources', enabled: true, priority: 1 },
-  security: { name: 'Cybersecurity', enabled: true, priority: 1 },
-  cyber: { name: 'Threat Intelligence', enabled: true, priority: 1 },
-  outages: { name: 'Service Outages', enabled: true, priority: 1 },
-  'service-status': { name: 'Service Status', enabled: true, priority: 2 },
-  monitors: { name: 'My Monitors', enabled: true, priority: 2 },
-};
-
-const OSINT_MAP_LAYERS: MapLayers = {
-  ...FULL_MAP_LAYERS,
-  conflicts: true,
-  hotspots: true,
-  protests: true,
-  outages: true,
-  weather: true,
-  military: false,
-  ais: false,
-  cables: true,
-  pipelines: false,
-  flights: false,
-  cyberThreats: true,
-  natural: true,
-  ucdpEvents: true,
-  displacement: false,
-  climate: false,
-  stockExchanges: false,
-  financialCenters: false,
-  centralBanks: false,
-  commodityHubs: false,
-};
-
-const OSINT_MOBILE_MAP_LAYERS: MapLayers = {
-  ...FULL_MOBILE_MAP_LAYERS,
-  conflicts: true,
-  hotspots: true,
-  protests: true,
-  outages: true,
-  weather: true,
-  cyberThreats: true,
-  ucdpEvents: true,
 };
 
 // ============================================
@@ -564,6 +460,7 @@ const HAPPY_PANELS: Record<string, PanelConfig> = {
 };
 
 const HAPPY_MAP_LAYERS: MapLayers = {
+  gpsJamming: false,
   conflicts: false,
   bases: false,
   cables: false,
@@ -610,11 +507,11 @@ const HAPPY_MAP_LAYERS: MapLayers = {
   renewableInstallations: true,
   tradeRoutes: false,
   iranAttacks: false,
-  gpsJamming: false,
   dayNight: false,
 };
 
 const HAPPY_MOBILE_MAP_LAYERS: MapLayers = {
+  gpsJamming: false,
   conflicts: false,
   bases: false,
   cables: false,
@@ -661,54 +558,15 @@ const HAPPY_MOBILE_MAP_LAYERS: MapLayers = {
   renewableInstallations: true,
   tradeRoutes: false,
   iranAttacks: false,
-  gpsJamming: false,
   dayNight: false,
 };
 
 // ============================================
 // VARIANT-AWARE EXPORTS
 // ============================================
-export const DEFAULT_PANELS = SITE_VARIANT === 'happy'
-  ? HAPPY_PANELS
-  : SITE_VARIANT === 'gtd'
-    ? GTD_PANELS
-  : SITE_VARIANT === 'tech'
-    ? TECH_PANELS
-    : SITE_VARIANT === 'finance'
-      ? FINANCE_PANELS
-      : SITE_VARIANT === 'local'
-        ? LOCAL_PANELS
-        : SITE_VARIANT === 'osint'
-          ? OSINT_PANELS
-          : FULL_PANELS;
-
-export const DEFAULT_MAP_LAYERS = SITE_VARIANT === 'happy'
-  ? HAPPY_MAP_LAYERS
-  : SITE_VARIANT === 'gtd'
-    ? GTD_MAP_LAYERS
-  : SITE_VARIANT === 'tech'
-    ? TECH_MAP_LAYERS
-    : SITE_VARIANT === 'finance'
-      ? FINANCE_MAP_LAYERS
-      : SITE_VARIANT === 'local'
-        ? LOCAL_MAP_LAYERS
-        : SITE_VARIANT === 'osint'
-          ? OSINT_MAP_LAYERS
-          : FULL_MAP_LAYERS;
-
-export const MOBILE_DEFAULT_MAP_LAYERS = SITE_VARIANT === 'happy'
-  ? HAPPY_MOBILE_MAP_LAYERS
-  : SITE_VARIANT === 'gtd'
-    ? GTD_MOBILE_MAP_LAYERS
-  : SITE_VARIANT === 'tech'
-    ? TECH_MOBILE_MAP_LAYERS
-    : SITE_VARIANT === 'finance'
-      ? FINANCE_MOBILE_MAP_LAYERS
-      : SITE_VARIANT === 'local'
-        ? LOCAL_MOBILE_MAP_LAYERS
-        : SITE_VARIANT === 'osint'
-          ? OSINT_MOBILE_MAP_LAYERS
-          : FULL_MOBILE_MAP_LAYERS;
+export const DEFAULT_PANELS = SITE_VARIANT === 'happy' ? HAPPY_PANELS : SITE_VARIANT === 'tech' ? TECH_PANELS : SITE_VARIANT === 'finance' ? FINANCE_PANELS : FULL_PANELS;
+export const DEFAULT_MAP_LAYERS = SITE_VARIANT === 'happy' ? HAPPY_MAP_LAYERS : SITE_VARIANT === 'tech' ? TECH_MAP_LAYERS : SITE_VARIANT === 'finance' ? FINANCE_MAP_LAYERS : FULL_MAP_LAYERS;
+export const MOBILE_DEFAULT_MAP_LAYERS = SITE_VARIANT === 'happy' ? HAPPY_MOBILE_MAP_LAYERS : SITE_VARIANT === 'tech' ? TECH_MOBILE_MAP_LAYERS : SITE_VARIANT === 'finance' ? FINANCE_MOBILE_MAP_LAYERS : FULL_MOBILE_MAP_LAYERS;
 
 /** Maps map-layer toggle keys to their data-freshness source IDs (single source of truth). */
 export const LAYER_TO_SOURCE: Partial<Record<keyof MapLayers, DataSourceId[]>> = {
@@ -738,31 +596,31 @@ export const PANEL_CATEGORY_MAP: Record<string, { labelKey: string; panelKeys: s
     panelKeys: ['map', 'live-news', 'live-webcams', 'insights', 'strategic-posture'],
   },
 
-  // Full (geopolitical) + GTD variant
+  // Full (geopolitical) variant
   intelligence: {
     labelKey: 'header.panelCatIntelligence',
-    panelKeys: ['cii', 'strategic-risk', 'intel', 'gdelt-intel', 'cascade'],
-    variants: ['full', 'gtd'],
+    panelKeys: ['cii', 'strategic-risk', 'intel', 'gdelt-intel', 'cascade', 'telegram-intel'],
+    variants: ['full'],
   },
   regionalNews: {
     labelKey: 'header.panelCatRegionalNews',
     panelKeys: ['politics', 'us', 'europe', 'middleeast', 'africa', 'latam', 'asia'],
-    variants: ['full', 'gtd'],
+    variants: ['full'],
   },
   marketsFinance: {
     labelKey: 'header.panelCatMarketsFinance',
-    panelKeys: ['commodities', 'markets', 'economic', 'trade-policy', 'supply-chain', 'finance', 'polymarket', 'macro-signals', 'etf-flows', 'stablecoins', 'crypto', 'heatmap'],
-    variants: ['full', 'gtd'],
+    panelKeys: ['commodities', 'markets', 'economic', 'trade-policy', 'supply-chain', 'finance', 'polymarket', 'macro-signals', 'gulf-economies', 'etf-flows', 'stablecoins', 'crypto', 'heatmap'],
+    variants: ['full'],
   },
   topical: {
     labelKey: 'header.panelCatTopical',
     panelKeys: ['energy', 'gov', 'thinktanks', 'tech', 'ai', 'layoffs'],
-    variants: ['full', 'gtd'],
+    variants: ['full'],
   },
   dataTracking: {
     labelKey: 'header.panelCatDataTracking',
-    panelKeys: ['monitors', 'satellite-fires', 'ucdp-events', 'displacement', 'climate', 'population-exposure', 'security-advisories', 'boston'],
-    variants: ['full', 'gtd'],
+    panelKeys: ['monitors', 'satellite-fires', 'ucdp-events', 'displacement', 'climate', 'population-exposure', 'security-advisories', 'oref-sirens', 'world-clock'],
+    variants: ['full'],
   },
 
   // Tech variant
@@ -783,7 +641,7 @@ export const PANEL_CATEGORY_MAP: Record<string, { labelKey: string; panelKeys: s
   },
   techMarkets: {
     labelKey: 'header.panelCatMarkets',
-    panelKeys: ['markets', 'finance', 'crypto', 'economic', 'polymarket', 'macro-signals', 'etf-flows', 'stablecoins', 'layoffs', 'monitors'],
+    panelKeys: ['markets', 'finance', 'crypto', 'economic', 'polymarket', 'macro-signals', 'etf-flows', 'stablecoins', 'layoffs', 'monitors', 'world-clock'],
     variants: ['tech'],
   },
 
@@ -820,22 +678,8 @@ export const PANEL_CATEGORY_MAP: Record<string, { labelKey: string; panelKeys: s
   },
   gulfMena: {
     labelKey: 'header.panelCatGulfMena',
-    panelKeys: ['gcc-investments', 'gccNews', 'monitors'],
+    panelKeys: ['gulf-economies', 'gcc-investments', 'gccNews', 'monitors', 'world-clock'],
     variants: ['finance'],
-  },
-
-  // Local variant
-  localOps: {
-    labelKey: 'header.panelCatLocal',
-    panelKeys: ['local', 'city', 'transit', 'weather', 'outages', 'boston', 'service-status', 'monitors'],
-    variants: ['local'],
-  },
-
-  // OSINT variant
-  osintCore: {
-    labelKey: 'header.panelCatOsint',
-    panelKeys: ['osint-workbench', 'osint', 'security', 'cyber', 'outages', 'service-status', 'monitors'],
-    variants: ['osint'],
   },
 };
 

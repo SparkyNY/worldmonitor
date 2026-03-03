@@ -21,13 +21,13 @@ interface WebcamFeed {
 const WEBCAM_FEEDS: WebcamFeed[] = [
   // Iran Attacks — Tehran, Tel Aviv, Jerusalem
   { id: 'iran-tehran', city: 'Tehran', country: 'Iran', region: 'iran', channelHandle: '@IranHDCams', fallbackVideoId: '-zGuR1qVKrU' },
-  { id: 'iran-telaviv', city: 'Tel Aviv', country: 'Israel', region: 'iran', channelHandle: '@IsraelLiveCam', fallbackVideoId: '-VLcYT5QBrY' },
-  { id: 'iran-jerusalem', city: 'Jerusalem', country: 'Israel', region: 'iran', channelHandle: '@JerusalemLive', fallbackVideoId: 'JHwwZRH2wz8' },
+  { id: 'iran-telaviv', city: 'Tel Aviv', country: 'Israel', region: 'iran', channelHandle: '@IsraelLiveCam', fallbackVideoId: 'gmtlJ_m2r5A' },
+  { id: 'iran-jerusalem', city: 'Jerusalem', country: 'Israel', region: 'iran', channelHandle: '@JerusalemLive', fallbackVideoId: 'dpx0xxbPLN8' },
   { id: 'iran-multicam', city: 'Middle East', country: 'Multi', region: 'iran', channelHandle: '@MiddleEastCams', fallbackVideoId: '4E-iFtUM2kk' },
   // Middle East — Jerusalem & Tehran adjacent (conflict hotspots)
   { id: 'jerusalem', city: 'Jerusalem', country: 'Israel', region: 'middle-east', channelHandle: '@TheWesternWall', fallbackVideoId: 'UyduhBUpO7Q' },
   { id: 'tehran', city: 'Tehran', country: 'Iran', region: 'middle-east', channelHandle: '@IranHDCams', fallbackVideoId: '-zGuR1qVKrU' },
-  { id: 'tel-aviv', city: 'Tel Aviv', country: 'Israel', region: 'middle-east', channelHandle: '@IsraelLiveCam', fallbackVideoId: '-VLcYT5QBrY' },
+  { id: 'tel-aviv', city: 'Tel Aviv', country: 'Israel', region: 'middle-east', channelHandle: '@IsraelLiveCam', fallbackVideoId: 'gmtlJ_m2r5A' },
   { id: 'mecca', city: 'Mecca', country: 'Saudi Arabia', region: 'middle-east', channelHandle: '@MakkahLive', fallbackVideoId: 'DEcpmPUbkDQ' },
   // Europe
   { id: 'kyiv', city: 'Kyiv', country: 'Ukraine', region: 'europe', channelHandle: '@DWNews', fallbackVideoId: '-Q7FuPINDjA' },
@@ -66,15 +66,48 @@ export class LiveWebcamsPanel extends Panel {
   private boundVisibilityHandler!: () => void;
   private readonly IDLE_PAUSE_MS = 5 * 60 * 1000;
   private isIdle = false;
+  private fullscreenBtn: HTMLButtonElement | null = null;
+  private isFullscreen = false;
 
   constructor() {
     super({ id: 'live-webcams', title: t('panels.liveWebcams'), className: 'panel-wide' });
+    this.createFullscreenButton();
     this.createToolbar();
     this.setupIntersectionObserver();
     this.setupIdleDetection();
     subscribeStreamQualityChange(() => this.render());
     this.render();
+    document.addEventListener('keydown', this.boundFullscreenEscHandler);
   }
+
+  private createFullscreenButton(): void {
+    this.fullscreenBtn = document.createElement('button');
+    this.fullscreenBtn.className = 'live-mute-btn';
+    this.fullscreenBtn.title = 'Fullscreen';
+    this.fullscreenBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+    this.fullscreenBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleFullscreen();
+    });
+    const header = this.element.querySelector('.panel-header');
+    header?.appendChild(this.fullscreenBtn);
+  }
+
+  private toggleFullscreen(): void {
+    this.isFullscreen = !this.isFullscreen;
+    this.element.classList.toggle('live-news-fullscreen', this.isFullscreen);
+    document.body.classList.toggle('live-news-fullscreen-active', this.isFullscreen);
+    if (this.fullscreenBtn) {
+      this.fullscreenBtn.title = this.isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
+      this.fullscreenBtn.innerHTML = this.isFullscreen
+        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>'
+        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+    }
+  }
+
+  private boundFullscreenEscHandler = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && this.isFullscreen) this.toggleFullscreen();
+  };
 
   private get filteredFeeds(): WebcamFeed[] {
     if (this.regionFilter === 'all') return WEBCAM_FEEDS;
@@ -197,7 +230,7 @@ export class LiveWebcamsPanel extends Panel {
     this.destroyIframes();
 
     if (!this.isVisible || this.isIdle) {
-      this.content.innerHTML = '<div class="webcam-placeholder">Webcams paused</div>';
+      this.content.innerHTML = `<div class="webcam-placeholder">${escapeHtml(t('components.webcams.paused'))}</div>`;
       return;
     }
 
@@ -352,7 +385,7 @@ export class LiveWebcamsPanel extends Panel {
       this.idleTimeout = setTimeout(() => {
         this.isIdle = true;
         this.destroyIframes();
-        this.content.innerHTML = '<div class="webcam-placeholder">Webcams paused — move mouse to resume</div>';
+        this.content.innerHTML = `<div class="webcam-placeholder">${escapeHtml(t('components.webcams.pausedIdle'))}</div>`;
       }, this.IDLE_PAUSE_MS);
     };
 
@@ -375,9 +408,11 @@ export class LiveWebcamsPanel extends Panel {
       this.idleTimeout = null;
     }
     document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
+    document.removeEventListener('keydown', this.boundFullscreenEscHandler);
     ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'].forEach(event => {
       document.removeEventListener(event, this.boundIdleResetHandler);
     });
+    if (this.isFullscreen) this.toggleFullscreen();
     this.observer?.disconnect();
     this.destroyIframes();
     super.destroy();

@@ -2,9 +2,6 @@
  * RPC: GetSectorSummary
  * Fetches sector ETF performance from Finnhub.
  */
-
-declare const process: { env: Record<string, string | undefined> };
-
 import type {
   ServerContext,
   GetSectorSummaryRequest,
@@ -16,6 +13,8 @@ import { cachedFetchJson } from '../../../_shared/redis';
 
 const REDIS_CACHE_KEY = 'market:sectors:v1';
 const REDIS_CACHE_TTL = 600; // 10 min — Finnhub rate-limited
+
+let fallbackSectorCache: { data: GetSectorSummaryResponse; ts: number } | null = null;
 
 export async function getSectorSummary(
   _ctx: ServerContext,
@@ -49,8 +48,9 @@ export async function getSectorSummary(
     return sectors.length > 0 ? { sectors } : null;
   });
 
-  return result || { sectors: [] };
+  if (result) fallbackSectorCache = { data: result, ts: Date.now() };
+  return result || fallbackSectorCache?.data || { sectors: [] };
   } catch {
-    return { sectors: [] };
+    return fallbackSectorCache?.data || { sectors: [] };
   }
 }

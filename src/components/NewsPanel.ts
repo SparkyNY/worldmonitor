@@ -158,6 +158,7 @@ export class NewsPanel extends Panel {
 
     try {
       const result = await generateSummary(this.currentHeadlines.slice(0, 8), undefined, this.panelId, currentLang);
+      if (!this.element?.isConnected) return;
       if (this.lastHeadlineSignature !== sigAtStart) {
         this.hideSummary();
         return;
@@ -170,12 +171,15 @@ export class NewsPanel extends Panel {
         setTimeout(() => this.hideSummary(), 3000);
       }
     } catch {
+      if (!this.element?.isConnected) return;
       this.summaryContainer.innerHTML = '<div class="panel-summary-error">Summary failed</div>';
       setTimeout(() => this.hideSummary(), 3000);
     } finally {
       this.isSummarizing = false;
-      this.summaryBtn.innerHTML = '✨';
-      this.summaryBtn.disabled = false;
+      if (this.summaryBtn) {
+        this.summaryBtn.innerHTML = '✨';
+        this.summaryBtn.disabled = false;
+      }
     }
   }
 
@@ -194,6 +198,7 @@ export class NewsPanel extends Panel {
 
     try {
       const translated = await translateText(text, currentLang);
+      if (!this.element?.isConnected) return;
       if (translated) {
         titleEl.textContent = translated;
         titleEl.dataset.original = originalText;
@@ -205,15 +210,18 @@ export class NewsPanel extends Panel {
         // Shake animation or error state could be added here
       }
     } catch (e) {
+      if (!this.element?.isConnected) return;
       console.error('Translation failed', e);
       element.innerHTML = '文';
     } finally {
-      element.style.pointerEvents = 'auto';
+      if (element.isConnected) {
+        element.style.pointerEvents = 'auto';
+      }
     }
   }
 
   private showSummary(summary: string): void {
-    if (!this.summaryContainer) return;
+    if (!this.summaryContainer || !this.element?.isConnected) return;
     this.summaryContainer.style.display = 'block';
     this.summaryContainer.innerHTML = `
       <div class="panel-summary-content">

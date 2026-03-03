@@ -21,6 +21,19 @@ const BOOTSTRAP_CACHE_KEYS = {
   wildfires:        'wildfire:fires:v1',
 };
 
+const SLOW_KEYS = new Set([
+  'bisPolicy', 'bisExchange', 'bisCredit', 'minerals', 'giving',
+  'sectors', 'etfFlows', 'shippingRates', 'wildfires', 'climateAnomalies',
+]);
+const FAST_KEYS = new Set([
+  'earthquakes', 'outages', 'serviceStatuses', 'macroSignals', 'chokepoints',
+]);
+
+const TIER_CACHE = {
+  slow: 'public, s-maxage=3600, stale-while-revalidate=600, stale-if-error=3600',
+  fast: 'public, s-maxage=600, stale-while-revalidate=120, stale-if-error=900',
+};
+
 const NEG_SENTINEL = '__WM_NEG__';
 
 async function getCachedJsonBatch(keys) {
@@ -71,10 +84,17 @@ export default async function handler(req) {
     });
 
   const url = new URL(req.url);
-  const requested = url.searchParams.get('keys')?.split(',').filter(Boolean);
-  const registry = requested
-    ? Object.fromEntries(Object.entries(BOOTSTRAP_CACHE_KEYS).filter(([k]) => requested.includes(k)))
-    : BOOTSTRAP_CACHE_KEYS;
+  const tier = url.searchParams.get('tier');
+  let registry;
+  if (tier === 'slow' || tier === 'fast') {
+    const tierSet = tier === 'slow' ? SLOW_KEYS : FAST_KEYS;
+    registry = Object.fromEntries(Object.entries(BOOTSTRAP_CACHE_KEYS).filter(([k]) => tierSet.has(k)));
+  } else {
+    const requested = url.searchParams.get('keys')?.split(',').filter(Boolean).sort();
+    registry = requested
+      ? Object.fromEntries(Object.entries(BOOTSTRAP_CACHE_KEYS).filter(([k]) => requested.includes(k)))
+      : BOOTSTRAP_CACHE_KEYS;
+  }
 
   const keys = Object.values(registry);
   const names = Object.keys(registry);
@@ -97,12 +117,14 @@ export default async function handler(req) {
     else missing.push(names[i]);
   }
 
+  const cacheControl = (tier && TIER_CACHE[tier]) || 'public, s-maxage=600, stale-while-revalidate=120, stale-if-error=900';
+
   return new Response(JSON.stringify({ data, missing }), {
     status: 200,
     headers: {
       ...cors,
       'Content-Type': 'application/json',
-      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30',
+      'Cache-Control': cacheControl,
     },
   });
 }

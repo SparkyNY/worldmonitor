@@ -26,6 +26,7 @@ import { createCircuitBreaker } from '@/utils';
 import { getCSSColor } from '@/utils';
 import { isFeatureAvailable } from '../runtime-config';
 import { dataFreshness } from '../data-freshness';
+import { getHydratedData } from '@/services/bootstrap';
 
 // ---- Client + Circuit Breakers ----
 
@@ -92,7 +93,7 @@ const FRED_SERIES: FredConfig[] = [
 
 async function fetchSingleFredSeries(config: FredConfig): Promise<FredSeries | null> {
   const resp = await getFredBreaker(config.id).execute(async () => {
-    return client.getFredSeries({ seriesId: config.id, limit: 120 });
+    return client.getFredSeries({ seriesId: config.id, limit: 120 }, { signal: AbortSignal.timeout(20_000) });
   }, emptyFredFallback);
 
   const obs = resp.series?.observations;
@@ -212,7 +213,7 @@ export async function checkEiaStatus(): Promise<boolean> {
   if (!isFeatureAvailable('energyEia')) return false;
   try {
     const resp = await eiaBreaker.execute(async () => {
-      return client.getEnergyPrices({ commodities: ['wti'] });
+      return client.getEnergyPrices({ commodities: ['wti'] }, { signal: AbortSignal.timeout(20_000) });
     }, emptyEiaFallback);
     return resp.prices.length > 0;
   } catch {
@@ -229,7 +230,7 @@ export async function fetchOilAnalytics(): Promise<OilAnalytics> {
 
   try {
     const resp = await eiaBreaker.execute(async () => {
-      return client.getEnergyPrices({ commodities: [] }); // all commodities
+      return client.getEnergyPrices({ commodities: [] }, { signal: AbortSignal.timeout(20_000) }); // all commodities
     }, emptyEiaFallback);
 
     const byId = new Map<string, ProtoEnergyPrice>();
@@ -296,7 +297,7 @@ export async function fetchEnergyCapacityRpc(
       return client.getEnergyCapacity({
         energySources: energySources ?? [],
         years: years ?? 0,
-      });
+      }, { signal: AbortSignal.timeout(20_000) });
     }, emptyCapacityFallback);
   } catch {
     return emptyCapacityFallback;
@@ -435,7 +436,7 @@ export async function getIndicatorData(
       year: years,
       pageSize: 0,
       cursor: '',
-    });
+    }, { signal: AbortSignal.timeout(20_000) });
   }, emptyWbFallback);
 
   return buildWorldBankResponse(indicator, resp.data);
@@ -561,11 +562,16 @@ export interface BisData {
 
 export async function fetchBisData(): Promise<BisData> {
   const empty: BisData = { policyRates: [], exchangeRates: [], creditToGdp: [], fetchedAt: new Date() };
+
+  const hPolicy = getHydratedData('bisPolicy') as GetBisPolicyRatesResponse | undefined;
+  const hEer = getHydratedData('bisExchange') as GetBisExchangeRatesResponse | undefined;
+  const hCredit = getHydratedData('bisCredit') as GetBisCreditResponse | undefined;
+
   try {
     const [policy, eer, credit] = await Promise.all([
-      bisPolicyBreaker.execute(() => client.getBisPolicyRates({}), emptyBisPolicyFallback),
-      bisEerBreaker.execute(() => client.getBisExchangeRates({}), emptyBisEerFallback),
-      bisCreditBreaker.execute(() => client.getBisCredit({}), emptyBisCreditFallback),
+      hPolicy ? Promise.resolve(hPolicy) : bisPolicyBreaker.execute(() => client.getBisPolicyRates({}, { signal: AbortSignal.timeout(20_000) }), emptyBisPolicyFallback),
+      hEer ? Promise.resolve(hEer) : bisEerBreaker.execute(() => client.getBisExchangeRates({}, { signal: AbortSignal.timeout(20_000) }), emptyBisEerFallback),
+      hCredit ? Promise.resolve(hCredit) : bisCreditBreaker.execute(() => client.getBisCredit({}, { signal: AbortSignal.timeout(20_000) }), emptyBisCreditFallback),
     ]);
     return {
       policyRates: policy.rates,

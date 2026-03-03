@@ -9,7 +9,7 @@ import type {
   ListStablecoinMarketsResponse,
   Stablecoin,
 } from '../../../../src/generated/server/worldmonitor/market/v1/service_server';
-import { UPSTREAM_TIMEOUT_MS } from './_shared';
+import { UPSTREAM_TIMEOUT_MS, parseStringArray } from './_shared';
 import { CHROME_UA } from '../../../_shared/constants';
 import { cachedFetchJson } from '../../../_shared/redis';
 
@@ -55,8 +55,9 @@ export async function listStablecoinMarkets(
     return stablecoinCache;
   }
 
-  const coins = req.coins.length > 0
-    ? req.coins.filter(c => /^[a-z0-9-]+$/.test(c)).join(',')
+  const parsedCoins = parseStringArray(req.coins);
+  const coins = parsedCoins.length > 0
+    ? parsedCoins.filter(c => /^[a-z0-9-]+$/.test(c)).join(',')
     : DEFAULT_STABLECOIN_IDS;
 
   const redisKey = `${REDIS_CACHE_KEY}:${coins}`;
@@ -69,7 +70,7 @@ export async function listStablecoinMarkets(
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
 
-    if (resp.status === 429 && stablecoinCache) return stablecoinCache;
+    if (resp.status === 429 && stablecoinCache) return null;
     if (!resp.ok) throw new Error(`CoinGecko HTTP ${resp.status}`);
 
     const data = (await resp.json()) as CoinGeckoStablecoinItem[];
