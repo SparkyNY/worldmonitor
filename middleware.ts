@@ -11,14 +11,16 @@ const PUBLIC_API_PATHS = new Set(['/api/version']);
 const SOCIAL_IMAGE_UA =
   /Slack-ImgProxy|Slackbot|twitterbot|facebookexternalhit|linkedinbot|telegrambot|whatsapp|discordbot|redditbot/i;
 
-const VARIANT_HOST_MAP: Record<string, string> = {
+type VariantKey = 'tech' | 'finance' | 'happy';
+
+const VARIANT_HOST_MAP: Record<string, VariantKey> = {
   'tech.worldmonitor.app': 'tech',
   'finance.worldmonitor.app': 'finance',
   'happy.worldmonitor.app': 'happy',
 };
 
 // Source of truth: src/config/variant-meta.ts — keep in sync when variant metadata changes.
-const VARIANT_OG: Record<string, { title: string; description: string; image: string; url: string }> = {
+const VARIANT_OG: Record<VariantKey, { title: string; description: string; image: string; url: string }> = {
   tech: {
     title: 'Tech Monitor - Real-Time AI & Tech Industry Dashboard',
     description: 'Real-time AI and tech industry dashboard tracking tech giants, AI labs, startup ecosystems, funding rounds, and tech events worldwide.',
