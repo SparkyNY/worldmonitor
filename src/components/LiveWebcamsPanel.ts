@@ -230,7 +230,7 @@ export class LiveWebcamsPanel extends Panel {
     this.destroyIframes();
 
     if (!this.isVisible || this.isIdle) {
-      this.content.innerHTML = `<div class="webcam-placeholder">${t('components.webcams.paused')}</div>`;
+      this.content.innerHTML = `<div class="webcam-placeholder">${escapeHtml(t('components.webcams.paused'))}</div>`;
       return;
     }
 
@@ -385,7 +385,7 @@ export class LiveWebcamsPanel extends Panel {
       this.idleTimeout = setTimeout(() => {
         this.isIdle = true;
         this.destroyIframes();
-        this.content.innerHTML = `<div class="webcam-placeholder">${t('components.webcams.pausedIdle')}</div>`;
+        this.content.innerHTML = `<div class="webcam-placeholder">${escapeHtml(t('components.webcams.pausedIdle'))}</div>`;
       }, this.IDLE_PAUSE_MS);
     };
 

@@ -106,7 +106,7 @@ export class PositiveNewsFeedPanel extends Panel {
     this.filteredItems = items;
 
     if (items.length === 0) {
-      this.content.innerHTML = `<div class="positive-feed-empty">${t('components.positiveNewsFeed.noStories')}</div>`;
+      this.content.innerHTML = `<div class="positive-feed-empty">${escapeHtml(t('components.positiveNewsFeed.noStories'))}</div>`;
       return;
     }
 

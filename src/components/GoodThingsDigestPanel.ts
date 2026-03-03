@@ -35,7 +35,7 @@ export class GoodThingsDigestPanel extends Panel {
     const top5 = items.slice(0, 5);
 
     if (top5.length === 0) {
-      this.content.innerHTML = `<p class="digest-placeholder">${t('components.goodThingsDigest.noStories')}</p>`;
+      this.content.innerHTML = `<p class="digest-placeholder">${escapeHtml(t('components.goodThingsDigest.noStories'))}</p>`;
       this.cardElements = [];
       return;
     }
@@ -57,7 +57,7 @@ export class GoodThingsDigestPanel extends Panel {
             ${escapeHtml(item.title)}
           </a>
           <span class="digest-card-source">${escapeHtml(item.source)}</span>
-          <p class="digest-card-summary digest-card-summary--loading">${t('components.goodThingsDigest.summarizing')}</p>
+          <p class="digest-card-summary digest-card-summary--loading">${escapeHtml(t('components.goodThingsDigest.summarizing'))}</p>
         </div>
       `;
       list.appendChild(card);
