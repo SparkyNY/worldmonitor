@@ -325,7 +325,6 @@ export class BostonPanel extends Panel {
     const activeIncidents = this.activeTab === 'crime' ? crimeIncidents : fireIncidents;
     const transitSummary = this.data.transit?.summaries ?? [];
     const transitAlerts = this.data.transit?.alerts ?? [];
-    const transitLines = this.data.transit?.lines ?? [];
     const transitFetchedAt = this.data.transit?.provenance.fetchedAt ?? null;
 
     this.setContent(`
@@ -355,7 +354,7 @@ export class BostonPanel extends Panel {
           </div>
           <div class="boston-transit-meta">
             ${transitFetchedAt
-              ? `Live MBTA pull: ${escapeHtml(formatDateTime(transitFetchedAt))} · ${transitLines.length} route lines · ${this.data.transit?.vehicles.length ?? 0} vehicles`
+              ? `Live MBTA pull: ${escapeHtml(formatDateTime(transitFetchedAt))} · ${this.data.transit?.vehicles.length ?? 0} vehicles tracked`
               : 'Waiting for first transit fetch'}
           </div>
           <div class="boston-transit-grid">${renderTransitSummary(transitSummary)}</div>

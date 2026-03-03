@@ -45,6 +45,8 @@ import type { ClimateAnomaly } from '@/services/climate';
 import { ArcLayer } from '@deck.gl/layers';
 import { HeatmapLayer } from '@deck.gl/aggregation-layers';
 import type { WeatherAlert } from '@/services/weather';
+import type { BostonIncident, BostonLayerData, BostonLayerId } from '@/services/boston-open-data';
+import type { LocalTransitLine, LocalTransitVehicle } from '@/services/local-transit';
 import { escapeHtml } from '@/utils/sanitize';
 import { tokenizeForMatch, matchKeyword, matchesAnyKeyword, findMatchingKeywords } from '@/utils/keyword-match';
 import { t } from '@/services/i18n';
@@ -99,6 +101,7 @@ import type { FeatureCollection, Geometry } from 'geojson';
 export type TimeRange = '1h' | '6h' | '24h' | '48h' | '7d' | 'all';
 export type DeckMapView = 'global' | 'america' | 'mena' | 'eu' | 'asia' | 'latam' | 'africa' | 'oceania';
 type MapInteractionMode = 'flat' | '3d';
+const SHOW_BOSTON_TRANSIT_ROUTE_LINES = false;
 
 export interface CountryClickPayload {
   lat: number;
@@ -307,6 +310,21 @@ export class DeckGLMap {
   private tradeRouteSegments: TradeRouteSegment[] = resolveTradeRouteSegments();
   private positiveEvents: PositiveGeoEvent[] = [];
   private kindnessPoints: KindnessPoint[] = [];
+  private bostonPoliceDistricts: BostonLayerData = { type: 'FeatureCollection', features: [] };
+  private bostonFireHydrants: BostonLayerData = { type: 'FeatureCollection', features: [] };
+  private bostonFireDepartments: BostonLayerData = { type: 'FeatureCollection', features: [] };
+  private bostonCommunityCenters: BostonLayerData = { type: 'FeatureCollection', features: [] };
+  private bostonCrimeIncidents: BostonIncident[] = [];
+  private bostonFireIncidents: BostonIncident[] = [];
+  private bostonTransitVehicles: LocalTransitVehicle[] = [];
+  private bostonTransitLines: LocalTransitLine[] = [];
+  private bostonLayersEnabled: Record<BostonLayerId, boolean> = {
+    policeDistricts: true,
+    fireHydrants: true,
+    fireDepartments: true,
+    communityCenters: false,
+    transitVehicles: true,
+  };
 
   // Phase 8 overlay data
   private happinessScores: Map<string, number> = new Map();
@@ -1132,6 +1150,37 @@ export class DeckGLMap {
     }
     layers.push(this.createEmptyGhost('outages-layer'));
 
+    // Boston/local overlays
+    const showBostonLayers = SITE_VARIANT === 'local' || SITE_VARIANT === 'full' || SITE_VARIANT === 'osint';
+    if (showBostonLayers) {
+      if (this.bostonLayersEnabled.policeDistricts && this.bostonPoliceDistricts.features.length > 0) {
+        layers.push(this.createBostonPolygonLayer('boston-police-districts-layer', this.bostonPoliceDistricts, [70, 130, 255, 45], [70, 130, 255, 200]));
+      }
+      if (this.bostonLayersEnabled.fireHydrants && this.bostonFireHydrants.features.length > 0) {
+        layers.push(this.createBostonPointLayer('boston-fire-hydrants-layer', this.bostonFireHydrants, [220, 70, 70, 220], 2));
+      }
+      if (this.bostonLayersEnabled.fireDepartments && this.bostonFireDepartments.features.length > 0) {
+        layers.push(this.createBostonPointLayer('boston-fire-departments-layer', this.bostonFireDepartments, [255, 140, 0, 230], 5));
+      }
+      if (this.bostonLayersEnabled.communityCenters && this.bostonCommunityCenters.features.length > 0) {
+        layers.push(this.createBostonPointLayer('boston-community-centers-layer', this.bostonCommunityCenters, [50, 200, 130, 220], 4));
+      }
+      if (this.bostonLayersEnabled.transitVehicles) {
+        if (SHOW_BOSTON_TRANSIT_ROUTE_LINES && this.bostonTransitLines.length > 0) {
+          layers.push(this.createBostonTransitLinesLayer());
+        }
+        if (this.bostonTransitVehicles.length > 0) {
+          layers.push(this.createBostonTransitVehiclesLayer());
+        }
+      }
+      if (this.bostonCrimeIncidents.length > 0) {
+        layers.push(this.createBostonIncidentsLayer('boston-crime-layer', this.bostonCrimeIncidents, [255, 60, 90, 215]));
+      }
+      if (this.bostonFireIncidents.length > 0) {
+        layers.push(this.createBostonIncidentsLayer('boston-fire-layer', this.bostonFireIncidents, [255, 150, 60, 215]));
+      }
+    }
+
     // Cyber threat IOC layer
     if (mapLayers.cyberThreats && this.cyberThreats.length > 0) {
       layers.push(this.createCyberThreatsLayer());
@@ -1315,6 +1364,193 @@ export class DeckGLMap {
       console.warn(`[DeckGLMap] buildLayers took ${elapsed.toFixed(2)}ms (>16ms budget), ${result.length} layers`);
     }
     return result;
+  }
+
+  private createBostonPolygonLayer(
+    id: string,
+    data: BostonLayerData,
+    fillColor: [number, number, number, number],
+    lineColor: [number, number, number, number],
+  ): GeoJsonLayer {
+    return new GeoJsonLayer({
+      id,
+      data,
+      pickable: true,
+      stroked: true,
+      filled: true,
+      getLineColor: lineColor,
+      getFillColor: fillColor,
+      lineWidthMinPixels: 1.5,
+      getLineWidth: 2,
+      pointType: 'circle',
+    });
+  }
+
+  private createBostonPointLayer(
+    id: string,
+    data: BostonLayerData,
+    color: [number, number, number, number],
+    pointRadius: number,
+  ): GeoJsonLayer {
+    return new GeoJsonLayer({
+      id,
+      data,
+      pickable: true,
+      stroked: true,
+      filled: true,
+      pointType: 'circle',
+      getFillColor: color,
+      getLineColor: [12, 18, 30, 190],
+      lineWidthMinPixels: 1,
+      getPointRadius: pointRadius,
+      pointRadiusMinPixels: Math.max(2, pointRadius),
+      pointRadiusMaxPixels: Math.max(8, pointRadius * 2),
+    });
+  }
+
+  private createBostonIncidentsLayer(
+    id: string,
+    incidents: BostonIncident[],
+    color: [number, number, number, number],
+  ): ScatterplotLayer<BostonIncident> {
+    const data = incidents.filter((incident) => Number.isFinite(incident.lat) && Number.isFinite(incident.lon));
+    return new ScatterplotLayer<BostonIncident>({
+      id,
+      data,
+      pickable: true,
+      radiusUnits: 'meters',
+      getPosition: (d) => [d.lon as number, d.lat as number],
+      getRadius: 120,
+      radiusMinPixels: 4,
+      radiusMaxPixels: 14,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      getLineColor: [255, 255, 255, 220],
+      getFillColor: color,
+    });
+  }
+
+  private createBostonTransitLinesLayer(): PathLayer<LocalTransitLine> {
+    const data = this.bostonTransitLines.filter((line) => Array.isArray(line.path) && line.path.length > 1);
+    return new PathLayer<LocalTransitLine>({
+      id: 'boston-transit-lines-layer',
+      data,
+      pickable: true,
+      getPath: (d) => d.path,
+      getColor: (d) => this.hexToRgba(d.color, 180),
+      getWidth: 2,
+      widthMinPixels: 2,
+      widthMaxPixels: 8,
+      rounded: true,
+      capRounded: true,
+      jointRounded: true,
+    });
+  }
+
+  private getTransitVehicleColor(vehicle: LocalTransitVehicle): [number, number, number, number] {
+    if (vehicle.routeColor) {
+      return this.hexToRgba(vehicle.routeColor, 225);
+    }
+
+    const { mode } = vehicle;
+    switch (mode) {
+      case 'subway':
+        return [231, 76, 60, 220];
+      case 'bus':
+        return [46, 134, 222, 220];
+      case 'commuter_rail':
+        return [125, 95, 255, 220];
+      case 'ferry':
+        return [0, 178, 255, 220];
+      default:
+        return [255, 255, 255, 220];
+    }
+  }
+
+  private createBostonTransitVehiclesLayer(): ScatterplotLayer<LocalTransitVehicle> {
+    const data = this.bostonTransitVehicles.filter((vehicle) => Number.isFinite(vehicle.lat) && Number.isFinite(vehicle.lon));
+    return new ScatterplotLayer<LocalTransitVehicle>({
+      id: 'boston-transit-vehicles-layer',
+      data,
+      pickable: true,
+      radiusUnits: 'meters',
+      getPosition: (d) => [d.lon, d.lat],
+      getRadius: 110,
+      radiusMinPixels: 4,
+      radiusMaxPixels: 14,
+      stroked: true,
+      lineWidthMinPixels: 1,
+      getLineColor: [255, 255, 255, 230],
+      getFillColor: (d) => this.getTransitVehicleColor(d),
+    });
+  }
+
+  private formatTransitStatusLabel(value: string | null | undefined): string {
+    if (!value) return 'Unknown';
+    const normalized = String(value).replace(/_/g, ' ').trim().toLowerCase();
+    return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  private getTransitPunctualityLabel(scheduleStatus: string | null, status: string): string {
+    const merged = `${scheduleStatus ?? ''} ${status}`.toLowerCase();
+    if (merged.includes('delay') || merged.includes('late')) return 'Delayed';
+    if (merged.includes('cancel')) return 'Cancelled';
+    if (merged.includes('on time')) return 'On Time';
+    if (merged.includes('stopped at')) return 'Stopped At Stop';
+    if (merged.includes('incoming at')) return 'Incoming At Stop';
+    if (merged.includes('in transit to')) return 'In Transit';
+    return this.formatTransitStatusLabel(scheduleStatus ?? status);
+  }
+
+  private formatTransitTimestamp(value: string | null | undefined): string {
+    if (!value) return 'N/A';
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return 'N/A';
+    return new Date(parsed).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  private formatTransitRelative(value: string | null | undefined): string {
+    if (!value) return '';
+    const parsed = Date.parse(value);
+    if (!Number.isFinite(parsed)) return '';
+    const minutes = Math.round((parsed - Date.now()) / 60000);
+    if (Math.abs(minutes) <= 1) return '(now)';
+    if (minutes > 0) return `(in ${minutes}m)`;
+    return `(${Math.abs(minutes)}m ago)`;
+  }
+
+  private renderTransitVehicleTooltip(vehicle: LocalTransitVehicle): string {
+    const route = escapeHtml(vehicle.routeLabel || 'MBTA Vehicle');
+    const mode = escapeHtml(this.formatTransitStatusLabel(vehicle.mode));
+    const direction = escapeHtml(vehicle.directionLabel || 'Unknown');
+    const vehicleId = escapeHtml(vehicle.vehicleLabel || vehicle.id || 'Unknown');
+    const tripId = escapeHtml(vehicle.tripId || 'N/A');
+    const realtime = escapeHtml(this.formatTransitStatusLabel(vehicle.status));
+    const punctuality = escapeHtml(this.getTransitPunctualityLabel(vehicle.scheduleStatus, vehicle.status));
+    const schedule = escapeHtml(this.formatTransitStatusLabel(vehicle.scheduleStatus));
+    const currentStop = escapeHtml(vehicle.currentStopName || 'N/A');
+    const nextStop = escapeHtml(vehicle.nextStopName || 'N/A');
+    const stopSequence = vehicle.nextStopSequence != null ? `#${escapeHtml(String(vehicle.nextStopSequence))}` : 'N/A';
+    const arrivalTime = escapeHtml(this.formatTransitTimestamp(vehicle.nextArrivalTime));
+    const arrivalRelative = escapeHtml(this.formatTransitRelative(vehicle.nextArrivalTime));
+    const departureTime = escapeHtml(this.formatTransitTimestamp(vehicle.nextDepartureTime));
+    const departureRelative = escapeHtml(this.formatTransitRelative(vehicle.nextDepartureTime));
+    const updated = escapeHtml(this.formatTransitTimestamp(vehicle.updatedAt ?? vehicle.asOf));
+
+    return `<div class="deckgl-tooltip">
+      <strong>${route}</strong><br/>
+      ${mode} · ${direction}<br/>
+      Vehicle: ${vehicleId}<br/>
+      Trip: ${tripId}<br/>
+      Real-time: ${realtime}<br/>
+      Schedule: ${schedule}<br/>
+      Punctuality: ${punctuality}<br/>
+      Current stop: ${currentStop}<br/>
+      Next stop: ${nextStop} (${stopSequence})<br/>
+      Next arrival: ${arrivalTime} ${arrivalRelative}<br/>
+      Next departure: ${departureTime} ${departureRelative}<br/>
+      Updated: ${updated}
+    </div>`;
   }
 
   // Layer creation methods
@@ -2838,6 +3074,21 @@ export class DeckGLMap {
         const area = areaDesc ? `<br/><small>${text(areaDesc.slice(0, 50))}${areaDesc.length > 50 ? '...' : ''}</small>` : '';
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.event || t('components.deckgl.layers.weatherAlerts'))}</strong><br/>${text(obj.severity)}${area}</div>` };
       }
+      case 'boston-police-districts-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>Boston Police District</strong><br/>${text(obj.properties?.DISTRICT || obj.properties?.district || 'District')}</div>` };
+      case 'boston-fire-hydrants-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>Fire Hydrant</strong></div>` };
+      case 'boston-fire-departments-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>Fire Department</strong><br/>${text(obj.properties?.NAME || obj.properties?.name || '')}</div>` };
+      case 'boston-community-centers-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>Community Center</strong><br/>${text(obj.properties?.NAME || obj.properties?.name || '')}</div>` };
+      case 'boston-crime-layer':
+      case 'boston-fire-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.incidentType || obj.description || 'Incident')}</strong><br/>${text(obj.address || '')}</div>` };
+      case 'boston-transit-lines-layer':
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.routeLabel || 'Transit Line')}</strong><br/>${text(obj.mode || '')}</div>` };
+      case 'boston-transit-vehicles-layer':
+        return { html: this.renderTransitVehicleTooltip(obj as LocalTransitVehicle) };
       case 'outages-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.asn || t('components.deckgl.tooltip.internetOutage'))}</strong><br/>${text(obj.country)}</div>` };
       case 'cyber-threats-layer':
@@ -4575,6 +4826,51 @@ export class DeckGLMap {
       this.maplibreMap.setPaintProperty('country-hover-fill', 'fill-opacity', hoverOpacity);
       this.maplibreMap.setPaintProperty('country-highlight-fill', 'fill-opacity', highlightOpacity);
     } catch { /* layers may not be ready */ }
+  }
+
+  public setBostonPoliceDistricts(data: BostonLayerData): void {
+    this.bostonPoliceDistricts = data;
+    this.updateLayers();
+  }
+
+  public setBostonFireHydrants(data: BostonLayerData): void {
+    this.bostonFireHydrants = data;
+    this.updateLayers();
+  }
+
+  public setBostonFireDepartments(data: BostonLayerData): void {
+    this.bostonFireDepartments = data;
+    this.updateLayers();
+  }
+
+  public setBostonCommunityCenters(data: BostonLayerData): void {
+    this.bostonCommunityCenters = data;
+    this.updateLayers();
+  }
+
+  public setBostonCrimeIncidents(incidents: BostonIncident[]): void {
+    this.bostonCrimeIncidents = incidents;
+    this.updateLayers();
+  }
+
+  public setBostonFireIncidents(incidents: BostonIncident[]): void {
+    this.bostonFireIncidents = incidents;
+    this.updateLayers();
+  }
+
+  public setBostonTransitVehicles(vehicles: LocalTransitVehicle[]): void {
+    this.bostonTransitVehicles = vehicles;
+    this.updateLayers();
+  }
+
+  public setBostonTransitLines(lines: LocalTransitLine[]): void {
+    this.bostonTransitLines = lines;
+    this.updateLayers();
+  }
+
+  public setBostonLayerEnabled(layerId: BostonLayerId, enabled: boolean): void {
+    this.bostonLayersEnabled[layerId] = enabled;
+    this.updateLayers();
   }
 
   public destroy(): void {

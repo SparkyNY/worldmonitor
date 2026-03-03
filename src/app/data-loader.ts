@@ -196,6 +196,7 @@ export class DataLoaderManager implements AppModule {
 
   private async tryFetchDigest(): Promise<ListFeedDigestResponse | null> {
     const now = Date.now();
+    const digestVariant = SITE_VARIANT === 'gtd' ? 'full' : SITE_VARIANT;
 
     if (this.digestBreaker.state === 'open') {
       if (now < this.digestBreaker.cooldownUntil) {
@@ -206,7 +207,7 @@ export class DataLoaderManager implements AppModule {
 
     try {
       const resp = await fetch(
-        `/api/news/v1/list-feed-digest?variant=${SITE_VARIANT}&lang=${getCurrentLanguage()}`,
+        `/api/news/v1/list-feed-digest?variant=${digestVariant}&lang=${getCurrentLanguage()}`,
         { signal: AbortSignal.timeout(this.digestRequestTimeoutMs) },
       );
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -693,7 +694,8 @@ export class DataLoaderManager implements AppModule {
         return staleItems;
       }
 
-      if (!this.isPerFeedFallbackEnabled()) {
+      const forcePerFeedFallback = SITE_VARIANT === 'local' || SITE_VARIANT === 'osint';
+      if (!this.isPerFeedFallbackEnabled() && !forcePerFeedFallback) {
         console.warn(`[News] Digest missing for "${category}", limited per-feed fallback disabled`);
         this.renderNewsForCategory(category, []);
         this.ctx.statusPanel?.updateFeed(category.charAt(0).toUpperCase() + category.slice(1), {

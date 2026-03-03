@@ -336,6 +336,7 @@ export class IntelligenceServiceClient {
   }
 
   async deductSituation(req: DeductSituationRequest, options?: IntelligenceServiceCallOptions): Promise<DeductSituationResponse> {
+    void req;
     let path = "/api/intelligence/v1/deduct-situation";
     const url = this.baseURL + path;
 
@@ -373,4 +374,3 @@ export class IntelligenceServiceClient {
     throw new ApiError(resp.status, `Request failed with status ${resp.status}`, body);
   }
 }
-

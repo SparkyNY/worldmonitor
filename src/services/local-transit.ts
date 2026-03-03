@@ -9,6 +9,7 @@ export interface LocalTransitVehicle {
   mode: Exclude<LocalTransitMode, 'amtrak'>;
   routeId: string;
   routeLabel: string;
+  routeColor: string | null;
   status: string;
   lat: number;
   lon: number;
@@ -225,6 +226,26 @@ function modeColor(mode: Exclude<LocalTransitMode, 'amtrak'>): string {
   }
 }
 
+function inferRouteColor(routeId: string, mode: Exclude<LocalTransitMode, 'amtrak'>): string {
+  const normalized = routeId.trim().toUpperCase();
+  if (normalized === 'RED' || normalized === 'MATTAPAN') return '#DA291C';
+  if (normalized === 'ORANGE') return '#ED8B00';
+  if (normalized === 'BLUE') return '#003DA5';
+  if (normalized.startsWith('GREEN-') || normalized === 'GREEN') return '#00843D';
+  if (normalized.startsWith('SL')) return '#7C878E';
+
+  switch (mode) {
+    case 'subway':
+      return '#DA291C';
+    case 'bus':
+      return '#FFC72C';
+    case 'commuter_rail':
+      return '#80276C';
+    case 'ferry':
+      return '#008EAA';
+  }
+}
+
 function normalizeHexColor(value: unknown, fallback: string): string {
   const raw = textOrEmpty(value).replace(/^#/, '').toUpperCase();
   if (/^[0-9A-F]{6}$/.test(raw)) return `#${raw}`;
@@ -422,6 +443,7 @@ function normalizeVehiclesFromMbtaV3(payload: MbtaResponse): LocalTransitVehicle
 
     const routeLabelValue = routeAttrs.short_name ?? routeAttrs.long_name;
     const routeLabel = String(routeLabelValue || routeId || 'Unknown route');
+    const routeColor = normalizeHexColor(routeAttrs.color, inferRouteColor(routeId || row.id, mode));
     const status = String(attrs.current_status ?? attrs.current_stop_sequence ?? 'IN_TRANSIT_TO');
     const tripId = row.relationships?.trip?.data?.id ?? null;
     const tripAttrs = tripId ? (tripById.get(tripId)?.attributes ?? {}) : {};
@@ -436,6 +458,7 @@ function normalizeVehiclesFromMbtaV3(payload: MbtaResponse): LocalTransitVehicle
       mode,
       routeId: routeId || row.id,
       routeLabel,
+      routeColor,
       status,
       lat,
       lon,
@@ -481,12 +504,14 @@ function normalizeVehiclesFromGtfsEnhanced(payload: JsonRecord): LocalTransitVeh
 
     const status = textOrEmpty(vehicle.current_status) || textOrEmpty(vehicle.currentStatus) || 'IN_TRANSIT_TO';
     const timestamp = vehicle.timestamp ?? entity?.timestamp;
+    const inferredRouteId = routeId || 'unknown';
 
     vehicles.push({
       id: textOrEmpty(entity?.id) || `gtfs-${routeId}-${lat}-${lon}`,
       mode,
-      routeId: routeId || 'unknown',
+      routeId: inferredRouteId,
       routeLabel: routeId || 'Unknown route',
+      routeColor: inferRouteColor(inferredRouteId, mode),
       status,
       lat,
       lon,
@@ -641,7 +666,7 @@ function buildSyntheticLinesFromVehicles(vehicles: LocalTransitVehicle[]): Local
       mode,
       routeId,
       routeLabel: rows[0]!.routeLabel || routeId,
-      color: modeColor(mode),
+      color: rows[0]!.routeColor ?? modeColor(mode),
       textColor: '#FFFFFF',
       path,
       source: 'vehicle_synthetic',
@@ -1012,6 +1037,24 @@ function buildSummary(vehicles: LocalTransitVehicle[], alerts: LocalTransitAlert
   });
 }
 
+function enrichVehiclesWithRouteColors(vehicles: LocalTransitVehicle[], lines: LocalTransitLine[]): LocalTransitVehicle[] {
+  if (vehicles.length === 0) return vehicles;
+  const colorByRoute = new Map<string, string>();
+  for (const line of lines) {
+    if (line.routeId && line.color) {
+      colorByRoute.set(line.routeId, line.color);
+    }
+  }
+
+  return vehicles.map((vehicle) => {
+    const lineColor = colorByRoute.get(vehicle.routeId);
+    return {
+      ...vehicle,
+      routeColor: lineColor ?? vehicle.routeColor ?? inferRouteColor(vehicle.routeId, vehicle.mode),
+    };
+  });
+}
+
 export async function getCachedLocalTransit(): Promise<LocalTransitPayload | null> {
   const cached = await getPersistentCache<LocalTransitPayload>(CACHE_KEY);
   return cached?.data ?? null;
@@ -1048,6 +1091,7 @@ export async function refreshLocalTransit(): Promise<LocalTransitPayload> {
     } catch (error) {
       warnings.push(`MBTA transit line refresh failed (${error instanceof Error ? error.message : String(error)}).`);
     }
+    vehicles = enrichVehiclesWithRouteColors(vehicles, lines);
   }
 
   const mbtaAlerts = mbtaAlertsResult.status === 'fulfilled' ? mbtaAlertsResult.value : [];
