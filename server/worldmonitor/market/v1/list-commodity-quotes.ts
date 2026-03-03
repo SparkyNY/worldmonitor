@@ -9,11 +9,13 @@ import type {
   ListCommodityQuotesResponse,
   CommodityQuote,
 } from '../../../../src/generated/server/worldmonitor/market/v1/service_server';
-import { fetchYahooQuotesBatch } from './_shared';
+import { fetchYahooQuotesBatch, parseStringArray } from './_shared';
 import { cachedFetchJson } from '../../../_shared/redis';
 
 const REDIS_CACHE_KEY = 'market:commodities:v1';
 const REDIS_CACHE_TTL = 600; // 10 min — commodities move slower than indices
+
+const fallbackCommodityCache = new Map<string, { data: ListCommodityQuotesResponse; ts: number }>();
 
 function redisCacheKey(symbols: string[]): string {
   return `${REDIS_CACHE_KEY}:${[...symbols].sort().join(',')}`;
@@ -23,7 +25,7 @@ export async function listCommodityQuotes(
   _ctx: ServerContext,
   req: ListCommodityQuotesRequest,
 ): Promise<ListCommodityQuotesResponse> {
-  const symbols = req.symbols;
+  const symbols = parseStringArray(req.symbols);
   if (!symbols.length) return { quotes: [] };
 
   const redisKey = redisCacheKey(symbols);
@@ -41,8 +43,12 @@ export async function listCommodityQuotes(
     return quotes.length > 0 ? { quotes } : null;
   });
 
-  return result || { quotes: [] };
+  if (result) {
+    if (fallbackCommodityCache.size > 50) fallbackCommodityCache.clear();
+    fallbackCommodityCache.set(redisKey, { data: result, ts: Date.now() });
+  }
+  return result || fallbackCommodityCache.get(redisKey)?.data || { quotes: [] };
   } catch {
-    return { quotes: [] };
+    return fallbackCommodityCache.get(redisKey)?.data || { quotes: [] };
   }
 }

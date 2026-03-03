@@ -1,11 +1,51 @@
 import { escapeHtml } from '@/utils/sanitize';
 import { t } from '@/services/i18n';
 import { trackSearchUsed } from '@/services/analytics';
-import { COMMANDS, type Command } from '@/config/commands';
+import { getAllCommands, type Command } from '@/config/commands';
 
 interface CommandResult {
   command: Command;
   score: number;
+}
+
+const CATEGORY_KEYS: Record<string, string> = {
+  navigate: 'commands.categories.navigate',
+  layers: 'commands.categories.layers',
+  panels: 'commands.categories.panels',
+  view: 'commands.categories.view',
+  actions: 'commands.categories.actions',
+  country: 'commands.categories.country',
+};
+
+function kebabToCamel(s: string): string {
+  return s.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+}
+
+function resolveCommandLabel(cmd: Command): string {
+  const colonIdx = cmd.id.indexOf(':');
+  if (colonIdx === -1) return cmd.label;
+  const prefix = cmd.id.slice(0, colonIdx);
+  const action = cmd.id.slice(colonIdx + 1);
+
+  switch (prefix) {
+    case 'nav':
+      return `${t('commands.prefixes.map')}: ${t('commands.regions.' + action, { defaultValue: cmd.label })}`;
+    case 'country-map':
+      return `${t('commands.prefixes.map')}: ${cmd.label}`;
+    case 'panel': {
+      const panelName = t('panels.' + kebabToCamel(action), { defaultValue: cmd.label });
+      return `${t('commands.prefixes.panel')}: ${panelName}`;
+    }
+    case 'country':
+      return `${t('commands.prefixes.brief')}: ${cmd.label}`;
+    default:
+      return cmd.label;
+  }
+}
+
+function resolveCategoryLabel(cmd: Command): string {
+  const key = CATEGORY_KEYS[cmd.category];
+  return key ? t(key, { defaultValue: cmd.category }) : cmd.category;
 }
 
 export type SearchResultType = 'country' | 'news' | 'hotspot' | 'market' | 'prediction' | 'conflict' | 'base' | 'pipeline' | 'cable' | 'datacenter' | 'earthquake' | 'outage' | 'nuclear' | 'irradiator' | 'techcompany' | 'ailab' | 'startup' | 'techevent' | 'techhq' | 'accelerator' | 'exchange' | 'financialcenter' | 'centralbank' | 'commodityhub';
@@ -30,7 +70,6 @@ const MAX_COMMANDS = 5;
 
 interface SearchModalOptions {
   placeholder?: string;
-  hint?: string;
 }
 
 export class SearchModal {
@@ -46,13 +85,11 @@ export class SearchModal {
   private onSelect?: (result: SearchResult) => void;
   private onCommand?: (command: Command) => void;
   private placeholder: string;
-  private hint: string;
   private activePanelIds: Set<string> = new Set();
 
   constructor(container: HTMLElement, options?: SearchModalOptions) {
     this.container = container;
     this.placeholder = options?.placeholder || t('modals.search.placeholder');
-    this.hint = options?.hint || t('modals.search.hint');
     this.loadRecentSearches();
   }
 
@@ -135,7 +172,7 @@ export class SearchModal {
   private matchCommands(query: string): CommandResult[] {
     if (query.length < 2) return [];
     const matched: CommandResult[] = [];
-    for (const cmd of COMMANDS) {
+    for (const cmd of getAllCommands()) {
       if (cmd.id.startsWith('panel:') && this.activePanelIds.size > 0) {
         const panelId = cmd.id.slice(6);
         if (!this.activePanelIds.has(panelId)) continue;
@@ -252,16 +289,40 @@ export class SearchModal {
   private renderEmpty(): void {
     if (!this.resultsList) return;
 
-    this.resultsList.innerHTML = `
-      <div class="search-empty">
-        <div class="search-empty-icon">\u2318</div>
-        <div>${t('modals.search.empty')}</div>
-        <div class="search-empty-hint">${this.hint}</div>
-        <div class="search-empty-examples">
-          <span>Try: <kbd>dark mode</kbd> <kbd>iran</kbd> <kbd>military layers</kbd> <kbd>crypto</kbd></span>
-        </div>
-      </div>
-    `;
+    const tips: { icon: string; key: string; example: string }[] = [
+      { icon: '\u{1F30D}', key: 'commands.tips.map', example: 'iran' },
+      { icon: '\u{1F4CB}', key: 'commands.tips.panel', example: 'news' },
+      { icon: '\u{1F4C4}', key: 'commands.tips.brief', example: 'brief china' },
+      { icon: '\u{1F6E1}\uFE0F', key: 'commands.tips.layers', example: 'military layers' },
+      { icon: '\u23F1\uFE0F', key: 'commands.tips.time', example: '24h' },
+      { icon: '\u2699\uFE0F', key: 'commands.tips.settings', example: 'dark mode' },
+    ];
+
+    const shuffled = tips.sort(() => Math.random() - 0.5).slice(0, 4);
+
+    let html = `<div class="search-section-header">${t('modals.search.empty')}</div>`;
+    shuffled.forEach((tip, i) => {
+      html += `
+        <div class="search-result-item tip-item${i === 0 ? ' selected' : ''}" data-tip-example="${escapeHtml(tip.example)}">
+          <span class="search-result-icon">${tip.icon}</span>
+          <div class="search-result-content">
+            <div class="search-result-title">${escapeHtml(t(tip.key))}</div>
+          </div>
+          <kbd class="search-tip-example">${escapeHtml(tip.example)}</kbd>
+        </div>`;
+    });
+
+    this.resultsList.innerHTML = html;
+
+    this.resultsList.querySelectorAll('.tip-item').forEach((el) => {
+      el.addEventListener('click', () => {
+        const example = (el as HTMLElement).dataset.tipExample || '';
+        if (this.input) {
+          this.input.value = example;
+          this.handleSearch();
+        }
+      });
+    });
   }
 
   private get totalResultCount(): number {
@@ -318,9 +379,9 @@ export class SearchModal {
           <div class="search-result-item command-item ${globalIndex === this.selectedIndex ? 'selected' : ''}" data-index="${globalIndex}" data-command="${command.id}">
             <span class="search-result-icon">${command.icon}</span>
             <div class="search-result-content">
-              <div class="search-result-title">${escapeHtml(command.label)}</div>
+              <div class="search-result-title">${escapeHtml(resolveCommandLabel(command))}</div>
             </div>
-            <span class="search-result-type">${escapeHtml(command.category)}</span>
+            <span class="search-result-type">${escapeHtml(resolveCategoryLabel(command))}</span>
           </div>`;
         globalIndex++;
       }

@@ -1,9 +1,22 @@
 import type { AppContext, AppModule, CountryBriefSignals } from '@/app/app-context';
 import type { TimelineEvent } from '@/components/CountryTimeline';
 import { CountryTimeline } from '@/components/CountryTimeline';
-import { CountryBriefPage } from '@/components/CountryBriefPage';
+import type {
+  CountryDeepDiveEconomicIndicator,
+  CountryDeepDiveMilitarySummary,
+  CountryDeepDiveSignalDetails,
+} from '@/components/CountryBriefPanel';
+import { CountryDeepDivePanel } from '@/components/CountryDeepDivePanel';
 import { reverseGeocode } from '@/utils/reverse-geocode';
-import { getCountryAtCoordinates, hasCountryGeometry, isCoordinateInCountry, ME_STRIKE_BOUNDS } from '@/services/country-geometry';
+import {
+  getCountryAtCoordinates,
+  getCountryCentroid,
+  hasCountryGeometry,
+  isCoordinateInCountry,
+  ME_STRIKE_BOUNDS,
+  iso3ToIso2Code,
+  nameToCountryCode,
+} from '@/services/country-geometry';
 import { calculateCII, getCountryData, TIER1_COUNTRIES, type CountryScore } from '@/services/country-instability';
 import { signalAggregator } from '@/services/signal-aggregator';
 import { dataFreshness } from '@/services/data-freshness';
@@ -13,15 +26,29 @@ import { renderStoryToCanvas } from '@/services/story-renderer';
 import { openStoryModal } from '@/components/StoryModal';
 import { MarketServiceClient } from '@/generated/client/worldmonitor/market/v1/service_client';
 import { BETA_MODE } from '@/config/beta';
+import { MILITARY_BASES } from '@/config';
 import { mlWorker } from '@/services/ml-worker';
-import { t } from '@/services/i18n';
+import { isHeadlineMemoryEnabled } from '@/services/ai-flow-settings';
+import { t, getCurrentLanguage } from '@/services/i18n';
 import { trackCountrySelected, trackCountryBriefOpened } from '@/services/analytics';
 import type { StrategicPosturePanel } from '@/components/StrategicPosturePanel';
+import type { NewsItem } from '@/types';
+import { getNearbyInfrastructure } from '@/services/related-assets';
 
 type IntlDisplayNamesCtor = new (
   locales: string | string[],
   options: { type: 'region' }
 ) => { of: (code: string) => string | undefined };
+
+type CountryStockSnapshot = {
+  available: boolean;
+  code: string;
+  symbol: string;
+  indexName: string;
+  price: string;
+  weekChangePercent: string;
+  currency: string;
+};
 
 export class CountryIntelManager implements AppModule {
   private ctx: AppContext;
@@ -43,7 +70,7 @@ export class CountryIntelManager implements AppModule {
 
   private setupCountryIntel(): void {
     if (!this.ctx.map) return;
-    this.ctx.countryBriefPage = new CountryBriefPage();
+    this.ctx.countryBriefPage = new CountryDeepDivePanel(this.ctx.map);
     this.ctx.countryBriefPage.setShareStoryHandler((code, name) => {
       this.ctx.countryBriefPage?.hide();
       this.openCountryStory(code, name);
@@ -114,7 +141,7 @@ export class CountryIntelManager implements AppModule {
     this.openCountryBriefByCode(geo.code, geo.country);
   }
 
-  async openCountryBriefByCode(code: string, country: string): Promise<void> {
+  async openCountryBriefByCode(code: string, country: string, opts?: { maximize?: boolean }): Promise<void> {
     if (!this.ctx.countryBriefPage) return;
     this.ctx.map?.setRenderPaused(true);
     trackCountryBriefOpened(code);
@@ -128,6 +155,18 @@ export class CountryIntelManager implements AppModule {
 
     this.ctx.countryBriefPage.show(country, code, score, signals);
     this.ctx.map?.highlightCountry(code);
+
+    if (opts?.maximize) {
+      requestAnimationFrame(() => {
+        const panel = this.ctx.countryBriefPage;
+        if (panel?.isVisible() && panel.getCode() === code) {
+          panel.maximize?.();
+        }
+      });
+    }
+    this.ctx.countryBriefPage.updateSignalDetails?.(this.buildSignalDetails(code));
+    this.ctx.countryBriefPage.updateMilitaryActivity?.(this.buildMilitarySummary(code, country));
+    this.ctx.countryBriefPage.updateEconomicIndicators?.(this.buildEconomicIndicators(code, score, null));
 
     const marketClient = new MarketServiceClient('', { fetch: (...args: Parameters<typeof globalThis.fetch>) => globalThis.fetch(...args) });
     const stockPromise = marketClient.getCountryStockIndex({ countryCode: code })
@@ -143,7 +182,9 @@ export class CountryIntelManager implements AppModule {
       .catch(() => ({ available: false as const, code: '', symbol: '', indexName: '', price: '0', weekChangePercent: '0', currency: '' }));
 
     stockPromise.then((stock) => {
-      if (this.ctx.countryBriefPage?.getCode() === code) this.ctx.countryBriefPage.updateStock(stock);
+      if (this.ctx.countryBriefPage?.getCode() !== code) return;
+      this.ctx.countryBriefPage.updateStock(stock);
+      this.ctx.countryBriefPage.updateEconomicIndicators?.(this.buildEconomicIndicators(code, score, stock));
     });
 
     fetchCountryMarkets(country)
@@ -165,10 +206,12 @@ export class CountryIntelManager implements AppModule {
       const ourPos = CountryIntelManager.firstMentionPosition(t, searchTerms);
       const otherPos = CountryIntelManager.firstMentionPosition(t, otherCountryTerms);
       return ourPos !== Infinity && (otherPos === Infinity || ourPos <= otherPos);
+    }).sort((a, b) => {
+      const severityDelta = this.newsSeverityRank(b) - this.newsSeverityRank(a);
+      if (severityDelta !== 0) return severityDelta;
+      return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
     });
-    if (filteredNews.length > 0) {
-      this.ctx.countryBriefPage.updateNews(filteredNews.slice(0, 8));
-    }
+    this.ctx.countryBriefPage.updateNews(filteredNews.slice(0, 15));
 
     this.ctx.countryBriefPage.updateInfrastructure(code);
 
@@ -216,7 +259,21 @@ export class CountryIntelManager implements AppModule {
 
       let briefText = '';
       try {
-        const contextSnapshot = this.buildBriefContextSnapshot(country, code, score, signals, context);
+        let contextSnapshot = this.buildBriefContextSnapshot(country, code, score, signals, context);
+
+        if (isHeadlineMemoryEnabled() && mlWorker.isAvailable && mlWorker.isModelLoaded('embeddings') && briefHeadlines.length > 0) {
+          try {
+            const results = await mlWorker.vectorStoreSearch(briefHeadlines.slice(0, 3), 5, 0.3);
+            if (results.length > 0) {
+              const historical = results.map(r =>
+                `- ${r.text} (${new Date(r.pubDate).toISOString().slice(0, 10)})`
+              ).join('\n').slice(0, 350);
+              contextSnapshot = contextSnapshot.slice(0, 1800)
+                + `\n[BEGIN HISTORICAL DATA]\n${historical}\n[END HISTORICAL DATA]`;
+            }
+          } catch { /* RAG unavailable */ }
+        }
+
         briefText = await this.fetchCountryIntelBrief(code, contextSnapshot);
       } catch { /* server unreachable */ }
 
@@ -227,7 +284,11 @@ export class CountryIntelManager implements AppModule {
         const sumModelId = BETA_MODE ? 'summarization-beta' : 'summarization';
         if (briefHeadlines.length >= 2 && mlWorker.isAvailable && mlWorker.isModelLoaded(sumModelId)) {
           try {
-            const prompt = `Summarize the current situation in ${country} based on these headlines: ${briefHeadlines.slice(0, 8).join('. ')}`;
+            const lang = getCurrentLanguage();
+            const prompt = lang === 'fr'
+              ? `Résumez la situation actuelle en ${country} à partir de ces titres : ${briefHeadlines.slice(0, 8).join('. ')}`
+              : `Summarize the current situation in ${country} based on these headlines: ${briefHeadlines.slice(0, 8).join('. ')}`;
+
             const [summary] = await mlWorker.summarize([prompt], BETA_MODE ? 'summarization-beta' : undefined);
             if (summary && summary.length > 20) fallbackBrief = summary;
           } catch { /* T5 failed */ }
@@ -271,7 +332,8 @@ export class CountryIntelManager implements AppModule {
   }
 
   private async fetchCountryIntelBrief(code: string, contextSnapshot: string): Promise<string> {
-    const params = new URLSearchParams({ country_code: code });
+    const lang = getCurrentLanguage();
+    const params = new URLSearchParams({ country_code: code, lang });
     const trimmed = contextSnapshot.trim();
     if (trimmed.length > 0) {
       params.set('context', trimmed.slice(0, 2200));
@@ -408,7 +470,8 @@ export class CountryIntelManager implements AppModule {
     }
 
     for (const e of this.getCountryStrikes(code, hasGeoShape)) {
-      const ts = e.timestamp < 1e12 ? e.timestamp * 1000 : e.timestamp;
+      const rawTs = Number(e.timestamp) || 0;
+      const ts = rawTs < 1e12 ? rawTs * 1000 : rawTs;
       events.push({
         timestamp: ts,
         lane: 'conflict',
@@ -492,7 +555,7 @@ export class CountryIntelManager implements AppModule {
     if (this.ctx.intelligenceCache.flightDelays) {
       aviationDisruptions = this.ctx.intelligenceCache.flightDelays.filter(d =>
         (d.severity === 'major' || d.severity === 'severe' || d.delayType === 'closure') &&
-        d.country?.toLowerCase() === countryLower
+        (hasGeoShape ? this.isInCountry(d.lat, d.lon, code) : d.country?.toLowerCase() === countryLower)
       ).length;
     }
 
@@ -552,6 +615,185 @@ export class CountryIntelManager implements AppModule {
     };
   }
 
+  private newsSeverityRank(item: NewsItem): number {
+    const level = item.threat?.level;
+    if (level === 'critical') return 5;
+    if (level === 'high') return 4;
+    if (level === 'medium') return 3;
+    if (level === 'low') return 2;
+    if (item.isAlert) return 4;
+    return 1;
+  }
+
+  private buildSignalDetails(code: string): CountryDeepDiveSignalDetails {
+    const cluster = signalAggregator.getCountryClusters().find((entry) => entry.country === code);
+    if (!cluster) {
+      return { critical: 0, high: 0, medium: 0, low: 0, recentHigh: [] };
+    }
+
+    const details: CountryDeepDiveSignalDetails = {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      recentHigh: [],
+    };
+
+    const rankedSignals = [...cluster.signals]
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    for (const signal of rankedSignals) {
+      const severity = this.normalizeSignalSeverity(signal.type, signal.severity);
+      if (severity === 'critical') details.critical += 1;
+      else if (severity === 'high') details.high += 1;
+      else if (severity === 'medium') details.medium += 1;
+      else details.low += 1;
+    }
+
+    details.recentHigh = rankedSignals
+      .map((signal) => ({
+        type: this.mapSignalType(signal.type),
+        severity: this.normalizeSignalSeverity(signal.type, signal.severity),
+        description: signal.title,
+        timestamp: signal.timestamp,
+      }))
+      .filter((signal) => signal.severity === 'critical' || signal.severity === 'high')
+      .slice(0, 3);
+
+    return details;
+  }
+
+  private buildMilitarySummary(code: string, country: string): CountryDeepDiveMilitarySummary {
+    const hasGeoShape = hasCountryGeometry(code) || !!CountryIntelManager.COUNTRY_BOUNDS[code];
+    const flights = this.ctx.intelligenceCache.military?.flights ?? [];
+    const vessels = this.ctx.intelligenceCache.military?.vessels ?? [];
+
+    const flightsInCountry = flights.filter((flight) =>
+      hasGeoShape ? this.isInCountry(flight.lat, flight.lon, code) : this.sameCountry(code, country, flight.operatorCountry)
+    );
+    const ownFlights = flightsInCountry.filter((flight) => this.sameCountry(code, country, flight.operatorCountry)).length;
+    const foreignFlights = Math.max(0, flightsInCountry.length - ownFlights);
+
+    const vesselsInCountry = vessels.filter((vessel) =>
+      hasGeoShape ? this.isInCountry(vessel.lat, vessel.lon, code) : this.sameCountry(code, country, vessel.operatorCountry)
+    );
+    const foreignVessels = vesselsInCountry.filter((vessel) => !this.sameCountry(code, country, vessel.operatorCountry)).length;
+
+    const centroid = getCountryCentroid(code, CountryIntelManager.COUNTRY_BOUNDS);
+    const nearbyBases = centroid
+      ? getNearbyInfrastructure(centroid.lat, centroid.lon, ['base']).slice(0, 3).map((base) => ({
+        id: base.id,
+        name: base.name,
+        distanceKm: base.distanceKm,
+        country: MILITARY_BASES.find((entry) => entry.id === base.id)?.country,
+      }))
+      : [];
+
+    return {
+      ownFlights,
+      foreignFlights,
+      nearbyVessels: vesselsInCountry.length,
+      nearestBases: nearbyBases,
+      foreignPresence: foreignFlights > 0 || foreignVessels > 0,
+    };
+  }
+
+  private buildEconomicIndicators(
+    code: string,
+    score: CountryScore | null,
+    stock: CountryStockSnapshot | null,
+  ): CountryDeepDiveEconomicIndicator[] {
+    const indicators: CountryDeepDiveEconomicIndicator[] = [];
+
+    if (stock?.available) {
+      const weekly = Number.parseFloat(stock.weekChangePercent);
+      const weeklyTrend = Number.isFinite(weekly)
+        ? weekly > 0 ? 'up' : weekly < 0 ? 'down' : 'flat'
+        : 'flat';
+      indicators.push({
+        label: 'Stock Index',
+        value: `${stock.indexName}: ${stock.price} ${stock.currency}`,
+        trend: weeklyTrend,
+        source: 'Market Service',
+      });
+      indicators.push({
+        label: 'Weekly Momentum',
+        value: `${weekly >= 0 ? '+' : ''}${stock.weekChangePercent}%`,
+        trend: weeklyTrend,
+      });
+    }
+
+    if (score) {
+      const trend = score.trend === 'rising'
+        ? 'up'
+        : score.trend === 'falling'
+          ? 'down'
+          : 'flat';
+      indicators.push({
+        label: 'Instability Regime',
+        value: `${score.score}/100 (${score.level})`,
+        trend,
+        source: 'CII',
+      });
+    }
+
+    const countryData = getCountryData(code);
+    if (countryData?.displacementOutflow && countryData.displacementOutflow > 0) {
+      const displaced = countryData.displacementOutflow >= 1_000_000
+        ? `${(countryData.displacementOutflow / 1_000_000).toFixed(1)}M`
+        : `${Math.round(countryData.displacementOutflow / 1000)}K`;
+      indicators.push({
+        label: 'Displacement Outflow',
+        value: displaced,
+        trend: 'up',
+        source: 'UN-style displacement feed',
+      });
+    }
+
+    return indicators.slice(0, 3);
+  }
+
+  private sameCountry(code: string, country: string, raw: string | undefined): boolean {
+    if (!raw) return false;
+    const normalized = raw.trim();
+    if (!normalized) return false;
+
+    const upper = normalized.toUpperCase();
+    if (upper === code) return true;
+    if (upper.length === 3) {
+      const iso2 = iso3ToIso2Code(upper);
+      if (iso2 === code) return true;
+    }
+
+    const fromName = nameToCountryCode(normalized.toLowerCase());
+    if (fromName === code) return true;
+
+    const countryLower = country.toLowerCase();
+    const rawLower = normalized.toLowerCase();
+    return rawLower === countryLower || rawLower.includes(countryLower);
+  }
+
+  private mapSignalType(type: string): CountryDeepDiveSignalDetails['recentHigh'][number]['type'] {
+    if (type === 'military_flight' || type === 'military_vessel') return 'MILITARY';
+    if (type === 'protest') return 'PROTEST';
+    if (type === 'internet_outage') return 'OUTAGE';
+    if (type === 'satellite_fire') return 'DISASTER';
+    if (type === 'ais_disruption') return 'OUTAGE';
+    if (type === 'active_strike') return 'MILITARY';
+    if (type === 'temporal_anomaly') return 'CYBER';
+    return 'OTHER';
+  }
+
+  private normalizeSignalSeverity(
+    type: string,
+    severity: 'low' | 'medium' | 'high',
+  ): CountryDeepDiveSignalDetails['recentHigh'][number]['severity'] {
+    if (type === 'active_strike' && severity === 'high') return 'critical';
+    if (severity === 'high') return 'high';
+    if (severity === 'medium') return 'medium';
+    return 'low';
+  }
+
   openCountryStory(code: string, name: string): void {
     if (!dataFreshness.hasSufficientData() || this.ctx.latestClusters.length === 0) {
       this.showToast('Data still loading — try again in a moment');
@@ -593,7 +835,9 @@ export class CountryIntelManager implements AppModule {
 
   private isInCountry(lat: number, lon: number, code: string): boolean {
     const precise = isCoordinateInCountry(lat, lon, code);
-    if (precise != null) return precise;
+    if (precise === true) return true;
+    // When precise geometry returns false (coastal/polygon precision) or null (not loaded),
+    // fall through to bounding box — matches CII's coordsToBoundsCountry fallback
     const b = CountryIntelManager.COUNTRY_BOUNDS[code];
     if (!b) return false;
     return lat >= b.s && lat <= b.n && lon >= b.w && lon <= b.e;

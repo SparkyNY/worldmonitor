@@ -3,6 +3,7 @@ import { invokeTauri } from '../services/tauri-bridge';
 import { t } from '../services/i18n';
 import { h, replaceChildren, safeHtml } from '../utils/dom-utils';
 import { trackPanelResized } from '@/services/analytics';
+import { getAiFlowSettings } from '@/services/ai-flow-settings';
 
 export interface PanelOptions {
   id: string;
@@ -73,7 +74,7 @@ function getColSpan(element: HTMLElement): number {
 }
 
 function getGridColumnCount(element: HTMLElement): number {
-  const grid = element.closest('.panels-grid') as HTMLElement | null;
+  const grid = (element.closest('.panels-grid') || element.closest('.map-bottom-grid')) as HTMLElement | null;
   if (!grid) return 3;
   const style = window.getComputedStyle(grid);
   const template = style.gridTemplateColumns;
@@ -661,7 +662,13 @@ export class Panel {
 
   public setCount(count: number): void {
     if (this.countEl) {
+      const prev = parseInt(this.countEl.textContent ?? '0', 10);
       this.countEl.textContent = count.toString();
+      if (count > prev && getAiFlowSettings().badgeAnimation) {
+        this.countEl.classList.remove('bump');
+        void this.countEl.offsetWidth;
+        this.countEl.classList.add('bump');
+      }
     }
   }
 

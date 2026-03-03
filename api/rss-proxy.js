@@ -1,38 +1,32 @@
-// Non-sebuf: returns XML/HTML, stays as standalone Vercel function
 import { getCorsHeaders, isDisallowedOrigin } from './_cors.js';
 import { validateApiKey } from './_api-key.js';
 import { checkRateLimit } from './_rate-limit.js';
+import { getRelayBaseUrl, getRelayHeaders, fetchWithTimeout } from './_relay.js';
 
 export const config = { runtime: 'edge' };
 
-// Fetch with timeout
-async function fetchWithTimeout(url, options, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function getRelayBaseUrl() {
-  const relayUrl = process.env.WS_RELAY_URL || '';
-  if (!relayUrl) return '';
-  return relayUrl.replace('wss://', 'https://').replace('ws://', 'http://').replace(/\/$/, '');
-}
-
-function getRelayHeaders(baseHeaders = {}) {
-  const headers = { ...baseHeaders };
-  const relaySecret = process.env.RELAY_SHARED_SECRET || '';
-  if (relaySecret) {
-    const relayHeader = (process.env.RELAY_AUTH_HEADER || 'x-relay-key').toLowerCase();
-    headers[relayHeader] = relaySecret;
-    headers.Authorization = `Bearer ${relaySecret}`;
-  }
-  return headers;
-}
+// Domains that consistently block Vercel edge IPs — skip direct fetch,
+// go straight to Railway relay to avoid wasted invocation + timeout.
+const RELAY_ONLY_DOMAINS = new Set([
+  'rss.cnn.com',
+  'www.defensenews.com',
+  'layoffs.fyi',
+  'news.un.org',
+  'www.cisa.gov',
+  'www.iaea.org',
+  'www.who.int',
+  'www.crisisgroup.org',
+  'english.alarabiya.net',
+  'www.arabnews.com',
+  'www.timesofisrael.com',
+  'www.scmp.com',
+  'kyivindependent.com',
+  'www.themoscowtimes.com',
+  'feeds.24.com',
+  'feeds.capi24.com',
+  'islandtimes.org',
+  'www.atlanticcouncil.org',
+]);
 
 async function fetchViaRailway(feedUrl, timeoutMs) {
   const relayBaseUrl = getRelayBaseUrl();
@@ -161,6 +155,9 @@ const ALLOWED_DOMAINS = [
   // Accelerators
   'www.techstars.com',
   // Middle East & Regional News
+  'asharqbusiness.com',
+  'asharq.com',
+  'www.omanobserver.om',
   'english.alarabiya.net',
   'www.arabnews.com',
   'www.timesofisrael.com',
@@ -383,6 +380,8 @@ export default async function handler(req) {
       });
     }
 
+    const isRelayOnly = RELAY_ONLY_DOMAINS.has(hostname);
+
     // Google News is slow - use longer timeout
     const isGoogleNews = feedUrl.includes('news.google.com');
     const timeout = isGoogleNews ? 20000 : 12000;
@@ -419,31 +418,44 @@ export default async function handler(req) {
 
     let response;
     let usedRelay = false;
-    try {
-      response = await fetchDirect();
-    } catch (directError) {
+
+    if (isRelayOnly) {
+      // Skip direct fetch entirely — these domains block Vercel IPs
       response = await fetchViaRailway(feedUrl, timeout);
       usedRelay = !!response;
-      if (!response) throw directError;
-    }
+      if (!response) throw new Error(`Railway relay unavailable for relay-only domain: ${hostname}`);
+    } else {
+      try {
+        response = await fetchDirect();
+      } catch (directError) {
+        response = await fetchViaRailway(feedUrl, timeout);
+        usedRelay = !!response;
+        if (!response) throw directError;
+      }
 
-    if (!response.ok && !usedRelay) {
-      const relayResponse = await fetchViaRailway(feedUrl, timeout);
-      if (relayResponse && relayResponse.ok) {
-        response = relayResponse;
+      if (!response.ok && !usedRelay) {
+        const relayResponse = await fetchViaRailway(feedUrl, timeout);
+        if (relayResponse && relayResponse.ok) {
+          response = relayResponse;
+        }
       }
     }
 
     const data = await response.text();
     const isSuccess = response.status >= 200 && response.status < 300;
+    // Relay-only feeds are slow-updating institutional sources — cache longer
+    const cdnTtl = isRelayOnly ? 3600 : 900;
+    const swr = isRelayOnly ? 7200 : 1800;
+    const sie = isRelayOnly ? 14400 : 3600;
+    const browserTtl = isRelayOnly ? 600 : 180;
     return new Response(data, {
       status: response.status,
       headers: {
         'Content-Type': response.headers.get('content-type') || 'application/xml',
         'Cache-Control': isSuccess
-          ? 'public, max-age=180, s-maxage=900, stale-while-revalidate=1800, stale-if-error=3600'
+          ? `public, max-age=${browserTtl}, s-maxage=${cdnTtl}, stale-while-revalidate=${swr}, stale-if-error=${sie}`
           : 'public, max-age=15, s-maxage=60, stale-while-revalidate=120',
-        ...(isSuccess && { 'CDN-Cache-Control': 'public, s-maxage=900, stale-while-revalidate=1800, stale-if-error=3600' }),
+        ...(isSuccess && { 'CDN-Cache-Control': `public, s-maxage=${cdnTtl}, stale-while-revalidate=${swr}, stale-if-error=${sie}` }),
         ...corsHeaders,
       },
     });

@@ -57,7 +57,7 @@ import {
   fetchChokepointStatus,
   fetchCriticalMinerals,
 } from '@/services';
-import { checkBatchForBreakingAlerts } from '@/services/breaking-news-alerts';
+import { checkBatchForBreakingAlerts, dispatchOrefBreakingAlert } from '@/services/breaking-news-alerts';
 import { mlWorker } from '@/services/ml-worker';
 import { clusterNewsHybrid } from '@/services/clustering';
 import { ingestProtests, ingestFlights, ingestVessels, ingestEarthquakes, detectGeoConvergence, geoConvergenceToSignal } from '@/services/geo-convergence';
@@ -86,7 +86,6 @@ import { classifyWithAI } from '@/services/threat-classifier';
 import { ingestHeadlines } from '@/services/trending-keywords';
 import type { ListFeedDigestResponse } from '@/generated/client/worldmonitor/news/v1/service_client';
 import type { GetSectorSummaryResponse } from '@/generated/client/worldmonitor/market/v1/service_client';
-import { maybeShowDownloadBanner } from '@/components/DownloadBanner';
 import { mountCommunityWidget } from '@/components/CommunityWidget';
 import { ResearchServiceClient } from '@/generated/client/worldmonitor/research/v1/service_client';
 import {
@@ -191,6 +190,7 @@ export class DataLoaderManager implements AppModule {
   init(): void {}
 
   destroy(): void {
+    this.applyTimeRangeFilterToNewsPanelsDebounced.cancel();
     stopOrefPolling();
   }
 
@@ -605,7 +605,50 @@ export class DataLoaderManager implements AppModule {
         return items;
       }
 
-      // Fallback path when digest is unavailable: stale-first, then limited per-feed fan-out.
+      // Digest branch: server already aggregated feeds — map proto items to client types
+      if (digest?.categories && category in digest.categories) {
+        const enabledNames = new Set(enabledFeeds.map(f => f.name));
+        let items = (digest.categories[category]?.items ?? [])
+          .map(protoItemToNewsItem)
+          .filter(i => enabledNames.has(i.source));
+
+        ingestHeadlines(items.map(i => ({ title: i.title, pubDate: i.pubDate, source: i.source, link: i.link })));
+
+        const aiCandidates = items
+          .filter(i => i.threat?.source === 'keyword')
+          .sort((a, b) => b.pubDate.getTime() - a.pubDate.getTime())
+          .slice(0, AI_CLASSIFY_MAX_PER_FEED);
+        for (const item of aiCandidates) {
+          if (!canQueueAiClassification(item.title)) continue;
+          classifyWithAI(item.title, SITE_VARIANT).then(ai => {
+            if (ai && item.threat && ai.confidence > item.threat.confidence) {
+              item.threat = ai;
+              item.isAlert = ai.level === 'critical' || ai.level === 'high';
+            }
+          }).catch(() => {});
+        }
+
+        checkBatchForBreakingAlerts(items);
+        this.flashMapForNews(items);
+        this.renderNewsForCategory(category, items);
+
+        this.ctx.statusPanel?.updateFeed(category.charAt(0).toUpperCase() + category.slice(1), {
+          status: 'ok',
+          itemCount: items.length,
+        });
+
+        if (panel) {
+          try {
+            const baseline = await updateBaseline(`news:${category}`, items.length);
+            const deviation = calculateDeviation(items.length, baseline);
+            panel.setDeviation(deviation.zScore, deviation.percentChange, deviation.level);
+          } catch (e) { console.warn(`[Baseline] news:${category} write failed:`, e); }
+        }
+
+        return items;
+      }
+
+      // Per-feed fallback: fetch each feed individually (first load or digest unavailable)
       const renderIntervalMs = 100;
       let lastRenderTime = 0;
       let renderTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -838,7 +881,6 @@ export class DataLoaderManager implements AppModule {
 
     this.ctx.allNews = collectedNews;
     this.ctx.initialLoadComplete = true;
-    maybeShowDownloadBanner();
     mountCommunityWidget();
     updateAndCheck([
       { type: 'news', region: 'global', count: collectedNews.length },
@@ -905,36 +947,37 @@ export class DataLoaderManager implements AppModule {
 
       if (stocksResult.rateLimited && stocksResult.data.length === 0) {
         const rlMsg = 'Market data temporarily unavailable (rate limited) — retrying shortly';
-        this.ctx.panels['heatmap']?.showError(rlMsg);
         this.ctx.panels['commodities']?.showError(rlMsg);
       } else if (stocksResult.skipped) {
         this.ctx.statusPanel?.updateApi('Finnhub', { status: 'error' });
         if (stocksResult.data.length === 0) {
           this.ctx.panels['markets']?.showConfigError(finnhubConfigMsg);
         }
-        this.ctx.panels['heatmap']?.showConfigError(finnhubConfigMsg);
       } else {
         this.ctx.statusPanel?.updateApi('Finnhub', { status: 'ok' });
+      }
 
-        const hydratedSectors = getHydratedData('sectors') as GetSectorSummaryResponse | undefined;
-        if (hydratedSectors?.sectors?.length) {
-          const mapped = hydratedSectors.sectors.map((s) => ({ name: s.name, change: s.change }));
-          (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(mapped);
-        } else {
-          const sectorsResult = await fetchMultipleStocks(
-            SECTORS.map((s) => ({ ...s, display: s.name })),
-            {
-              onBatch: (partialSectors) => {
-                (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(
-                  partialSectors.map((s) => ({ name: s.name, change: s.change }))
-                );
-              },
-            }
-          );
-          (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(
-            sectorsResult.data.map((s) => ({ name: s.name, change: s.change }))
-          );
-        }
+      // Sector heatmap: always attempt loading regardless of market rate-limit status
+      const hydratedSectors = getHydratedData('sectors') as GetSectorSummaryResponse | undefined;
+      if (hydratedSectors?.sectors?.length) {
+        const mapped = hydratedSectors.sectors.map((s) => ({ name: s.name, change: s.change }));
+        (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(mapped);
+      } else if (!stocksResult.skipped) {
+        const sectorsResult = await fetchMultipleStocks(
+          SECTORS.map((s) => ({ ...s, display: s.name })),
+          {
+            onBatch: (partialSectors) => {
+              (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(
+                partialSectors.map((s) => ({ name: s.name, change: s.change }))
+              );
+            },
+          }
+        );
+        (this.ctx.panels['heatmap'] as HeatmapPanel).renderHeatmap(
+          sectorsResult.data.map((s) => ({ name: s.name, change: s.change }))
+        );
+      } else {
+        this.ctx.panels['heatmap']?.showConfigError(finnhubConfigMsg);
       }
 
       const commoditiesPanel = this.ctx.panels['commodities'] as CommoditiesPanel;
@@ -1328,12 +1371,14 @@ export class DataLoaderManager implements AppModule {
         const historyCount24h = data.historyCount24h ?? 0;
         ingestOrefForCII(alertCount, historyCount24h);
         this.ctx.intelligenceCache.orefAlerts = { alertCount, historyCount24h };
+        if (data.alerts?.length) dispatchOrefBreakingAlert(data.alerts);
         onOrefAlertsUpdate((update) => {
           (this.ctx.panels['oref-sirens'] as OrefSirensPanel)?.setData(update);
           const updAlerts = update.alerts?.length ?? 0;
           const updHistory = update.historyCount24h ?? 0;
           ingestOrefForCII(updAlerts, updHistory);
           this.ctx.intelligenceCache.orefAlerts = { alertCount: updAlerts, historyCount24h: updHistory };
+          if (update.alerts?.length) dispatchOrefBreakingAlert(update.alerts);
         });
         startOrefPolling();
       } catch (error) {
@@ -1456,8 +1501,9 @@ export class DataLoaderManager implements AppModule {
       this.ctx.intelligenceCache.iranEvents = events;
       this.ctx.map?.setIranEvents(events);
       this.ctx.map?.setLayerReady('iranAttacks', events.length > 0);
-      signalAggregator.ingestConflictEvents(events);
-      ingestStrikesForCII(events);
+      const coerced = events.map(e => ({ ...e, timestamp: Number(e.timestamp) || 0 }));
+      signalAggregator.ingestConflictEvents(coerced);
+      ingestStrikesForCII(coerced);
       (this.ctx.panels['cii'] as CIIPanel)?.refresh();
     } catch {
       this.ctx.map?.setLayerReady('iranAttacks', false);

@@ -1,5 +1,3 @@
-declare const process: { env: Record<string, string | undefined> };
-
 import type {
   ServerContext,
   GetCountryIntelBriefRequest,
@@ -38,15 +36,17 @@ export async function getCountryIntelBrief(
   if (!apiKey) return empty;
 
   let contextSnapshot = '';
+  let lang = 'en';
   try {
     const url = new URL(ctx.request.url);
     contextSnapshot = (url.searchParams.get('context') || '').trim().slice(0, 4000);
+    lang = url.searchParams.get('lang') || 'en';
   } catch {
     contextSnapshot = '';
   }
 
   const contextHash = contextSnapshot ? hashString(contextSnapshot) : 'base';
-  const cacheKey = `ci-sebuf:v2:${req.countryCode}:${contextHash}`;
+  const cacheKey = `ci-sebuf:v2:${req.countryCode}:${lang}:${contextHash}`;
   const countryName = TIER1_COUNTRIES[req.countryCode] || req.countryCode;
   const dateStr = new Date().toISOString().split('T')[0];
 
@@ -64,48 +64,53 @@ Rules:
 - 4-5 paragraphs, 250-350 words
 - No speculation beyond what data supports
 - Use plain language, not jargon
-- If a context snapshot is provided, explicitly reflect each non-zero signal category in the brief`;
+- If a context snapshot is provided, explicitly reflect each non-zero signal category in the brief${lang === 'fr' ? '\n- IMPORTANT: You MUST respond ENTIRELY in French language.' : ''}`;
 
-  const result = await cachedFetchJson<GetCountryIntelBriefResponse>(cacheKey, INTEL_CACHE_TTL, async () => {
-    try {
-      const userPromptParts = [
-        `Country: ${countryName} (${req.countryCode})`,
-      ];
-      if (contextSnapshot) {
-        userPromptParts.push(`Context snapshot:\n${contextSnapshot}`);
-      }
+  let result: GetCountryIntelBriefResponse | null = null;
+  try {
+    result = await cachedFetchJson<GetCountryIntelBriefResponse>(cacheKey, INTEL_CACHE_TTL, async () => {
+      try {
+        const userPromptParts = [
+          `Country: ${countryName} (${req.countryCode})`,
+        ];
+        if (contextSnapshot) {
+          userPromptParts.push(`Context snapshot:\n${contextSnapshot}`);
+        }
 
-      const resp = await fetch(GROQ_API_URL, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'User-Agent': CHROME_UA },
-        body: JSON.stringify({
+        const resp = await fetch(GROQ_API_URL, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'User-Agent': CHROME_UA },
+          body: JSON.stringify({
+            model: GROQ_MODEL,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPromptParts.join('\n\n') },
+            ],
+            temperature: 0.4,
+            max_tokens: 900,
+          }),
+          signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        });
+
+        if (!resp.ok) return null;
+        const data = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
+        const brief = data.choices?.[0]?.message?.content?.trim() || '';
+        if (!brief) return null;
+
+        return {
+          countryCode: req.countryCode,
+          countryName,
+          brief,
           model: GROQ_MODEL,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPromptParts.join('\n\n') },
-          ],
-          temperature: 0.4,
-          max_tokens: 900,
-        }),
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      });
-
-      if (!resp.ok) return null;
-      const data = (await resp.json()) as { choices?: Array<{ message?: { content?: string } }> };
-      const brief = data.choices?.[0]?.message?.content?.trim() || '';
-      if (!brief) return null;
-
-      return {
-        countryCode: req.countryCode,
-        countryName,
-        brief,
-        model: GROQ_MODEL,
-        generatedAt: Date.now(),
-      };
-    } catch {
-      return null;
-    }
-  });
+          generatedAt: Date.now(),
+        };
+      } catch {
+        return null;
+      }
+    });
+  } catch {
+    return empty;
+  }
 
   return result || empty;
 }

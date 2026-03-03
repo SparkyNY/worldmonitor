@@ -39,7 +39,10 @@ import {
   trackMapViewChange,
   trackMapLayerToggle,
   trackPanelToggled,
+  trackDownloadClicked,
 } from '@/services/analytics';
+import { detectPlatform, allButtons, buttonsForPlatform } from '@/components/DownloadBanner';
+import type { Platform } from '@/components/DownloadBanner';
 import { invokeTauri } from '@/services/tauri-bridge';
 import { dataFreshness } from '@/services/data-freshness';
 import { mlWorker } from '@/services/ml-worker';
@@ -55,6 +58,7 @@ export interface EventHandlerCallbacks {
   loadDataForLayer: (layer: string) => void;
   waitForAisData: () => void;
   syncDataFreshnessWithLayers: () => void;
+  ensureCorrectZones: () => void;
 }
 
 export class EventHandlerManager implements AppModule {
@@ -70,10 +74,10 @@ export class EventHandlerManager implements AppModule {
   private snapshotIntervalId: ReturnType<typeof setInterval> | null = null;
   private clockIntervalId: ReturnType<typeof setInterval> | null = null;
   private readonly IDLE_PAUSE_MS = 2 * 60 * 1000;
-  private debouncedUrlSync = debounce(() => {
+  private readonly debouncedUrlSync = debounce(() => {
     const shareUrl = this.getShareUrl();
     if (!shareUrl) return;
-    history.replaceState(null, '', shareUrl);
+    try { history.replaceState(null, '', shareUrl); } catch { }
   }, 250);
 
   constructor(ctx: AppContext, callbacks: EventHandlerCallbacks) {
@@ -129,6 +133,7 @@ export class EventHandlerManager implements AppModule {
   }
 
   destroy(): void {
+    this.debouncedUrlSync.cancel();
     if (this.boundFullscreenHandler) {
       document.removeEventListener('fullscreenchange', this.boundFullscreenHandler);
       this.boundFullscreenHandler = null;
@@ -188,13 +193,15 @@ export class EventHandlerManager implements AppModule {
       }
     });
 
+    this.initDownloadDropdown();
+
     window.addEventListener('storage', (e) => {
       if (e.key === STORAGE_KEYS.panels && e.newValue) {
         try {
           this.ctx.panelSettings = JSON.parse(e.newValue) as Record<string, PanelConfig>;
           this.applyPanelSettings();
           this.ctx.unifiedSettings?.refreshPanelToggles();
-        } catch (_) {}
+        } catch (_) { }
       }
       if (e.key === STORAGE_KEYS.liveChannels && e.newValue) {
         const panel = this.ctx.panels['live-news'];
@@ -281,15 +288,21 @@ export class EventHandlerManager implements AppModule {
         if (!anchor) return;
         const href = anchor.href;
         if (!href || href.startsWith('javascript:') || href === '#' || href.startsWith('#')) return;
+        // Only handle valid http(s) URLs
+        let url: URL;
         try {
-          const url = new URL(href, window.location.href);
-          if (url.origin === window.location.origin) return;
-          e.preventDefault();
-          e.stopPropagation();
-          void invokeTauri<void>('open_url', { url: url.toString() }).catch(() => {
-            window.open(url.toString(), '_blank');
-          });
-        } catch { /* malformed URL -- let browser handle */ }
+          url = new URL(href, window.location.href);
+        } catch {
+          // Malformed URL, let browser handle
+          return;
+        }
+        if (url.origin === window.location.origin) return;
+        if (!/^https?:$/.test(url.protocol)) return; // Only allow http(s) links
+        e.preventDefault();
+        e.stopPropagation();
+        void invokeTauri<void>('open_url', { url: url.toString() }).catch(() => {
+          window.open(url.toString(), '_blank');
+        });
       };
       document.addEventListener('click', this.boundDesktopExternalLinkHandler, true);
     }
@@ -349,13 +362,16 @@ export class EventHandlerManager implements AppModule {
     const state = this.ctx.map.getState();
     const center = this.ctx.map.getCenter();
     const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    const briefPage = this.ctx.countryBriefPage;
+    const isCountryVisible = briefPage?.isVisible() ?? false;
     return buildMapUrl(baseUrl, {
       view: state.view,
       zoom: state.zoom,
       center,
       timeRange: state.timeRange,
       layers: state.layers,
-      country: this.ctx.countryBriefPage?.isVisible() ? (this.ctx.countryBriefPage.getCode() ?? undefined) : undefined,
+      country: isCountryVisible ? (briefPage!.getCode() ?? undefined) : undefined,
+      expanded: isCountryVisible && briefPage?.getIsMaximized?.() ? true : undefined,
     });
   }
 
@@ -374,6 +390,85 @@ export class EventHandlerManager implements AppModule {
     document.body.removeChild(textarea);
   }
 
+  private platformLabel(p: Platform): string {
+    switch (p) {
+      case 'macos-arm64': return '\uF8FF Silicon';
+      case 'macos-x64': return '\uF8FF Intel';
+      case 'macos': return '\uF8FF macOS';
+      case 'windows': return 'Windows';
+      case 'linux': return 'Linux';
+      default: return t('header.downloadApp');
+    }
+  }
+
+  private initDownloadDropdown(): void {
+    const btn = document.getElementById('downloadBtn');
+    const dropdown = document.getElementById('downloadDropdown');
+    const label = document.getElementById('downloadBtnLabel');
+    if (!btn || !dropdown) return;
+
+    const platform = detectPlatform();
+    if (label) label.textContent = this.platformLabel(platform);
+
+    const primary = buttonsForPlatform(platform);
+    const all = allButtons();
+    const others = all.filter(b => !primary.some(p => p.href === b.href));
+
+    const renderDropdown = () => {
+      const primaryHtml = primary.map(b =>
+        `<a class="dl-dd-btn ${b.cls} primary" href="${b.href}">${b.label}</a>`
+      ).join('');
+      const othersHtml = others.map(b =>
+        `<a class="dl-dd-btn ${b.cls}" href="${b.href}">${b.label}</a>`
+      ).join('');
+
+      dropdown.innerHTML = `
+        <div class="dl-dd-tagline">${t('modals.downloadBanner.description')}</div>
+        <div class="dl-dd-buttons">${primaryHtml}</div>
+        ${others.length ? `<button class="dl-dd-toggle" id="dlDdToggle">${t('modals.downloadBanner.showAllPlatforms')}</button>
+        <div class="dl-dd-others" id="dlDdOthers">${othersHtml}</div>` : ''}
+      `;
+
+      dropdown.querySelectorAll<HTMLAnchorElement>('.dl-dd-btn').forEach(a => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const plat = new URL(a.href, location.origin).searchParams.get('platform') || 'unknown';
+          trackDownloadClicked(plat);
+          window.open(a.href, '_blank');
+          dropdown.classList.remove('open');
+        });
+      });
+
+      const toggle = dropdown.querySelector('#dlDdToggle');
+      const othersEl = dropdown.querySelector('#dlDdOthers') as HTMLElement | null;
+      if (toggle && othersEl) {
+        toggle.addEventListener('click', () => {
+          const showing = othersEl.classList.toggle('show');
+          toggle.textContent = showing
+            ? t('modals.downloadBanner.showLess')
+            : t('modals.downloadBanner.showAllPlatforms');
+        });
+      }
+    };
+
+    renderDropdown();
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target as Node) && !btn.contains(e.target as Node)) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') dropdown.classList.remove('open');
+    });
+  }
+
   private setCopyLinkFeedback(button: HTMLElement | null, message: string): void {
     if (!button) return;
     const originalText = button.textContent ?? '';
@@ -387,13 +482,13 @@ export class EventHandlerManager implements AppModule {
 
   toggleFullscreen(): void {
     if (document.fullscreenElement) {
-      try { void document.exitFullscreen()?.catch(() => {}); } catch {}
+      try { void document.exitFullscreen()?.catch(() => { }); } catch { }
     } else {
       const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
       if (el.requestFullscreen) {
-        try { void el.requestFullscreen()?.catch(() => {}); } catch {}
+        try { void el.requestFullscreen()?.catch(() => { }); } catch { }
       } else if (el.webkitRequestFullscreen) {
-        try { el.webkitRequestFullscreen(); } catch {}
+        try { el.webkitRequestFullscreen(); } catch { }
       }
     }
   }
@@ -426,10 +521,6 @@ export class EventHandlerManager implements AppModule {
 
   setupStatusPanel(): void {
     this.ctx.statusPanel = new StatusPanel();
-    const headerLeft = this.ctx.container.querySelector('.header-left');
-    if (headerLeft) {
-      headerLeft.appendChild(this.ctx.statusPanel.getElement());
-    }
   }
 
   setupPizzIntIndicator(): void {
@@ -486,8 +577,21 @@ export class EventHandlerManager implements AppModule {
       },
       getAllSourceNames: () => this.getAllSourceNames(),
       getLocalizedPanelName: (key: string, fallback: string) => this.getLocalizedPanelName(key, fallback),
+      resetLayout: () => {
+        localStorage.removeItem(this.ctx.PANEL_SPANS_KEY);
+        localStorage.removeItem('worldmonitor-panel-col-spans');
+        localStorage.removeItem(this.ctx.PANEL_ORDER_KEY);
+        localStorage.removeItem(this.ctx.PANEL_ORDER_KEY + '-bottom');
+        localStorage.removeItem('map-height');
+        window.location.reload();
+      },
       isDesktopApp: this.ctx.isDesktopApp,
+      statusPanel: this.ctx.statusPanel,
     });
+
+    if (this.ctx.statusPanel) {
+      this.ctx.statusPanel.onUpdate = () => this.ctx.unifiedSettings?.refreshStatusTab();
+    }
 
     const mount = document.getElementById('unifiedSettingsMount');
     if (mount) {
@@ -632,18 +736,35 @@ export class EventHandlerManager implements AppModule {
 
   setupMapResize(): void {
     const mapSection = document.getElementById('mapSection');
+    const mapContainer = document.getElementById('mapContainer');
     const resizeHandle = document.getElementById('mapResizeHandle');
-    if (!mapSection || !resizeHandle) return;
+    if (!mapSection || !mapContainer || !resizeHandle) return;
 
-    const getMinHeight = () => (window.innerWidth >= 2000 ? 320 : 400);
-    const getMaxHeight = () => Math.max(getMinHeight(), window.innerHeight - 60);
+    const getMinHeight = () => (window.innerWidth >= 1600 ? 280 : 350);
+    const getMaxHeight = () => {
+      if (window.innerWidth < 1600) return Math.max(getMinHeight(), window.innerHeight - 150);
+
+      const bottomGrid = document.getElementById('mapBottomGrid');
+      const isEmpty = !bottomGrid || bottomGrid.children.length === 0;
+      const headerHeight = 60; // Approximate header height
+      const totalAvailable = window.innerHeight - headerHeight;
+
+      if (isEmpty) {
+        // Allow map to take almost all space if bottom is empty, but leave 25px for handle
+        return totalAvailable - 25;
+      } else {
+        // Guarantee at least 300px for the bottom area
+        return totalAvailable - 300;
+      }
+    };
 
     const savedHeight = localStorage.getItem('map-height');
     if (savedHeight) {
       const numeric = Number.parseInt(savedHeight, 10);
       if (Number.isFinite(numeric)) {
         const clamped = Math.max(getMinHeight(), Math.min(numeric, getMaxHeight()));
-        mapSection.style.height = `${clamped}px`;
+        mapContainer.style.height = `${clamped}px`;
+        mapContainer.style.flex = 'none'; // Lock height
         if (clamped !== numeric) {
           localStorage.setItem('map-height', `${clamped}px`);
         }
@@ -656,30 +777,60 @@ export class EventHandlerManager implements AppModule {
     let startY = 0;
     let startHeight = 0;
 
+    const endResize = () => {
+      if (!isResizing) return;
+      isResizing = false;
+      this.ctx.map?.setIsResizing(false);
+      this.ctx.map?.render();
+      mapSection.classList.remove('resizing');
+      document.body.style.cursor = '';
+      localStorage.setItem('map-height', mapContainer.style.height);
+    };
+
     resizeHandle.addEventListener('mousedown', (e) => {
       isResizing = true;
       startY = e.clientY;
-      startHeight = mapSection.offsetHeight;
+      startHeight = mapContainer.offsetHeight;
+      this.ctx.map?.setIsResizing(true);
       mapSection.classList.add('resizing');
+      mapContainer.style.flex = 'none'; // Ensure manual resize locks it
       document.body.style.cursor = 'ns-resize';
       e.preventDefault();
+    });
+
+    resizeHandle.addEventListener('dblclick', () => {
+      const targetHeight = window.innerHeight * 0.5;
+      const finalHeight = Math.max(getMinHeight(), Math.min(targetHeight, getMaxHeight()));
+
+      this.ctx.map?.setIsResizing(true);
+      mapContainer.classList.add('map-container-smooth');
+      mapContainer.style.height = `${finalHeight}px`;
+      mapContainer.style.flex = 'none';
+
+      const onEnd = () => {
+        mapContainer.classList.remove('map-container-smooth');
+        mapContainer.removeEventListener('transitionend', onEnd);
+        localStorage.setItem('map-height', `${finalHeight}px`);
+        this.ctx.map?.setIsResizing(false);
+        this.ctx.map?.render();
+      };
+
+      mapContainer.addEventListener('transitionend', onEnd);
+      // Fallback for transitionend
+      setTimeout(onEnd, 500);
     });
 
     document.addEventListener('mousemove', (e) => {
       if (!isResizing) return;
       const deltaY = e.clientY - startY;
       const newHeight = Math.max(getMinHeight(), Math.min(startHeight + deltaY, getMaxHeight()));
-      mapSection.style.height = `${newHeight}px`;
-      this.ctx.map?.render();
+      mapContainer.style.height = `${newHeight}px`;
     });
 
-    document.addEventListener('mouseup', () => {
-      if (!isResizing) return;
-      isResizing = false;
-      mapSection.classList.remove('resizing');
-      document.body.style.cursor = '';
-      localStorage.setItem('map-height', mapSection.style.height);
-      this.ctx.map?.render();
+    document.addEventListener('mouseup', endResize);
+    window.addEventListener('blur', endResize);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) endResize();
     });
   }
 
@@ -698,6 +849,29 @@ export class EventHandlerManager implements AppModule {
       const nowPinned = mapSection.classList.toggle('pinned');
       pinBtn.classList.toggle('active', nowPinned);
       localStorage.setItem('map-pinned', String(nowPinned));
+    });
+
+    this.setupMapFullscreen(mapSection);
+  }
+
+  private setupMapFullscreen(mapSection: HTMLElement): void {
+    const btn = document.getElementById('mapFullscreenBtn');
+    if (!btn) return;
+    const expandSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+    const shrinkSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>';
+    let isFullscreen = false;
+
+    const toggle = () => {
+      isFullscreen = !isFullscreen;
+      mapSection.classList.toggle('live-news-fullscreen', isFullscreen);
+      document.body.classList.toggle('live-news-fullscreen-active', isFullscreen);
+      btn.innerHTML = isFullscreen ? shrinkSvg : expandSvg;
+      btn.title = isFullscreen ? 'Exit fullscreen' : 'Fullscreen';
+    };
+
+    btn.addEventListener('click', toggle);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isFullscreen) toggle();
     });
   }
 
@@ -726,6 +900,11 @@ export class EventHandlerManager implements AppModule {
         const mapSection = document.getElementById('mapSection');
         if (mapSection) {
           mapSection.classList.toggle('hidden', !config.enabled);
+          const mainContent = document.querySelector('.main-content');
+          if (mainContent) {
+            mainContent.classList.toggle('map-hidden', !config.enabled);
+          }
+          this.callbacks.ensureCorrectZones();
         }
         return;
       }
